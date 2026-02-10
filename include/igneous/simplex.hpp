@@ -2,91 +2,124 @@
 #include <cstdint>
 #include <igneous/algebra.hpp>
 #include <igneous/memory.hpp>
+#include <memory_resource>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
 namespace igneous {
 
-// A Handle is just an index into the Arena.
-// We use handles instead of pointers so we can re-organize memory later
-// without breaking references (and it saves 4 bytes on 64-bit systems if we use
-// uint32).
+// A Handle is a type-safe index into the Arena.
 struct SimplexHandle {
   uint32_t index = UINT32_MAX;
 
-  bool is_valid() const { return index != UINT32_MAX; }
-
-  bool operator==(const SimplexHandle &other) const = default;
+  constexpr bool is_valid() const { return index != UINT32_MAX; }
+  constexpr bool operator==(const SimplexHandle &other) const = default;
 };
 
-// The Simplex: The fundamental atom of geometry.
-// Templated on the Algebra so we can use VGA, PGA, or STA.
+// The Atom of Geometry.
+// Represents a 0-Simplex (Point), 1-Simplex (Edge), 2-Simplex (Triangle), etc.
 template <typename Algebra> struct Simplex {
-  // 1. The Geometry (Where is it?)
-  // e.g., a Point is 'e0 + x*e1 + y*e2' in PGA
+  // 1. Geometry (Position/Orientation in CGA/VGA)
   Algebra geometry;
 
-  // 2. The Topology (What is it connected to?)
-  // This is a "Boundary Operator".
-  // A generic simplex stores its boundary as a list of handles to lower-dim
-  // simplices. e.g., A Line (1-Simplex) stores handles to 2 Points
-  // (0-Simplices). We use a small inline vector optimization or just a handle
-  // for now. For efficiency, let's store boundary indices directly. (Simplified
-  // for now: Just storing the geometry)
+  // 2. Properties
+  uint8_t dimension; // 0, 1, 2, 3...
 
-  // 3. Properties
-  uint8_t dimension; // 0=Point, 1=Line, 2=Triangle
+  // 3. Topology (The Hasse Diagram Connections)
+  // We use std::pmr::vector so the dynamic lists live inside our MemoryArena.
 
-  // Constructors
-  Simplex() : geometry(), dimension(0) {}
-  Simplex(Algebra g, uint8_t dim) : geometry(g), dimension(dim) {}
+  // Boundary: Lower-dimensional faces (e.g., Edge -> {Vertex A, Vertex B})
+  std::pmr::vector<SimplexHandle> boundary;
+
+  // Coboundary: Higher-dimensional parents (e.g., Vertex A -> {Edge 1,
+  // Edge 2...})
+  std::pmr::vector<SimplexHandle> coboundary;
+
+  // Constructor requires the arena allocator
+  Simplex(Algebra g, uint8_t dim, std::pmr::memory_resource *mem)
+      : geometry(g), dimension(dim), boundary(mem), coboundary(mem) {}
 };
 
-// The Container: Holds all simplices in a contiguous Arena
+// The Container: Manages the Arena and the Topological Graph
 template <typename Algebra> class SimplexMesh {
 public:
   using SimplexType = Simplex<Algebra>;
 
 private:
-  // The Arena for raw memory storage
   MemoryArena arena;
+  std::pmr::polymorphic_allocator<std::byte> allocator;
 
-  // We keep a direct pointer list for fast iteration,
-  // but the actual data lives inside the 'arena'.
-  // This vector is standard heap, but it points to arena memory.
+  // Direct pointers for fast iteration.
+  // The pointers point into 'arena', but this vector itself is on the heap.
   std::vector<SimplexType *> elements;
 
 public:
-  explicit SimplexMesh(size_t size_bytes = 1024 * 1024) : arena(size_bytes) {
-    // Reserve space for pointers to avoid reallocations
-    elements.reserve(10000);
+  explicit SimplexMesh(size_t size_bytes = 1024 * 1024 * 64)
+      : arena(size_bytes), allocator(&arena) {
+    elements.reserve(100000);
   }
 
-  // Create a new Simplex (0-Simplex, 1-Simplex, etc.)
-  // Returns a Handle (Index) to it.
-  SimplexHandle add(const Algebra &geom, uint8_t dim) {
-    // 1. Allocate in Arena (Super fast!)
-    void *mem = arena.allocate(sizeof(SimplexType), alignof(SimplexType));
-
-    // 2. Construct in place
-    SimplexType *s = new (mem) SimplexType(geom, dim);
-
-    // 3. Store pointer and return index
-    uint32_t index = static_cast<uint32_t>(elements.size());
-    elements.push_back(s);
-
-    return {index};
-  }
-
-  // Accessor
-  SimplexType &get(SimplexHandle h) { return *elements[h.index]; }
-
-  const SimplexType &get(SimplexHandle h) const { return *elements[h.index]; }
-
-  // Iterators (for range-based loops)
-  auto begin() { return elements.begin(); }
-  auto end() { return elements.end(); }
   size_t size() const { return elements.size(); }
+
+  SimplexType &get(SimplexHandle h) {
+    if (h.index >= elements.size())
+      throw std::out_of_range("Invalid handle");
+    return *elements[h.index];
+  }
+
+  const SimplexType &get(SimplexHandle h) const {
+    if (h.index >= elements.size())
+      throw std::out_of_range("Invalid handle");
+    return *elements[h.index];
+  }
+
+  // --- Hasse Diagram Builders ---
+
+  // Level 0: Add a Vertex (0-Simplex)
+  SimplexHandle add_vertex(const Algebra &point) {
+    return create_simplex(point, 0, {});
+  }
+
+  // Level 1: Add an Edge (1-Simplex) between two vertices
+  SimplexHandle add_edge(const Algebra &line, SimplexHandle a,
+                         SimplexHandle b) {
+    return create_simplex(line, 1, {a, b});
+  }
+
+  // Level 2: Add a Triangle (2-Simplex) defined by 3 edges
+  SimplexHandle add_triangle(const Algebra &face, SimplexHandle e1,
+                             SimplexHandle e2, SimplexHandle e3) {
+    return create_simplex(face, 2, {e1, e2, e3});
+  }
+
+private:
+  // Internal helper that handles the heavy lifting of graph connections
+  SimplexHandle
+  create_simplex(const Algebra &geom, uint8_t dim,
+                 std::initializer_list<SimplexHandle> boundaries) {
+    // 1. Allocate Simplex in Arena
+    void *mem = arena.allocate(sizeof(SimplexType), alignof(SimplexType));
+    SimplexType *s = new (mem) SimplexType(geom, dim, &arena);
+
+    // 2. Store Handle
+    uint32_t new_idx = static_cast<uint32_t>(elements.size());
+    elements.push_back(s);
+    SimplexHandle new_handle = {new_idx};
+
+    // 3. Link Topology (The "Hasse" logic)
+    // For every boundary handle passed in...
+    for (auto &lower_handle : boundaries) {
+      // A. Add it to *my* boundary list
+      s->boundary.push_back(lower_handle);
+
+      // B. Add *me* to *its* coboundary list (Back-link)
+      // This is the crucial step standard engines skip!
+      get(lower_handle).coboundary.push_back(new_handle);
+    }
+
+    return new_handle;
+  }
 };
 
 } // namespace igneous

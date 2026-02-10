@@ -38,3 +38,11 @@ target_link_libraries(bench_algebra PRIVATE igneous fmt::fmt)
 
 add_executable(bench_memory tests/benchmark_memory.cpp)
 target_link_libraries(bench_memory PRIVATE igneous fmt::fmt)
+
+# --- THE MAIN APPLICATION ---
+add_executable(igneous-app src/main.cpp)
+target_link_libraries(igneous-app 
+    PRIVATE 
+    igneous 
+    fmt::fmt
+)
