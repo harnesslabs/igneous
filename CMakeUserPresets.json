@@ -1,0 +1,16 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "default-local",
+      "inherits": "default",
+      "environment": {
+        "VCPKG_ROOT": "/Users/autoparallel/vcpkg" 
+      },
+      "cacheVariables": {
+        "CMAKE_MAKE_PROGRAM": "/opt/homebrew/bin/ninja",
+        "CMAKE_TOOLCHAIN_FILE": "/Users/autoparallel/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      }
+    }
+  ]
+}
