@@ -11,6 +11,7 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 find_package(fmt CONFIG REQUIRED)
 find_package(range-v3 CONFIG REQUIRED)
 find_package(doctest CONFIG REQUIRED)
+find_package(xsimd CONFIG REQUIRED)
 
 # --- 1. The Library Target ---
 # INTERFACE means "Header Only" (Common for templates)
@@ -20,7 +21,7 @@ add_library(igneous INTERFACE)
 target_include_directories(igneous INTERFACE include)
 
 # Dependencies needed by the library itself
-target_link_libraries(igneous INTERFACE fmt::fmt range-v3::range-v3)
+target_link_libraries(igneous INTERFACE fmt::fmt range-v3::range-v3 xsimd)
 
 # --- 2. The Test Runner ---
 # This enables CTest (standard testing tool)

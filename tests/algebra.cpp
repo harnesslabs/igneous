@@ -16,9 +16,9 @@ TEST_CASE("Euclidean 3D Geometric Algebra") {
   // Basis Indices: 0, 1, 2
   using VGA = Multivector<double, Signature<3, 0, 0>>;
 
-  auto e1 = VGA::from_blade(1 << 0); // Bit 0 (1)
-  auto e2 = VGA::from_blade(1 << 1); // Bit 1 (2)
-  auto e3 = VGA::from_blade(1 << 2); // Bit 2 (4)
+  auto e1 = VGA::from_blade(1 << 0, 1); // Bit 0 (1)
+  auto e2 = VGA::from_blade(1 << 1, 1); // Bit 1 (2)
+  auto e3 = VGA::from_blade(1 << 2, 1); // Bit 2 (4)
 
   SUBCASE("Generators Square to +1") {
     CHECK((e1 * e1)[0] == doctest::Approx(1.0));
@@ -68,9 +68,9 @@ TEST_CASE("Minkowski Spacetime Algebra (STA)") {
   // Index 0 -> Time (+), Indices 1,2,3 -> Space (-)
   using STA = Multivector<double, Signature<1, 3, 0>>;
 
-  auto gamma0 = STA::from_blade(1 << 0); // Time basis
-  auto gamma1 = STA::from_blade(1 << 1); // Space x
-  auto gamma2 = STA::from_blade(1 << 2); // Space y
+  auto gamma0 = STA::from_blade(1 << 0, 1); // Time basis
+  auto gamma1 = STA::from_blade(1 << 1, 1); // Space x
+  auto gamma2 = STA::from_blade(1 << 2, 1); // Space y
 
   SUBCASE("Metric Signature (+, -, -, -)") {
     // Time squares to +1
@@ -106,10 +106,10 @@ TEST_CASE("Projective Geometric Algebra (PGA 3D)") {
   using PGA = Multivector<double, Signature<3, 0, 1>>;
 
   // In PGA, basis vectors are usually PLANES
-  auto e1 = PGA::from_blade(1 << 0); // Plane x=0
-  auto e2 = PGA::from_blade(1 << 1); // Plane y=0
-  auto e3 = PGA::from_blade(1 << 2); // Plane z=0
-  auto e0 = PGA::from_blade(1 << 3); // Plane at infinity
+  auto e1 = PGA::from_blade(1 << 0, 1); // Plane x=0
+  auto e2 = PGA::from_blade(1 << 1, 1); // Plane y=0
+  auto e3 = PGA::from_blade(1 << 2, 1); // Plane z=0
+  auto e0 = PGA::from_blade(1 << 3, 1); // Plane at infinity
 
   SUBCASE("Metric Properties") {
     // Spatial planes normalize to 1

@@ -1,39 +1,48 @@
-.PHONY: all config build test clean run check bench
+.PHONY: all config build test clean run check bench release debug
 
-# Default target: build everything
+# Default: Build in whatever mode is currently active
 all: build
 
-# 1. Configure (cargo init/update)
-config:
-	cmake --preset default-local
+# --- Configuration Helpers ---
 
-# 2. Build (cargo build)
-# Now explicitly builds the benchmark too
+# Switch to Debug Mode (Best for coding/testing)
+debug:
+	cmake --preset default-local -DCMAKE_BUILD_TYPE=Debug
+
+# Switch to Release Mode (Best for benchmarking)
+release:
+	cmake --preset default-local -DCMAKE_BUILD_TYPE=Release
+
+# --- Standard Targets ---
+
+# 1. Configure (Default to Debug if fresh)
+config: debug
+
+# 2. Build
 build:
 	cmake --build build
 
-# 3. Test (cargo test)
-# DEPENDS ON BUILD: Ensures we are testing the latest code.
-# --verbose: Shows the nice doctest output (green/red text) instead of just "Passed"
-test: build
+# 3. Test
+# We enforce Debug mode because debugging optimized tests is painful.
+test: debug
+	cmake --build build --target igneous-test
 	ctest --test-dir build --output-on-failure --verbose
 
-# 4. Run (cargo run)
-# Runs the main test runner directly (useful for debugging specific flags)
-run: build
+# 4. Run (Test Runner)
+run: test
 	./build/igneous-test
 
-# 5. Bench (cargo bench)
-# builds and runs your benchmark in Release mode (important!)
-bench:
-	cmake --build build --target igneous-bench --config Release
+# 5. Bench
+# CRITICAL CHANGE: We force the 'release' config first.
+# This rewrites the Ninja files to use -O3 optimizations.
+bench: release
+	cmake --build build --target igneous-bench
 	./build/igneous-bench
 
-# 6. Check (cargo check)
-# Just compiles the library interface to check for errors
+# 6. Check (Syntax check only)
 check:
 	cmake --build build --target igneous
 
-# 7. Clean (cargo clean)
+# 7. Clean
 clean:
 	rm -rf build
