@@ -14,38 +14,27 @@ find_package(doctest CONFIG REQUIRED)
 find_package(xsimd CONFIG REQUIRED)
 
 # --- 1. The Library Target ---
-# INTERFACE means "Header Only" (Common for templates)
 add_library(igneous INTERFACE)
-
-# Where are the headers?
 target_include_directories(igneous INTERFACE include)
-
-# Dependencies needed by the library itself
 target_link_libraries(igneous INTERFACE fmt::fmt range-v3::range-v3 xsimd)
 
-# --- 2. The Test Runner ---
-# This enables CTest (standard testing tool)
+# --- 2. Testing Setup ---
 enable_testing()
 
-add_executable(igneous-test tests/algebra.cpp)
+# Helper function to add a test easily
+function(add_igneous_test name source)
+    add_executable(${name} ${source})
+    target_link_libraries(${name} PRIVATE igneous doctest::doctest)
+    add_test(NAME ${name} COMMAND ${name})
+endfunction()
 
-# Link the test runner to our library and doctest
-target_link_libraries(igneous-test 
-    PRIVATE 
-    igneous 
-    doctest::doctest
-)
+# --- Test Suites ---
+add_igneous_test(test_algebra tests/algebra.cpp)
+add_igneous_test(test_simplex tests/simplex.cpp)
 
-# Register the test so 'ctest' command works
-add_test(NAME unit_tests COMMAND igneous-test)
+# --- 3. Benchmarks ---
+add_executable(bench_algebra tests/benchmark_algebra.cpp)
+target_link_libraries(bench_algebra PRIVATE igneous fmt::fmt)
 
-# --- 3. The Benchmark Runner (NEW) ---
-# This creates the 'igneous-bench' executable
-add_executable(igneous-bench tests/benchmark.cpp)
-
-# Link to our library and fmt (for printing timing results)
-target_link_libraries(igneous-bench 
-    PRIVATE 
-    igneous 
-    fmt::fmt
-)
+add_executable(bench_memory tests/benchmark_memory.cpp)
+target_link_libraries(bench_memory PRIVATE igneous fmt::fmt)

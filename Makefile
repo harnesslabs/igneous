@@ -1,48 +1,54 @@
-.PHONY: all config build test clean run check bench release debug
+.PHONY: all config build test test-all test-algebra test-simplex clean run bench bench-algebra bench-memory release debug
 
-# Default: Build in whatever mode is currently active
+# Default: Build everything
 all: build
 
-# --- Configuration Helpers ---
-
-# Switch to Debug Mode (Best for coding/testing)
+# --- Configuration ---
 debug:
 	cmake --preset default-local -DCMAKE_BUILD_TYPE=Debug
 
-# Switch to Release Mode (Best for benchmarking)
 release:
 	cmake --preset default-local -DCMAKE_BUILD_TYPE=Release
 
-# --- Standard Targets ---
-
-# 1. Configure (Default to Debug if fresh)
 config: debug
 
-# 2. Build
+# --- Building ---
+# Builds everything (library + all tests + all benchmarks)
 build:
 	cmake --build build
 
-# 3. Test
-# We enforce Debug mode because debugging optimized tests is painful.
+# --- Testing ---
+
+# 1. Run ALL tests (via CTest)
 test: debug
-	cmake --build build --target igneous-test
+	cmake --build build --target test_algebra test_simplex
 	ctest --test-dir build --output-on-failure --verbose
 
-# 4. Run (Test Runner)
-run: test
-	./build/igneous-test
+# 2. Run ONLY Algebra tests (Fast iteration)
+test-algebra: debug
+	cmake --build build --target test_algebra
+	./build/test_algebra
 
-# 5. Bench
-# CRITICAL CHANGE: We force the 'release' config first.
-# This rewrites the Ninja files to use -O3 optimizations.
-bench: release
-	cmake --build build --target igneous-bench
-	./build/igneous-bench
+# 3. Run ONLY Simplex tests (Fast iteration)
+test-simplex: debug
+	cmake --build build --target test_simplex
+	./build/test_simplex
 
-# 6. Check (Syntax check only)
+# --- Benchmarking ---
+bench-algebra: release
+	cmake --build build --target bench_algebra
+	./build/bench_algebra
+
+bench-memory: release
+	cmake --build build --target bench_memory
+	./build/bench_memory
+
+# Run all benchmarks
+bench: bench-algebra bench-memory
+
+# --- Utilities ---
 check:
 	cmake --build build --target igneous
 
-# 7. Clean
 clean:
 	rm -rf build
