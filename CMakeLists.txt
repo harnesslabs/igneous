@@ -26,7 +26,7 @@ target_link_libraries(igneous INTERFACE fmt::fmt range-v3::range-v3)
 # This enables CTest (standard testing tool)
 enable_testing()
 
-add_executable(igneous-test tests/main.cpp)
+add_executable(igneous-test tests/algebra.cpp)
 
 # Link the test runner to our library and doctest
 target_link_libraries(igneous-test 

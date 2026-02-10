@@ -106,6 +106,9 @@ template <typename Field, IsSignature Sig> struct Multivector {
   constexpr Field operator[](size_t i) const { return data[i]; }
   constexpr Field &operator[](size_t i) { return data[i]; }
 
+  // Properties
+  static constexpr size_t Size = Sig::size;
+
   // =========================================================
   // IMPLEMENTATION A: THE NAIVE LOOP (Runtime)
   // =========================================================
@@ -175,6 +178,14 @@ private:
 public:
   constexpr Multivector operator*(const Multivector &other) const {
     return unroll_outer(other, std::make_index_sequence<Sig::size>{});
+  }
+
+  constexpr Multivector operator+(const Multivector &other) const {
+    Multivector result;
+    for (size_t i = 0; i < Sig::size; ++i) {
+      result.data[i] = data[i] + other.data[i];
+    }
+    return result;
   }
 };
 
