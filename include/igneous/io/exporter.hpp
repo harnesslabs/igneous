@@ -58,14 +58,16 @@ void export_heatmap(const Mesh<Sig> &mesh, const std::vector<double> &field,
   size_t n_verts = mesh.geometry.num_points();
 
   for (size_t i = 0; i < n_verts; ++i) {
-    // UPDATED: Use get_point(i) accessor (returns Multivector by value)
-    auto p = mesh.geometry.get_point(i);
+    // FIX: Use get_vec3 instead of get_point
+    // This returns a struct {x, y, z} that maps correctly to storage
+    auto p = mesh.geometry.get_vec3(i);
 
     double val = (i < field.size()) ? field[i] : 0.0;
     double t = (val - min_v) / (max_v - min_v);
     auto [r, g, b] = get_heatmap_color(t);
 
-    file << "v " << p[1] << " " << p[2] << " " << p[3] << " " << r << " " << g
+    // FIX: Access .x .y .z directly
+    file << "v " << p.x << " " << p.y << " " << p.z << " " << r << " " << g
          << " " << b << "\n";
   }
 

@@ -1,89 +1,86 @@
 #pragma once
 #include <cstdint>
 #include <igneous/core/algebra.hpp>
+#include <igneous/core/blades.hpp>
 #include <span>
 #include <vector>
 
 namespace igneous::data {
 
-// Bring in core types
 using igneous::core::IsSignature;
 using igneous::core::Multivector;
-
-using igneous::core::Multivector;
-using igneous::core::Packet; // The SIMD Batch (e.g. float x 8)
-using igneous::core::WideMultivector;
+using igneous::core::Vec3;
 
 template <typename Field, typename Sig> struct GeometryBuffer {
-  // ========================================================================
-  // 1. SoA STORAGE (Structure of Arrays)
-  // ========================================================================
-  // Instead of [x0, y0, z0, x1...], we store:
-  // components[0]: [x0, x1, x2, x3...]
-  // components[1]: [y0, y1, y2, y3...]
-  // components[2]: [z0, z1, z2, z3...]
-  // This layout is "SIMD-Native".
-  std::array<std::vector<Field>, Sig::dim> components;
+  // Stride per vertex (e.g., 3 for Euclidean3D, 4 for PGA)
+  static constexpr size_t STRIDE = Sig::dim;
 
   // ========================================================================
-  // 2. SCALAR ACCESSORS (For random access / topology)
+  // 1. INTERLEAVED STORAGE (Array of Structs)
+  // ========================================================================
+  // Layout: [x0, y0, z0, x1, y1, z1, ...]
+  // This is optimal for random access (Topology/Curvature).
+  std::vector<Field> packed_data;
+
+  // ========================================================================
+  // 2. BLADE ACCESSORS (Fastest - No Padding)
+  // ========================================================================
+
+  // Directly returns a Vec3 struct (12 bytes).
+  // This bypasses Multivector construction entirely.
+  igneous::core::Vec3 get_vec3(size_t i) const {
+    size_t offset = i * STRIDE;
+    // Assume standard layout: first 3 components are spatial x, y, z
+    return {packed_data[offset], packed_data[offset + 1],
+            packed_data[offset + 2]};
+  }
+
+  void set_vec3(size_t i, const igneous::core::Vec3 &v) {
+    size_t offset = i * STRIDE;
+    packed_data[offset] = v.x;
+    packed_data[offset + 1] = v.y;
+    packed_data[offset + 2] = v.z;
+    // Note: For PGA/CGA, we leave the higher dimensions (w, n_inf) untouched.
+    // This is exactly what we want for spatial flow.
+  }
+
+  // ========================================================================
+  // 3. MULTIVECTOR ACCESSORS (Generic Lift)
   // ========================================================================
 
   Multivector<Field, Sig> get_point(size_t i) const {
     Multivector<Field, Sig> mv;
-    // Map SoA arrays back to Multivector basis indices (1, 2, 4...)
+    size_t offset = i * STRIDE;
+    // Map interleaved array to Basis Indices (1, 2, 4...)
     for (int k = 0; k < Sig::dim; ++k) {
-      mv[1 << k] = components[k][i];
+      mv[1 << k] = packed_data[offset + k];
     }
     return mv;
   }
 
   void set_point(size_t i, const Multivector<Field, Sig> &mv) {
+    size_t offset = i * STRIDE;
     for (int k = 0; k < Sig::dim; ++k) {
-      components[k][i] = mv[1 << k];
+      packed_data[offset + k] = mv[1 << k];
     }
   }
 
   void push_point(const Multivector<Field, Sig> &mv) {
     for (int k = 0; k < Sig::dim; ++k) {
-      components[k].push_back(mv[1 << k]);
-    }
-  }
-
-  // ========================================================================
-  // 3. WIDE ACCESSORS (The "Vectorized" Lift)
-  // ========================================================================
-  // Returns a SIMD batch of 8 vertices at once!
-
-  WideMultivector<Sig> get_batch(size_t i) const {
-    WideMultivector<Sig> wide_mv;
-    for (int k = 0; k < Sig::dim; ++k) {
-      // Aligned load of 8 floats from the k-th component array
-      wide_mv[1 << k] = xsimd::load_unaligned(&components[k][i]);
-    }
-    return wide_mv;
-  }
-
-  void set_batch(size_t i, const WideMultivector<Sig> &wide_mv) {
-    for (int k = 0; k < Sig::dim; ++k) {
-      wide_mv[1 << k].store_unaligned(&components[k][i]);
+      packed_data.push_back(mv[1 << k]);
     }
   }
 
   // ========================================================================
   // 4. UTILITY
   // ========================================================================
-  size_t num_points() const { return components[0].size(); }
+  size_t num_points() const { return packed_data.size() / STRIDE; }
 
-  void reserve(size_t v, size_t, size_t) {
-    for (auto &vec : components)
-      vec.reserve(v);
-  }
+  void reserve(size_t v, size_t, size_t) { packed_data.reserve(v * STRIDE); }
 
-  void clear() {
-    for (auto &vec : components)
-      vec.clear();
-  }
+  void resize(size_t v) { packed_data.resize(v * STRIDE); }
+
+  void clear() { packed_data.clear(); }
 };
 
 struct TopologyBuffer {
@@ -109,7 +106,7 @@ struct TopologyBuffer {
     return {&coboundary_data[start], end - start};
   }
 
-  // Builder (same as before)
+  // Builder
   void build_coboundaries(size_t num_vertices) {
     coboundary_offsets.assign(num_vertices + 1, 0);
     for (uint32_t v_idx : faces_to_vertices) {

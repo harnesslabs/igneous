@@ -32,9 +32,6 @@ endfunction()
 add_igneous_test(test_algebra tests/test_algebra.cpp)
 
 # --- 3. Benchmarks ---
-add_executable(bench_algebra benches/bench_algebra.cpp)
-target_link_libraries(bench_algebra PRIVATE igneous fmt::fmt)
-
 add_executable(bench_memory benches/bench_memory.cpp)
 target_link_libraries(bench_memory PRIVATE igneous fmt::fmt)
 
