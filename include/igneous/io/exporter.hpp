@@ -1,4 +1,3 @@
-// include/igneous/io/exporter.hpp
 #pragma once
 #include <algorithm>
 #include <cmath>
@@ -55,11 +54,17 @@ void export_heatmap(const Mesh<Sig> &mesh, const std::vector<double> &field,
   std::ofstream file(filename);
 
   // Vertices
-  for (size_t i = 0; i < mesh.geometry.points.size(); ++i) {
-    const auto &p = mesh.geometry.points[i];
+  // UPDATED: Use num_points() accessor
+  size_t n_verts = mesh.geometry.num_points();
+
+  for (size_t i = 0; i < n_verts; ++i) {
+    // UPDATED: Use get_point(i) accessor (returns Multivector by value)
+    auto p = mesh.geometry.get_point(i);
+
     double val = (i < field.size()) ? field[i] : 0.0;
     double t = (val - min_v) / (max_v - min_v);
     auto [r, g, b] = get_heatmap_color(t);
+
     file << "v " << p[1] << " " << p[2] << " " << p[3] << " " << r << " " << g
          << " " << b << "\n";
   }

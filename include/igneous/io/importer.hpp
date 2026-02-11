@@ -34,8 +34,6 @@ struct Vec3Hash {
 };
 
 // We keep DODLoader as an internal implementation detail.
-// It knows how to fill buffers, but doesn't know about "Mesh".
-// TODO: Can probably be refactored
 template <typename Sig> struct DODLoader {
   using Field = float;
   using MV = Multivector<Field, Sig>;
@@ -70,13 +68,16 @@ template <typename Sig> struct DODLoader {
                        (int)std::round(z * SCALE)};
 
         if (unique_map.find(key) == unique_map.end()) {
-          uint32_t idx = (uint32_t)geo_out.points.size();
+          // UPDATED: Use num_points()
+          uint32_t idx = (uint32_t)geo_out.num_points();
           unique_map[key] = idx;
           auto mv = MV::from_blade(0, 0);
           mv[1] = x;
           mv[2] = y;
           mv[3] = z;
-          geo_out.points.push_back(mv);
+
+          // UPDATED: Use push_point()
+          geo_out.push_point(mv);
         }
       } else if (line[0] == 'f' && line[1] == ' ') {
         std::istringstream iss(line.substr(2));
@@ -102,9 +103,11 @@ template <typename Sig> struct DODLoader {
     }
 
     topo_out.faces_to_vertices = std::move(face_indices);
-    topo_out.build_coboundaries(geo_out.points.size());
 
-    std::cout << "  - Vertices: " << geo_out.points.size() << "\n";
+    // UPDATED: Use num_points()
+    topo_out.build_coboundaries(geo_out.num_points());
+
+    std::cout << "  - Vertices: " << geo_out.num_points() << "\n";
     std::cout << "  - Faces:    " << topo_out.num_faces() << "\n";
   }
 };
@@ -113,14 +116,9 @@ template <typename Sig> struct DODLoader {
 // PUBLIC API (The Bridge)
 // ==============================================================================
 
-// This is the function you call from main.cpp.
-// It takes the high-level Mesh object and fills it using the internal loader.
 template <typename Sig>
 void load_obj(Mesh<Sig> &mesh, const std::filesystem::path &path) {
-  // 1. Delegate the hard work to the internal loader
   DODLoader<Sig>::load_internal(path, mesh.geometry, mesh.topology);
-
-  // 2. Set high-level metadata
   mesh.name = path.stem().string();
 }
 

@@ -18,6 +18,12 @@ It provides a unified buffer architecture for storing CGA/PGA primitives and an 
 
 
 
+This is a great way to visualize progress. By calculating the delta between the two runs, we can explicitly show the **~9-14% performance gain** achieved by the packed buffer optimization.
+
+Here is the updated **Performance** section for your README.
+
+---
+
 ## Performance
 
 Benchmarks were conducted on procedurally generated "Wavy Grid" meshes to evaluate scalability. The engine maintains interactive framerates for physics simulations even at high vertex counts.
@@ -28,7 +34,22 @@ Benchmarks were conducted on procedurally generated "Wavy Grid" meshes to evalua
 * **Chip:** Apple M3 Max
 * **Memory:** 36 GB Unified Memory
 
-### Benchmark Results
+### Current Benchmarks (v0.2 - Packed Buffers)
+
+*Optimization: Switched `GeometryBuffer` to packed SoA float storage to reduce memory bandwidth.*
+
+| Mesh Size | Vertices | Faces | Topology Build | Geometry Kernel (H, K) | Physics Kernel (Flow) | Sim FPS | Speedup* |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **Grid 100x100** | 10,000 | 19,602 | 0.084 ms | 1.060 ms | 0.107 ms | **857 Hz** | **+6.9%** |
+| **Grid 250x250** | 62,500 | 124,002 | 0.502 ms | 6.354 ms | 0.636 ms | **143 Hz** | **+14.4%** |
+| **Grid 500x500** | 250,000 | 498,002 | 1.914 ms | 24.459 ms | 2.564 ms | **37 Hz** | **+8.8%** |
+| **Grid 1k x 1k** | 1,000,000 | 1,996,002 | 8.261 ms | 96.654 ms | 10.212 ms | **9.4 Hz** | **+9.3%** |
+
+<small>*Speedup compared to initial baseline (commit `028b9c7`).</small>
+
+### Baseline Benchmarks (v0.1 - Sparse Multivectors)
+
+*Initial implementation using full sparse Multivector storage.*
 
 | Mesh Size | Vertices | Faces | Topology Build | Geometry Kernel (H, K) | Physics Kernel (Flow) | Sim FPS |
 | --- | --- | --- | --- | --- | --- | --- |
