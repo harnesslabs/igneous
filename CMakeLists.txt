@@ -29,14 +29,17 @@ function(add_igneous_test name source)
 endfunction()
 
 # --- Test Suites ---
-add_igneous_test(test_algebra tests/algebra.cpp)
+add_igneous_test(test_algebra tests/test_algebra.cpp)
 
 # --- 3. Benchmarks ---
-add_executable(bench_algebra tests/benchmark_algebra.cpp)
+add_executable(bench_algebra benches/bench_algebra.cpp)
 target_link_libraries(bench_algebra PRIVATE igneous fmt::fmt)
 
-add_executable(bench_memory tests/benchmark_memory.cpp)
+add_executable(bench_memory benches/bench_memory.cpp)
 target_link_libraries(bench_memory PRIVATE igneous fmt::fmt)
+
+add_executable(bench_geometry benches/bench_geometry.cpp)
+target_link_libraries(bench_geometry PRIVATE igneous fmt::fmt)
 
 # --- THE MAIN APPLICATION ---
 add_executable(igneous-app src/main.cpp)
