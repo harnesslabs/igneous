@@ -34,7 +34,19 @@ Benchmarks were conducted on procedurally generated "Wavy Grid" meshes to evalua
 * **Chip:** Apple M3 Max
 * **Memory:** 36 GB Unified Memory
 
-### Current Benchmarks (v0.2 - Packed Buffers)
+### Current Benchmarks (v0.3 - Algebra Kernels + Reduced Memory Overhead)
+
+*Optimization: Use `AlgebraKernel`s to use specific multivector types. Use `Vec3` for spatial flow vectors instead of full `Multivector` to reduce computational overhead.*
+
+
+| Mesh Size | Vertices | Faces | Topology Build | Geometry Kernel (H, K) | Physics Kernel (Flow) | Sim FPS | Speedup* |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **Grid 100x100** | 10,000 | 19,602 | 0.081 ms | 0.458 ms | 0.094 ms | **1813 Hz** | **+111.5%** |
+| **Grid 250x250** | 62,500 | 124,002 | 0.771 ms | 2.578 ms | 0.645 ms | **310 Hz** | **+116.8%** |
+| **Grid 500x500** | 250,000 | 498,002 | 2.06 ms | 10.310 ms | 2.445 ms | **78 Hz** | **+110.8%** |
+| **Grid 1k x 1k** | 1,000,000 | 1,996,002 | 8.098 ms | 41.371 ms | 9.540 ms | **19.6 Hz** | **+92.3%** |
+
+<small>*Speedup compared to initial baseline (commit `88bd073`).</small>
 
 *Optimization: Switched `GeometryBuffer` to packed SoA float storage to reduce memory bandwidth.*
 
