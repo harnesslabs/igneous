@@ -3,7 +3,6 @@
 #include <igneous/algebra.hpp>
 #include <igneous/memory.hpp>
 #include <memory_resource>
-#include <optional>
 #include <stdexcept>
 #include <vector>
 

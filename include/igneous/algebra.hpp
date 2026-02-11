@@ -5,6 +5,15 @@
 #include <concepts>
 #include <utility>
 
+// TODO:
+// Note: std::array<Field, Sig::size> might cause issues with xsimd if Sig::size
+// is not a multiple of the SIMD register width (e.g., a 32-element array for a
+// 5D algebra).
+
+// Since xsimd::batch expects to load from aligned memory, ensure that your
+// MemoryArena doesn't just align the Simplex start, but that the Multivector
+// data within it remains 32-byte or 64-byte aligned for AVX/AVX512.
+
 // Portable SIMD Intrinsics (NEON/AVX/SSE)
 #include <xsimd/xsimd.hpp>
 
@@ -136,21 +145,6 @@ template <typename Field, IsSignature Sig> struct Multivector {
   constexpr Field operator[](size_t i) const { return data[i]; }
   constexpr Field &operator[](size_t i) { return data[i]; }
 
-  // --- Basic Arithmetic ---
-  constexpr Multivector operator+(const Multivector &other) const {
-    Multivector result;
-    for (size_t i = 0; i < Size; ++i)
-      result.data[i] = data[i] + other.data[i];
-    return result;
-  }
-
-  constexpr Multivector operator-(const Multivector &other) const {
-    Multivector result;
-    for (size_t i = 0; i < Size; ++i)
-      result.data[i] = data[i] - other.data[i];
-    return result;
-  }
-
   // =========================================================
   // IMPLEMENTATION A: NAIVE (Runtime Loop with Table)
   // =========================================================
@@ -191,21 +185,22 @@ template <typename Field, IsSignature Sig> struct Multivector {
   // IMPLEMENTATION B: OPTIMIZED (Compile-Time Gather)
   // =========================================================
 private:
-  // Calculates one component of the result (TargetK)
-  // by finding all pairs (I, J) that sum to it.
-  template <size_t TargetK, size_t I>
-  constexpr void accumulate_dot_product(Field &accumulator,
-                                        const Multivector &other) const {
-    // Logic: I ^ J = TargetK  ==>  J = I ^ TargetK
+  // Unified Accumulator for Geometric (*) and Wedge (^) products
+  template <bool IsWedge, size_t TargetK, size_t I>
+  constexpr void accumulate_product(Field &accumulator,
+                                    const Multivector &other) const {
     constexpr size_t J = I ^ TargetK;
 
-    // Compile-Time Sign Calculation
+    // THE WEDGE CONSTRAINT (Compile-time check)
+    // If we are doing a Wedge product and the blades share vectors,
+    // the result is strictly zero. The compiler deletes this branch.
+    if constexpr (IsWedge && (I & J) != 0) {
+      return;
+    }
+
     constexpr int sign = geometric_product_sign<Sig>(I, J);
 
     if constexpr (sign != 0) {
-      // Unrolling logic:
-      // accumulator += this[I] * other[J] * sign
-      // We separate +/- to support SIMD types that don't cast to int easily
       if constexpr (sign == 1) {
         accumulator += data[I] * other.data[J];
       } else {
@@ -214,32 +209,52 @@ private:
     }
   }
 
-  // Unrolls the dot product for a single target component
-  template <size_t TargetK, size_t... Is>
+  // Unrolls the sum for a single target component
+  template <bool IsWedge, size_t TargetK, size_t... Is>
   constexpr void compute_component(Multivector &result,
                                    const Multivector &other,
                                    std::index_sequence<Is...>) const {
-    Field sum = Field(0); // Initialize zero (works for float or Packet)
-    // Fold expression: Sum all contributions
-    (accumulate_dot_product<TargetK, Is>(sum, other), ...);
+    Field sum = Field(0);
+    (accumulate_product<IsWedge, TargetK, Is>(sum, other), ...);
     result.data[TargetK] = sum;
   }
 
   // Unrolls the loop over all target components
-  template <size_t... Ks>
+  template <bool IsWedge, size_t... Ks>
   constexpr Multivector unroll_targets(const Multivector &other,
                                        std::index_sequence<Ks...>) const {
     Multivector result;
-    // For each target component K, compute its value
-    (compute_component<Ks>(result, other, std::make_index_sequence<Size>{}),
+    (compute_component<IsWedge, Ks>(result, other,
+                                    std::make_index_sequence<Size>{}),
      ...);
     return result;
   }
 
 public:
+public:
+  // Geometric Product (*)
   constexpr Multivector operator*(const Multivector &other) const {
-    // Entry point for the unroller
-    return unroll_targets(other, std::make_index_sequence<Size>{});
+    return unroll_targets<false>(other, std::make_index_sequence<Size>{});
+  }
+
+  // Outer Product (^) - Now optimized!
+  constexpr Multivector operator^(const Multivector &other) const {
+    return unroll_targets<true>(other, std::make_index_sequence<Size>{});
+  }
+
+  // --- Basic Arithmetic ---
+  constexpr Multivector operator+(const Multivector &other) const {
+    Multivector result;
+    for (size_t i = 0; i < Size; ++i)
+      result.data[i] = data[i] + other.data[i];
+    return result;
+  }
+
+  constexpr Multivector operator-(const Multivector &other) const {
+    Multivector result;
+    for (size_t i = 0; i < Size; ++i)
+      result.data[i] = data[i] - other.data[i];
+    return result;
   }
 };
 
