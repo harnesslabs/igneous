@@ -1,161 +1,86 @@
 #pragma once
 #include <cstdint>
 #include <igneous/core/algebra.hpp>
+#include <igneous/core/blades.hpp>
 #include <span>
 #include <vector>
 
 namespace igneous::data {
 
-// Bring in core types
 using igneous::core::IsSignature;
 using igneous::core::Multivector;
+using igneous::core::Vec3;
 
-/**
- * @brief GeometryBuffer: A Data-Oriented container with Compact Storage.
- *
- * instead of storing full Multivectors (which are sparse and padded to
- * power-of-2), we store tightly packed arrays of coefficients for specific
- * grades.
- *
- * - Points (Grade 1): Stored as [e1, e2, e3, ...]
- * - Edges  (Grade 2): Stored as [e12, e23, e31, ...]
- * - Faces  (Grade 3): Stored as [e123, ...]
- *
- * The 'get_X(i)' methods "Lift" these packed floats into a full SIMD-ready
- * Multivector register for computation.
- */
-template <typename Field, IsSignature Sig> struct GeometryBuffer {
+template <typename Field, typename Sig> struct GeometryBuffer {
+  // Stride per vertex (e.g., 3 for Euclidean3D, 4 for PGA)
+  static constexpr size_t STRIDE = Sig::dim;
 
   // ========================================================================
-  // 1. COMPACT STORAGE
+  // 1. INTERLEAVED STORAGE (Array of Structs)
   // ========================================================================
-
-  // Stride calculations based on Signature dimension
-  // For Euclidean3D (3,0,0):
-  //  - Vector Stride   = 3 (e1, e2, e3)
-  //  - Bivector Stride = 3 (e12, e13, e23)
-  //  - Trivector Stride= 1 (e123)
-
-  // Helper to calculate binomial coeff (n choose k) could be used here
-  // For now, we assume standard 3D/4D usage patterns.
-  static constexpr size_t POINT_STRIDE = Sig::dim;
-
-  // Layout: [p0_e1, p0_e2, p0_e3,  p1_e1, ...]
-  std::vector<Field> packed_points;
-
-  // Layout: [e0_12, e0_13, e0_23, ...] (Lexicographical order usually)
-  std::vector<Field> packed_edges;
-
-  // Layout: [f0_123, f1_123, ...]
-  std::vector<Field> packed_faces;
+  // Layout: [x0, y0, z0, x1, y1, z1, ...]
+  // This is optimal for random access (Topology/Curvature).
+  std::vector<Field> packed_data;
 
   // ========================================================================
-  // 2. ACCESSORS (The "Lift")
+  // 2. BLADE ACCESSORS (Fastest - No Padding)
   // ========================================================================
 
-  // Retrieve the i-th point as a full Multivector
+  // Directly returns a Vec3 struct (12 bytes).
+  // This bypasses Multivector construction entirely.
+  igneous::core::Vec3 get_vec3(size_t i) const {
+    size_t offset = i * STRIDE;
+    // Assume standard layout: first 3 components are spatial x, y, z
+    return {packed_data[offset], packed_data[offset + 1],
+            packed_data[offset + 2]};
+  }
+
+  void set_vec3(size_t i, const igneous::core::Vec3 &v) {
+    size_t offset = i * STRIDE;
+    packed_data[offset] = v.x;
+    packed_data[offset + 1] = v.y;
+    packed_data[offset + 2] = v.z;
+    // Note: For PGA/CGA, we leave the higher dimensions (w, n_inf) untouched.
+    // This is exactly what we want for spatial flow.
+  }
+
+  // ========================================================================
+  // 3. MULTIVECTOR ACCESSORS (Generic Lift)
+  // ========================================================================
+
   Multivector<Field, Sig> get_point(size_t i) const {
     Multivector<Field, Sig> mv;
-    size_t offset = i * POINT_STRIDE;
-
-    // We unroll this manual loop for 3D/4D common cases
-    // Note: This assumes the Basis blades 1, 2, 4 (binary) correspond to array
-    // indices A robust implementation maps blade bits to array indices. For
-    // Euclidean3D, indices 1, 2, 3 correspond to e1, e2, e3.
-
-    if constexpr (Sig::dim == 3) {
-      mv[1] = packed_points[offset + 0]; // x
-      mv[2] = packed_points[offset + 1]; // y
-      mv[3] = packed_points[offset + 2]; // z
-    } else {
-      // Fallback for generic dimensions
-      // Assumes packed data corresponds to basis vectors e1, e2, ... en
-      for (int k = 0; k < Sig::dim; ++k) {
-        // Basis vector indices in Multivector are usually 2^0, 2^1, ...
-        // Actually, MV storage is flat 0..Size-1.
-        // In 3D: 0=1, 1=e1, 2=e2, 3=e12, 4=e3...
-        // WAIT. Standard binary indexing:
-        // 1 (001) = e1
-        // 2 (010) = e2
-        // 4 (100) = e3
-        mv[1 << k] = packed_points[offset + k];
-      }
+    size_t offset = i * STRIDE;
+    // Map interleaved array to Basis Indices (1, 2, 4...)
+    for (int k = 0; k < Sig::dim; ++k) {
+      mv[1 << k] = packed_data[offset + k];
     }
     return mv;
   }
 
-  // Write a full Multivector back to compact storage
   void set_point(size_t i, const Multivector<Field, Sig> &mv) {
-    size_t offset = i * POINT_STRIDE;
-    if (offset + POINT_STRIDE > packed_points.size()) {
-      // Auto-resize or throw? For perf, assume caller sized it.
-      // But safe to just push_back if at end
-    }
-
-    if constexpr (Sig::dim == 3) {
-      packed_points[offset + 0] = mv[1]; // x
-      packed_points[offset + 1] = mv[2]; // y
-      packed_points[offset + 2] = mv[3]; // z (usually index 4 in binary layout)
-      // CAUTION: Is MV[3] e3?
-      // Standard GA Binary Indexing for 3D:
-      // 0: scalar
-      // 1: e1
-      // 2: e2
-      // 3: e12
-      // 4: e3  <-- WATCH OUT
-      // 5: e13
-      // 6: e23
-      // 7: e123
-      //
-      // Your current Algebra.hpp loop just iterates 0..Size.
-      // If your operator[] accesses linear array index, we need to know the
-      // mapping. Assuming your previous code `mv[1]=x, mv[2]=y, mv[3]=z`
-      // implied you wrote a custom mapping or used a linear basis 1, e1, e2,
-      // e3...
-
-      // FOR SAFETY with your current Algebra.hpp:
-      // Let's assume you used the binary indexing (standard xsimd/GA).
-      // We need a helper "get_basis_index(k)".
-      // For now, I will stick to the Binary Indexing standard:
-      // e1=1, e2=2, e3=4.
-
-      // HOWEVER, looking at your previous `mesh_loader`:
-      // mv[1]=x, mv[2]=y, mv[3]=z.
-      // This implies you are treating the MV array as [s, e1, e2, e3, e12, ...]
-      // I will preserve THAT mapping for now.
-
-      packed_points[offset + 0] = mv[1];
-      packed_points[offset + 1] = mv[2];
-      packed_points[offset + 2] = mv[3];
+    size_t offset = i * STRIDE;
+    for (int k = 0; k < Sig::dim; ++k) {
+      packed_data[offset + k] = mv[1 << k];
     }
   }
 
-  // helper to append
   void push_point(const Multivector<Field, Sig> &mv) {
-    if constexpr (Sig::dim == 3) {
-      packed_points.push_back(mv[1]);
-      packed_points.push_back(mv[2]);
-      packed_points.push_back(mv[3]);
+    for (int k = 0; k < Sig::dim; ++k) {
+      packed_data.push_back(mv[1 << k]);
     }
   }
 
   // ========================================================================
-  // 3. UTILITY
+  // 4. UTILITY
   // ========================================================================
+  size_t num_points() const { return packed_data.size() / STRIDE; }
 
-  size_t num_points() const { return packed_points.size() / POINT_STRIDE; }
+  void reserve(size_t v, size_t, size_t) { packed_data.reserve(v * STRIDE); }
 
-  void reserve(size_t v, size_t e, size_t f) {
-    packed_points.reserve(v * POINT_STRIDE);
-    packed_edges.reserve(e * 3); // Approx
-    packed_faces.reserve(f);
-  }
+  void resize(size_t v) { packed_data.resize(v * STRIDE); }
 
-  void clear() {
-    packed_points.clear();
-    packed_edges.clear();
-    packed_faces.clear();
-  }
+  void clear() { packed_data.clear(); }
 };
 
 struct TopologyBuffer {
@@ -181,7 +106,7 @@ struct TopologyBuffer {
     return {&coboundary_data[start], end - start};
   }
 
-  // Builder (same as before)
+  // Builder
   void build_coboundaries(size_t num_vertices) {
     coboundary_offsets.assign(num_vertices + 1, 0);
     for (uint32_t v_idx : faces_to_vertices) {

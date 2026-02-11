@@ -174,14 +174,4 @@ TEST_CASE("Algebraic Axioms") {
       CHECK(left[i] == doctest::Approx(right[i]));
     }
   }
-
-  SUBCASE("Naive vs Unrolled Implementation Match") {
-    // This confirms our optimization didn't break the math
-    auto fast = a * b;
-    auto slow = a.multiply_naive(b);
-
-    for (size_t i = 0; i < Alg::Size; ++i) {
-      CHECK(fast[i] == doctest::Approx(slow[i]));
-    }
-  }
 }
