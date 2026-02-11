@@ -43,6 +43,10 @@ bench-memory: release
 	cmake --build build --target bench_memory
 	./build/bench_memory
 
+bench-geometry: release
+	cmake --build build --target bench_geometry
+	./build/bench_geometry
+
 # Run all benchmarks
 bench: bench-algebra bench-memory
 
