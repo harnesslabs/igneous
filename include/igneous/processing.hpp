@@ -220,4 +220,52 @@ void save_colored_obj(const std::string &filename,
   }
 }
 
+template <typename Field, IsSignature Sig>
+void normalize_mesh(GeometryBuffer<Field, Sig> &geometry) {
+  if (geometry.points.empty())
+    return;
+
+  // 1. Compute Bounding Box
+  // Initialize with first point
+  Multivector<Field, Sig> min_p = geometry.points[0];
+  Multivector<Field, Sig> max_p = geometry.points[0];
+
+  for (const auto &p : geometry.points) {
+    // Check X, Y, Z (indices 1, 2, 3)
+    for (int k = 1; k <= 3; ++k) {
+      if (p[k] < min_p[k])
+        min_p[k] = p[k];
+      if (p[k] > max_p[k])
+        max_p[k] = p[k];
+    }
+  }
+
+  // 2. Calculate Center and Scale
+  Multivector<Field, Sig> center;
+  float max_dim = 0.0f;
+
+  for (int k = 1; k <= 3; ++k) {
+    center[k] = (min_p[k] + max_p[k]) * 0.5f;
+    float dim = max_p[k] - min_p[k];
+    if (dim > max_dim)
+      max_dim = dim;
+  }
+
+  // If scale is 0 (single point), avoid div/0
+  float scale_factor = (max_dim > 1e-9f) ? (2.0f / max_dim) : 1.0f;
+
+  std::cout << "[Normalization] Shift: " << center[1] << " " << center[2] << " "
+            << center[3] << "\n";
+  std::cout << "[Normalization] Scale: " << scale_factor << "x\n";
+
+  // 3. Apply Transform
+  for (auto &p : geometry.points) {
+    // p_new = (p - center) * scale
+    auto temp = p - center;
+    for (int k = 1; k <= 3; ++k) {
+      p[k] = temp[k] * scale_factor;
+    }
+  }
+}
+
 } // namespace igneous

@@ -18,41 +18,31 @@ int main(int argc, char **argv) {
   GeometryBuffer<float, Sig> geometry;
   TopologyBuffer topology;
 
-  // 1. Load Initial Mesh
   DODLoader<Sig>::load_obj(argv[1], geometry, topology);
 
-  // 2. Simulation Settings
-  int total_frames = 50;
-  double dt =
-      0.5; // "Time step" - higher is faster smoothing, but can be unstable
+  // --- CRITICAL FIX ---
+  // Bring mesh to 0,0,0 and scale to [-1, 1].
+  // This fixes float precision issues and makes dt=0.01 meaningful.
+  normalize_mesh(geometry);
+
+  // Simulation Settings
+  int total_frames = 1000;
+
+  // Now that scale is normalized, dt=0.01 is conservative, dt=0.1 is fast.
+  double dt = 0.5;
 
   std::cout << "Starting Mean Curvature Flow simulation...\n";
 
   for (int frame = 0; frame < total_frames; ++frame) {
-
-    // A. Analyze Geometry (Get Curvature for Color)
-    // We do this BEFORE moving, so the color represents the forces about to act
+    // (Rest of your loop remains the same)
     auto [H, K] = compute_curvature_measures(geometry, topology);
 
-    // B. Export Frame
-    // Filename: frame_000.obj, frame_001.obj...
-    std::string filename = "frame_" + std::to_string(frame) + ".obj";
-    if (frame < 10)
-      filename = "frame_00" + std::to_string(frame) + ".obj";
-    else if (frame < 100)
-      filename = "frame_0" + std::to_string(frame) + ".obj";
-
-    // Save with Heatmap (Sigma Clip 2.0 to see the flow clearly)
+    std::string filename =
+        std::format("output/frame_{:03}.obj", frame); // C++20 formatting
     save_colored_obj(filename, geometry, topology, H, 2.0);
 
-    // C. Integrate Physics
-    // This morphs the geometry for the next loop
     integrate_mean_curvature_flow(geometry, topology, dt);
-
     std::cout << "  [Frame " << frame << "] Smoothing complete.\n";
   }
-
-  std::cout << "Done! Drag frame_*.obj into Blender or MeshLab to see the "
-               "animation.\n";
   return 0;
 }
