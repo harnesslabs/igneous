@@ -1,48 +1,44 @@
-#include <igneous/algebra.hpp>
-#include <igneous/curvature.hpp> // for compute_curvature
-#include <igneous/flow.hpp>      // <--- NEW HEADER
-#include <igneous/geometry.hpp>
-#include <igneous/mesh_loader_dod.hpp>
-#include <igneous/processing.hpp> // for save_colored_obj
-#include <igneous/topology.hpp>
-#include <iostream>
-#include <string>
+#include <format>
+#include <igneous/data/mesh.hpp>
+#include <igneous/io/exporter.hpp>
+#include <igneous/io/importer.hpp>
+#include <igneous/ops/curvature.hpp>
+#include <igneous/ops/flow.hpp>
+#include <igneous/ops/transform.hpp>
 
 using namespace igneous;
-using Sig = Euclidean3D;
+using Sig = igneous::core::Euclidean3D;
+using Mesh = igneous::data::Mesh<Sig>;
 
 int main(int argc, char **argv) {
   if (argc < 2)
     return 1;
 
-  GeometryBuffer<float, Sig> geometry;
-  TopologyBuffer topology;
+  // 1. Setup
+  Mesh mesh;
 
-  DODLoader<Sig>::load_obj(argv[1], geometry, topology);
+  // 2. Import System
+  io::load_obj(mesh, argv[1]);
 
-  // --- CRITICAL FIX ---
-  // Bring mesh to 0,0,0 and scale to [-1, 1].
-  // This fixes float precision issues and makes dt=0.01 meaningful.
-  normalize_mesh(geometry);
+  // 3. Transform System (Pre-process)
+  ops::normalize(mesh);
 
-  // Simulation Settings
-  int total_frames = 1000;
+  std::cout << "Starting simulation on " << mesh.name << "...\n";
 
-  // Now that scale is normalized, dt=0.01 is conservative, dt=0.1 is fast.
-  double dt = 0.5;
+  // 4. The Loop
+  for (int frame = 0; frame < 50; ++frame) {
 
-  std::cout << "Starting Mean Curvature Flow simulation...\n";
+    // Compute System
+    // Note: You'll need to update curvature.hpp to take Mesh& input
+    auto [H, K] = igneous::ops::compute_curvature_measures(mesh);
 
-  for (int frame = 0; frame < total_frames; ++frame) {
-    // (Rest of your loop remains the same)
-    auto [H, K] = compute_curvature_measures(geometry, topology);
+    // Export System
+    std::string filename = std::format("frame_{:03}.obj", frame);
+    io::export_heatmap(mesh, H, filename, 2.0);
 
-    std::string filename =
-        std::format("output/frame_{:03}.obj", frame); // C++20 formatting
-    save_colored_obj(filename, geometry, topology, H, 2.0);
-
-    integrate_mean_curvature_flow(geometry, topology, dt);
-    std::cout << "  [Frame " << frame << "] Smoothing complete.\n";
+    // Physics System
+    igneous::ops::integrate_mean_curvature_flow(mesh, 0.05);
   }
+
   return 0;
 }

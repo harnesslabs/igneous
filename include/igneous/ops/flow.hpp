@@ -1,14 +1,21 @@
 // flow.hpp
 #pragma once
-#include <igneous/geometry.hpp>
-#include <igneous/topology.hpp>
+#include <igneous/data/mesh.hpp>
 #include <vector>
 
-namespace igneous {
+namespace igneous::ops {
 
-template <typename Field, IsSignature Sig>
-void integrate_mean_curvature_flow(GeometryBuffer<Field, Sig> &geometry,
-                                   const TopologyBuffer &topology, double dt) {
+using igneous::core::IsSignature;
+using igneous::core::Multivector;
+using igneous::data::Mesh;
+
+template <IsSignature Sig>
+void integrate_mean_curvature_flow(Mesh<Sig> &mesh, double dt) {
+  using Field = float;
+
+  auto &geometry = mesh.geometry;
+  auto &topology = mesh.topology;
+
   size_t num_verts = geometry.points.size();
 
   // 1. Compute Update Vectors (The "Flow")
@@ -72,4 +79,4 @@ void integrate_mean_curvature_flow(GeometryBuffer<Field, Sig> &geometry,
   }
 }
 
-} // namespace igneous
+} // namespace igneous::ops

@@ -17,7 +17,7 @@
 // Portable SIMD Intrinsics (NEON/AVX/SSE)
 #include <xsimd/xsimd.hpp>
 
-namespace igneous {
+namespace igneous::core {
 
 // ========================================================================
 // 1. SIGNATURE & METRIC
@@ -269,4 +269,4 @@ using Packet = xsimd::batch<float>;
 // Operations on this type happen in parallel automatically
 template <typename Sig> using WideMultivector = Multivector<Packet, Sig>;
 
-} // namespace igneous
+} // namespace igneous::core

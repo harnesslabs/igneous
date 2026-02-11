@@ -1,17 +1,24 @@
-// include/igneous/mesh_loader_dod.hpp
 #pragma once
 #include <filesystem>
 #include <fstream>
-#include <igneous/geometry.hpp>
-#include <igneous/topology.hpp>
+#include <igneous/data/mesh.hpp>
 #include <iostream>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
 
-namespace igneous {
+namespace igneous::io {
 
-// --- Spatial Hashing ---
+using igneous::core::IsSignature;
+using igneous::core::Multivector;
+using igneous::data::GeometryBuffer;
+using igneous::data::Mesh;
+using igneous::data::TopologyBuffer;
+
+// ==============================================================================
+// INTERNAL HELPERS (Spatial Hashing & Parsing)
+// ==============================================================================
+
 struct Vec3Key {
   int x, y, z;
   bool operator==(const Vec3Key &o) const {
@@ -26,15 +33,16 @@ struct Vec3Hash {
   }
 };
 
-// Template on Signature, not "Algebra" (which usually implies the Multivector)
+// We keep DODLoader as an internal implementation detail.
+// It knows how to fill buffers, but doesn't know about "Mesh".
+// TODO: Can probably be refactored
 template <typename Sig> struct DODLoader {
-  // Define the specific Multivector type we are constructing
   using Field = float;
   using MV = Multivector<Field, Sig>;
 
-  static void load_obj(const std::filesystem::path &path,
-                       GeometryBuffer<Field, Sig> &geo_out,
-                       TopologyBuffer &topo_out) {
+  static void load_internal(const std::filesystem::path &path,
+                            GeometryBuffer<Field, Sig> &geo_out,
+                            TopologyBuffer &topo_out) {
     std::ifstream file(path);
     if (!file.is_open())
       throw std::runtime_error("File not found: " + path.string());
@@ -42,15 +50,12 @@ template <typename Sig> struct DODLoader {
     geo_out.clear();
     topo_out.clear();
 
-    // Temporary storage for face indices before moving to buffer
     std::vector<uint32_t> face_indices;
-
     std::unordered_map<Vec3Key, uint32_t, Vec3Hash> unique_map;
     const double SCALE = 10000.0;
 
     std::string line;
-    std::cout << "[DOD] Streaming " << path.filename() << " to buffers..."
-              << std::endl;
+    std::cout << "[IO] Loading " << path.filename() << "...\n";
 
     while (std::getline(file, line)) {
       if (line.length() < 2)
@@ -67,8 +72,6 @@ template <typename Sig> struct DODLoader {
         if (unique_map.find(key) == unique_map.end()) {
           uint32_t idx = (uint32_t)geo_out.points.size();
           unique_map[key] = idx;
-
-          // FIXED: Use MV::from_blade instead of Sig::from_blade
           auto mv = MV::from_blade(0, 0);
           mv[1] = x;
           mv[2] = y;
@@ -87,12 +90,9 @@ template <typename Sig> struct DODLoader {
           int idx = std::stoi(v_str);
           if (idx < 0)
             idx = (int)unique_map.size() + idx + 1;
-
-          // OBJ is 1-based, we need 0-based
           poly.push_back(idx - 1);
         }
 
-        // Fan Triangulation
         for (size_t i = 0; i < poly.size() - 2; ++i) {
           face_indices.push_back(poly[0]);
           face_indices.push_back(poly[i + 1]);
@@ -101,17 +101,27 @@ template <typename Sig> struct DODLoader {
       }
     }
 
-    // Move data into the TopologyBuffer
     topo_out.faces_to_vertices = std::move(face_indices);
-
-    // FIXED: build_coboundaries only takes num_vertices.
-    // It reads faces_to_vertices directly from itself.
     topo_out.build_coboundaries(geo_out.points.size());
 
-    std::cout << "[DOD] Loaded " << geo_out.points.size()
-              << " unique vertices.\n";
-    std::cout << "[DOD] Loaded " << topo_out.num_faces() << " faces.\n";
+    std::cout << "  - Vertices: " << geo_out.points.size() << "\n";
+    std::cout << "  - Faces:    " << topo_out.num_faces() << "\n";
   }
 };
 
-} // namespace igneous
+// ==============================================================================
+// PUBLIC API (The Bridge)
+// ==============================================================================
+
+// This is the function you call from main.cpp.
+// It takes the high-level Mesh object and fills it using the internal loader.
+template <typename Sig>
+void load_obj(Mesh<Sig> &mesh, const std::filesystem::path &path) {
+  // 1. Delegate the hard work to the internal loader
+  DODLoader<Sig>::load_internal(path, mesh.geometry, mesh.topology);
+
+  // 2. Set high-level metadata
+  mesh.name = path.stem().string();
+}
+
+} // namespace igneous::io

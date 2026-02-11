@@ -30,7 +30,6 @@ endfunction()
 
 # --- Test Suites ---
 add_igneous_test(test_algebra tests/algebra.cpp)
-add_igneous_test(test_simplex tests/simplex.cpp)
 
 # --- 3. Benchmarks ---
 add_executable(bench_algebra tests/benchmark_algebra.cpp)

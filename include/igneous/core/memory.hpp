@@ -4,7 +4,7 @@
 #include <memory_resource>
 #include <vector>
 
-namespace igneous {
+namespace igneous::core {
 
 // A simple linear allocator (Arena).
 // It grabs a big chunk of memory upfront and hands it out sequentially.
@@ -70,4 +70,4 @@ protected:
   }
 };
 
-} // namespace igneous
+} // namespace igneous::core

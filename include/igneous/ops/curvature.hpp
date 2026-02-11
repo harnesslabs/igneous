@@ -1,16 +1,26 @@
 // curvature.hpp
 #pragma once
 #include <cmath>
-#include <igneous/geometry.hpp>
-#include <igneous/topology.hpp>
-#include <numbers> // C++20 for pi
+#include <igneous/core/algebra.hpp>
+#include <igneous/data/mesh.hpp>
+#include <numbers>
 
-namespace igneous {
+namespace igneous::ops {
 
-template <typename Field, IsSignature Sig>
+using igneous::core::IsSignature;
+using igneous::core::Multivector;
+using igneous::data::Mesh;
+
+template <IsSignature Sig>
 std::pair<std::vector<double>, std::vector<double>>
-compute_curvature_measures(const GeometryBuffer<Field, Sig> &geometry,
-                           const TopologyBuffer &topology) {
+compute_curvature_measures(const Mesh<Sig> &mesh) {
+
+  const auto &geometry = mesh.geometry;
+  const auto &topology = mesh.topology;
+
+  // Use 'float' for storage
+  using Field = float;
+
   size_t num_verts = geometry.points.size();
   std::vector<double> H(num_verts, 0.0);
   std::vector<double> K(num_verts, 0.0);
@@ -124,4 +134,4 @@ compute_curvature_measures(const GeometryBuffer<Field, Sig> &geometry,
   return {H, K};
 }
 
-} // namespace igneous
+} // namespace igneous::ops

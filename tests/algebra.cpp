@@ -1,9 +1,10 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <cmath>
 #include <doctest/doctest.h>
-#include <igneous/algebra.hpp>
+#include <igneous/core/algebra.hpp>
 
 using namespace igneous;
+using igneous::core::Multivector;
+using igneous::core::Signature;
 
 // Helper to define "Approx" for our multivectors if needed,
 // but for now we check components individually using doctest::Approx.

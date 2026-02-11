@@ -1,11 +1,14 @@
 #include <chrono>
 #include <fmt/core.h>
-#include <igneous/algebra.hpp>
-#include <igneous/memory.hpp>
+#include <igneous/core/algebra.hpp>
+#include <igneous/core/memory.hpp>
 #include <vector>
 
 using namespace igneous;
 using Clock = std::chrono::high_resolution_clock;
+using igneous::core::Euclidean3D;
+using igneous::core::MemoryArena;
+using igneous::core::Multivector;
 
 using Algebra = Multivector<double, Euclidean3D>;
 
@@ -40,7 +43,7 @@ int main() {
 
   // Create an arena big enough (Size of Algebra * Count + some padding)
   // Algebra is 8 doubles (64 bytes). 1M * 64B = ~64MB.
-  igneous::MemoryArena arena(OBJECT_COUNT * sizeof(Algebra) * 2);
+  MemoryArena arena(OBJECT_COUNT * sizeof(Algebra) * 2);
 
   // We use std::pmr::vector which uses our arena
   std::pmr::vector<Algebra *> arena_objects(&arena);

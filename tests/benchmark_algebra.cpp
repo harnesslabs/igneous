@@ -1,11 +1,16 @@
 #include <chrono>
 #include <fmt/core.h>
-#include <igneous/algebra.hpp>
+#include <igneous/core/algebra.hpp>
 #include <random>
 #include <vector>
 
 using namespace igneous;
 using Clock = std::chrono::high_resolution_clock;
+using igneous::core::Euclidean3D;
+using igneous::core::Multivector;
+using igneous::core::Packet;
+using igneous::core::Signature;
+using igneous::core::WideMultivector;
 
 // 1. Standard Scalar Algebra
 using Algebra = Multivector<double, Euclidean3D>;
