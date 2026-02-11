@@ -1,5 +1,6 @@
-// flow.hpp
+// include/igneous/ops/flow.hpp
 #pragma once
+#include <algorithm> // for std::max
 #include <igneous/data/mesh.hpp>
 #include <vector>
 
@@ -11,12 +12,14 @@ using igneous::data::Mesh;
 
 template <IsSignature Sig>
 void integrate_mean_curvature_flow(Mesh<Sig> &mesh, double dt) {
+  // Define Field to match the Mesh's storage type (float)
   using Field = float;
 
   auto &geometry = mesh.geometry;
-  auto &topology = mesh.topology;
+  const auto &topology = mesh.topology; // Topology is read-only here
 
-  size_t num_verts = geometry.points.size();
+  // UPDATED: Use accessor .num_points()
+  size_t num_verts = geometry.num_points();
 
   // 1. Compute Update Vectors (The "Flow")
   // We store these in a temporary buffer so we don't read "future" data
@@ -28,10 +31,6 @@ void integrate_mean_curvature_flow(Mesh<Sig> &mesh, double dt) {
     if (faces.empty())
       continue;
 
-    // Uniform Laplacian (Umbrella Operator)
-    // L(p) = sum(p_neighbor - p)
-    // This vector points in the direction of minimizing surface area.
-
     Multivector<Field, Sig> sum_neighbors; // Zero init
     double count = 0.0;
 
@@ -41,41 +40,35 @@ void integrate_mean_curvature_flow(Mesh<Sig> &mesh, double dt) {
       uint32_t i1 = topology.get_vertex_for_face(f_idx, 1);
       uint32_t i2 = topology.get_vertex_for_face(f_idx, 2);
 
-      // Add vertices that are NOT center 'i'
-      // (Note: This adds neighbors multiple times if they share multiple faces,
-      // which effectively weights them by valence. This is acceptable for
-      // simple smoothing.)
+      // UPDATED: Use get_point instead of direct array access
       if (i0 != i)
-        sum_neighbors = sum_neighbors + geometry.points[i0];
+        sum_neighbors = sum_neighbors + geometry.get_point(i0);
       if (i1 != i)
-        sum_neighbors = sum_neighbors + geometry.points[i1];
+        sum_neighbors = sum_neighbors + geometry.get_point(i1);
       if (i2 != i)
-        sum_neighbors = sum_neighbors + geometry.points[i2];
+        sum_neighbors = sum_neighbors + geometry.get_point(i2);
 
-      // Each face contributes 2 neighbors.
       count += 2.0;
     }
 
     // Calculate Laplacian Vector
-    // V_flow = (Average_Center - P)
     Multivector<Field, Sig> average_pos = sum_neighbors;
-    // Scalar division
     double inv_c = 1.0 / std::max(1.0, count);
     for (size_t k = 0; k < Sig::size; ++k)
-      average_pos[k] *= inv_c;
+      average_pos[k] *= (float)inv_c;
 
-    // The vector from P to the average of its neighbors
-    displacements[i] = average_pos - geometry.points[i];
+    // UPDATED: Use get_point
+    displacements[i] = average_pos - geometry.get_point(i);
   }
 
   // 2. Apply Updates (Integration Step)
-  // P_new = P_old + dt * Flow_Vector
   for (size_t i = 0; i < num_verts; ++i) {
-    // Scalar multiplication of the displacement vector
     for (size_t k = 0; k < Sig::size; ++k)
-      displacements[i][k] *= dt;
+      displacements[i][k] *= (float)dt;
 
-    geometry.points[i] = geometry.points[i] + displacements[i];
+    // UPDATED: Read, Add, Write back using set_point
+    auto current_p = geometry.get_point(i);
+    geometry.set_point(i, current_p + displacements[i]);
   }
 }
 

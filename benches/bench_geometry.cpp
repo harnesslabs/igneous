@@ -21,11 +21,13 @@ using igneous::data::Mesh;
 // ==============================================================================
 // 1. HELPER: Procedural Mesh Generator
 // ==============================================================================
-// Creates a "Wavy Grid" of size N x N.
-// This ensures we have a dense mesh with curvature to process.
 Mesh<Sig> generate_benchmark_mesh(int side_length) {
   Mesh<Sig> mesh;
   mesh.name = "Benchmark_Grid_" + std::to_string(side_length);
+
+  // Pre-allocate memory using the new API
+  // Estimate: side_length^2 vertices
+  mesh.geometry.reserve(side_length * side_length, 0, 0);
 
   // 1. Generate Vertices (z = sin(x) + cos(y))
   float scale = 10.0f / side_length;
@@ -39,12 +41,13 @@ Mesh<Sig> generate_benchmark_mesh(int side_length) {
       mv[1] = px;
       mv[2] = py;
       mv[3] = pz;
-      mesh.geometry.points.push_back(mv);
+
+      // FIXED: Use push_point instead of accessing vector directly
+      mesh.geometry.push_point(mv);
     }
   }
 
   // 2. Generate Topology (Quads -> Triangles)
-  // We manually fill faces_to_vertices to simulate a loaded file
   std::vector<uint32_t> indices;
   indices.reserve((side_length - 1) * (side_length - 1) * 6);
 
@@ -66,7 +69,6 @@ Mesh<Sig> generate_benchmark_mesh(int side_length) {
     }
   }
 
-  // We do NOT build coboundaries here. We want to benchmark that!
   mesh.topology.faces_to_vertices = std::move(indices);
   return mesh;
 }
@@ -88,8 +90,11 @@ BenchResult run_workload(int grid_size) {
   // A. Setup
   auto mesh = generate_benchmark_mesh(grid_size);
 
+  // FIXED: Use num_points() accessor
+  size_t n_verts = mesh.geometry.num_points();
+
   // Warmup (allocations, etc.)
-  mesh.topology.build_coboundaries(mesh.geometry.points.size());
+  mesh.topology.build_coboundaries(n_verts);
   ops::compute_curvature_measures(mesh);
 
   // Reset for actual timing
@@ -98,16 +103,14 @@ BenchResult run_workload(int grid_size) {
 
   // --- B. Benchmark: Topology (Graph Build) ---
   auto t0 = Clock::now();
-  mesh.topology.build_coboundaries(mesh.geometry.points.size());
+  mesh.topology.build_coboundaries(n_verts);
   auto t1 = Clock::now();
 
   // --- C. Benchmark: Geometry Kernel (Curvature) ---
-  // Run 10 times to average out noise
   int iterations = 10;
   auto t2 = Clock::now();
   for (int i = 0; i < iterations; ++i) {
     auto [H, K] = ops::compute_curvature_measures(mesh);
-    // Sink to prevent optimization (simple XOR sum)
     if (H.empty())
       std::cout << "Error";
   }
@@ -130,7 +133,7 @@ BenchResult run_workload(int grid_size) {
 
   return BenchResult{"Grid " + std::to_string(grid_size) + "x" +
                          std::to_string(grid_size),
-                     mesh.geometry.points.size(),
+                     n_verts, // FIXED
                      mesh.topology.num_faces(),
                      ms_topo,
                      ms_curv,
@@ -143,11 +146,7 @@ BenchResult run_workload(int grid_size) {
 // ==============================================================================
 int main() {
   std::vector<int> sizes = {100, 250, 500, 1000};
-  // 100x100 = 10k verts (L1 Cache fit)
-  // 500x500 = 250k verts (RAM Bandwidth bound)
-  // 1000x1000 = 1M verts (Stress test)
 
-  // Header
   std::cout << "\n============================================================="
                "====================\n";
   std::cout << " IGNEOUS GEOMETRY ENGINE BENCHMARK \n";

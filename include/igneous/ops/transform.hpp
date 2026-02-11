@@ -1,6 +1,5 @@
-// include/igneous/ops/transform.hpp
 #pragma once
-#include "igneous/core/algebra.hpp"
+#include <igneous/core/algebra.hpp>
 #include <igneous/data/mesh.hpp>
 #include <iostream>
 
@@ -10,16 +9,21 @@ using igneous::core::Multivector;
 using igneous::data::Mesh;
 
 template <typename Sig> void normalize(Mesh<Sig> &mesh) {
-  if (mesh.geometry.points.empty())
+  // UPDATED: Check num_points() instead of .points.empty()
+  if (mesh.geometry.num_points() == 0)
     return;
 
   using Field = float; // Assuming float for now
+  size_t n_verts = mesh.geometry.num_points();
 
   // 1. Compute Bounding Box
-  auto min_p = mesh.geometry.points[0];
-  auto max_p = mesh.geometry.points[0];
+  // UPDATED: Use get_point(0)
+  auto min_p = mesh.geometry.get_point(0);
+  auto max_p = mesh.geometry.get_point(0);
 
-  for (const auto &p : mesh.geometry.points) {
+  // UPDATED: Iterate using index
+  for (size_t i = 0; i < n_verts; ++i) {
+    auto p = mesh.geometry.get_point(i);
     for (int k = 1; k <= 3; ++k) {
       if (p[k] < min_p[k])
         min_p[k] = p[k];
@@ -42,12 +46,19 @@ template <typename Sig> void normalize(Mesh<Sig> &mesh) {
 
   std::cout << "[Transform] Centered and scaled (x" << scale << ")\n";
 
-  // 3. Apply
-  for (auto &p : mesh.geometry.points) {
+  // 3. Apply Transform
+  for (size_t i = 0; i < n_verts; ++i) {
+    // UPDATED: Read -> Modify -> Write pattern
+    auto p = mesh.geometry.get_point(i);
     auto temp = p - center;
+
+    // Apply scale component-wise
     for (int k = 1; k <= 3; ++k) {
       p[k] = temp[k] * scale;
     }
+
+    // Write back to packed storage
+    mesh.geometry.set_point(i, p);
   }
 }
 

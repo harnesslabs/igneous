@@ -26,18 +26,18 @@ int main(int argc, char **argv) {
   std::cout << "Starting simulation on " << mesh.name << "...\n";
 
   // 4. The Loop
-  for (int frame = 0; frame < 50; ++frame) {
+  for (int frame = 0; frame < 1000; ++frame) {
 
     // Compute System
     // Note: You'll need to update curvature.hpp to take Mesh& input
     auto [H, K] = igneous::ops::compute_curvature_measures(mesh);
 
     // Export System
-    std::string filename = std::format("frame_{:03}.obj", frame);
+    std::string filename = std::format("output/frame_{:03}.obj", frame);
     io::export_heatmap(mesh, H, filename, 2.0);
 
     // Physics System
-    igneous::ops::integrate_mean_curvature_flow(mesh, 0.05);
+    igneous::ops::integrate_mean_curvature_flow(mesh, 0.5);
   }
 
   return 0;
