@@ -94,7 +94,7 @@ BenchResult run_workload(int grid_size) {
   size_t n_verts = mesh.geometry.num_points();
 
   // Warmup (allocations, etc.)
-  mesh.topology.build_coboundaries(n_verts);
+  mesh.topology.build_connectivity(n_verts);
   ops::compute_curvature_measures(mesh);
 
   // Reset for actual timing
@@ -103,7 +103,7 @@ BenchResult run_workload(int grid_size) {
 
   // --- B. Benchmark: Topology (Graph Build) ---
   auto t0 = Clock::now();
-  mesh.topology.build_coboundaries(n_verts);
+  mesh.topology.build_connectivity(n_verts);
   auto t1 = Clock::now();
 
   // --- C. Benchmark: Geometry Kernel (Curvature) ---

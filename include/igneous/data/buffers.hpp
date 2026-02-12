@@ -1,8 +1,6 @@
 #pragma once
-#include <cstdint>
 #include <igneous/core/algebra.hpp>
 #include <igneous/core/blades.hpp>
-#include <span>
 #include <vector>
 
 namespace igneous::data {
@@ -81,61 +79,6 @@ template <typename Field, typename Sig> struct GeometryBuffer {
   void resize(size_t v) { packed_data.resize(v * STRIDE); }
 
   void clear() { packed_data.clear(); }
-};
-
-struct TopologyBuffer {
-  // Flattened Triangle Indices: [v0, v1, v2, v0, v1, v2, ...]
-  std::vector<uint32_t> faces_to_vertices;
-
-  // CSR Storage
-  std::vector<uint32_t> coboundary_offsets;
-  std::vector<uint32_t> coboundary_data;
-
-  inline uint32_t get_vertex_for_face(size_t face_idx, int corner) const {
-    return faces_to_vertices[face_idx * 3 + corner];
-  }
-
-  size_t num_faces() const { return faces_to_vertices.size() / 3; }
-
-  // CSR Accessor
-  std::span<const uint32_t> get_faces_for_vertex(uint32_t vertex_idx) const {
-    if (vertex_idx + 1 >= coboundary_offsets.size())
-      return {};
-    uint32_t start = coboundary_offsets[vertex_idx];
-    uint32_t end = coboundary_offsets[vertex_idx + 1];
-    return {&coboundary_data[start], end - start};
-  }
-
-  // Builder
-  void build_coboundaries(size_t num_vertices) {
-    coboundary_offsets.assign(num_vertices + 1, 0);
-    for (uint32_t v_idx : faces_to_vertices) {
-      if (v_idx < num_vertices)
-        coboundary_offsets[v_idx + 1]++;
-    }
-    for (size_t i = 0; i < num_vertices; ++i) {
-      coboundary_offsets[i + 1] += coboundary_offsets[i];
-    }
-    coboundary_data.resize(faces_to_vertices.size());
-    std::vector<uint32_t> write_head = coboundary_offsets;
-    size_t num_f = num_faces();
-    for (uint32_t f = 0; f < num_f; ++f) {
-      for (int c = 0; c < 3; ++c) {
-        uint32_t v = faces_to_vertices[f * 3 + c];
-        if (v < num_vertices) {
-          uint32_t pos = write_head[v];
-          coboundary_data[pos] = f;
-          write_head[v]++;
-        }
-      }
-    }
-  }
-
-  void clear() {
-    faces_to_vertices.clear();
-    coboundary_offsets.clear();
-    coboundary_data.clear();
-  }
 };
 
 } // namespace igneous::data
