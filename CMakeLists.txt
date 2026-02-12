@@ -39,8 +39,15 @@ add_executable(bench_geometry benches/bench_geometry.cpp)
 target_link_libraries(bench_geometry PRIVATE igneous fmt::fmt)
 
 # --- THE MAIN APPLICATION ---
-add_executable(igneous-app src/main.cpp)
-target_link_libraries(igneous-app 
+add_executable(igneous-mesh src/main_mesh.cpp)
+target_link_libraries(igneous-mesh 
+    PRIVATE 
+    igneous 
+    fmt::fmt
+)
+
+add_executable(igneous-point src/main_point.cpp)
+target_link_libraries(igneous-point 
     PRIVATE 
     igneous 
     fmt::fmt

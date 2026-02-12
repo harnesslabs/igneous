@@ -11,12 +11,13 @@ namespace igneous::ops {
 using igneous::core::Vec3;
 using igneous::data::Mesh;
 
-template <typename Sig> void normalize(Mesh<Sig> &mesh) {
+// TEMPLATE UPDATE: Accept generic Topo type
+template <typename Sig, typename Topo> void normalize(Mesh<Sig, Topo> &mesh) {
   size_t n_verts = mesh.geometry.num_points();
   if (n_verts == 0)
     return;
 
-  // 1. Compute Bounds (Safely using Vec3)
+  // 1. Compute Bounds
   Vec3 min_p = {std::numeric_limits<float>::max(),
                 std::numeric_limits<float>::max(),
                 std::numeric_limits<float>::max()};

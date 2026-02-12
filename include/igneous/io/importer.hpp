@@ -1,17 +1,18 @@
 #pragma once
 #include <fstream>
+#include <igneous/core/topology.hpp>
 #include <igneous/data/mesh.hpp>
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <vector>
 
 namespace igneous::io {
 
 using igneous::data::Mesh;
 
-template <typename Sig>
-void load_obj(Mesh<Sig> &mesh, const std::string &filename) {
+// We use 'typename Topo' to let the compiler deduce the specific topology type
+template <typename Sig, typename Topo>
+void load_obj(Mesh<Sig, Topo> &mesh, const std::string &filename) {
   std::ifstream file(filename);
   if (!file.is_open()) {
     std::cerr << "Failed to open " << filename << "\n";
@@ -19,8 +20,8 @@ void load_obj(Mesh<Sig> &mesh, const std::string &filename) {
   }
 
   std::string line;
-  std::vector<uint32_t> vertex_indices;
 
+  // Clear existing data
   mesh.geometry.clear();
   mesh.topology.clear();
 
@@ -35,32 +36,32 @@ void load_obj(Mesh<Sig> &mesh, const std::string &filename) {
       float x, y, z;
       iss >> x >> y >> z;
 
-      // DIRECT WRITE FIX:
-      // We write straight to the packed buffer.
-      // This guarantees [x, y, z] layout for get_vec3()
+      // Direct write to geometry buffer
       mesh.geometry.packed_data.push_back(x);
       mesh.geometry.packed_data.push_back(y);
       mesh.geometry.packed_data.push_back(z);
 
-      // For PGA (4D), pad with w=1
-      if constexpr (Sig::dim == 4) {
-        mesh.geometry.packed_data.push_back(1.0f);
-      }
     } else if (type == "f") {
-      std::string v_str;
-      while (iss >> v_str) {
-        size_t slash = v_str.find('/');
-        int idx = std::stoi(v_str.substr(0, slash)) - 1;
-        vertex_indices.push_back(static_cast<uint32_t>(idx));
+      // COMPILE-TIME CHECK: Only parse faces if the Topology supports them!
+      if constexpr (igneous::data::SurfaceTopology<Topo>) {
+        std::string v_str;
+        while (iss >> v_str) {
+          // OBJ is 1-based, convert to 0-based
+          size_t slash = v_str.find('/');
+          int idx = std::stoi(v_str.substr(0, slash)) - 1;
+
+          // Direct push to the topology's vector
+          mesh.topology.faces_to_vertices.push_back(static_cast<uint32_t>(idx));
+        }
       }
+      // If Topo is PointTopology, this block is discarded by the compiler.
     }
   }
 
-  mesh.topology.faces_to_vertices = std::move(vertex_indices);
-
-  // Rebuild Topology
+  // Rebuild Topology (Generic Interface)
+  // Renamed from 'build_coboundaries' to 'build_connectivity' to match Concept
   size_t n_verts = mesh.geometry.num_points();
-  mesh.topology.build_coboundaries(n_verts);
+  mesh.topology.build_connectivity(n_verts);
 
   std::cout << "[IO] Loaded " << filename << " (" << n_verts << " verts)\n";
 }
