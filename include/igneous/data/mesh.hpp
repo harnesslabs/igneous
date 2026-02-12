@@ -1,5 +1,5 @@
 #pragma once
-#include "igneous/core/topology.hpp"
+#include "igneous/data/topology.hpp"
 #include <igneous/data/buffers.hpp>
 #include <string>
 

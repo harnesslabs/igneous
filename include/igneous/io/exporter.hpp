@@ -2,12 +2,13 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
-#include <igneous/core/topology.hpp>
-#include <igneous/data/mesh.hpp>
 #include <iostream>
 #include <string>
 #include <tuple>
 #include <vector>
+
+#include <igneous/data/mesh.hpp>
+#include <igneous/data/topology.hpp>
 
 namespace igneous::io {
 
