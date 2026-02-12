@@ -1,23 +1,25 @@
 #pragma once
+#include "igneous/core/topology.hpp"
 #include <igneous/data/buffers.hpp>
 #include <string>
 
 namespace igneous::data {
 
-template <typename Sig> struct Mesh {
-  // The raw data lives here
+template <typename Sig, Topology Topo = TriangleTopology> struct Mesh {
+  using Signature = Sig;
+  using Topology = Topo;
+
   data::GeometryBuffer<float, Sig> geometry;
-  data::TopologyBuffer topology;
+
+  Topo topology;
 
   // Metadata
   std::string name;
 
-  // Helper: Are we ready to compute?
   bool is_valid() const {
     return !geometry.points.empty() && topology.num_faces() > 0;
   }
 
-  // Helper: Clear everything
   void clear() {
     geometry.clear();
     topology.clear();
