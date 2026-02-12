@@ -130,6 +130,21 @@ int main() {
 
 ```
 
+### Example: Visualization
+We can run an example using the `assets/bunny.obj` mesh included in the repository. Run the following to generate output frames:
+
+```bash
+mkdir -p output
+cmake --preset default
+cmake --build build
+./build/igneous-app assets/bunny.obj
+```
+
+To render the exported frames as an animated GIF:
+```bash
+python visualize.py
+```
+
 ## Architecture
 
 The engine architecture separates **Data** from **Operations** to maximize cache coherency.

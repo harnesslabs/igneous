@@ -1,3 +1,4 @@
 /build
 *.obj
+!assets/bunny.obj
 .DS_Store
