@@ -1,4 +1,5 @@
 #include "igneous/core/algebra.hpp"
+#include "igneous/core/blades.hpp"
 #include <chrono>
 #include <cmath>
 #include <iomanip>
@@ -15,7 +16,6 @@
 using namespace igneous;
 using Clock = std::chrono::high_resolution_clock;
 using Sig = igneous::core::Euclidean3D;
-using igneous::core::Multivector;
 using igneous::data::Mesh;
 
 // ==============================================================================
@@ -37,13 +37,8 @@ Mesh<Sig> generate_benchmark_mesh(int side_length) {
       float py = y * scale;
       float pz = std::sin(px) + std::cos(py); // Add curvature
 
-      auto mv = Multivector<float, Sig>::from_blade(0, 0);
-      mv[1] = px;
-      mv[2] = py;
-      mv[3] = pz;
-
-      // FIXED: Use push_point instead of accessing vector directly
-      mesh.geometry.push_point(mv);
+      auto v = core::Vec3{px, py, pz};
+      mesh.geometry.push_point(v);
     }
   }
 
