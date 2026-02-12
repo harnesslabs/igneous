@@ -1,16 +1,17 @@
 #pragma once
 #include <fstream>
-#include <igneous/core/topology.hpp>
-#include <igneous/data/mesh.hpp>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
+
+#include <igneous/data/mesh.hpp>
+#include <igneous/data/topology.hpp>
 
 namespace igneous::io {
 
 using igneous::data::Mesh;
 
-// We use 'typename Topo' to let the compiler deduce the specific topology type
 template <typename Sig, typename Topo>
 void load_obj(Mesh<Sig, Topo> &mesh, const std::string &filename) {
   std::ifstream file(filename);
@@ -25,6 +26,7 @@ void load_obj(Mesh<Sig, Topo> &mesh, const std::string &filename) {
   mesh.geometry.clear();
   mesh.topology.clear();
 
+  // 1. READ LOOP (Parse Data Only)
   while (std::getline(file, line)) {
     if (line.empty())
       continue;
@@ -42,26 +44,34 @@ void load_obj(Mesh<Sig, Topo> &mesh, const std::string &filename) {
       mesh.geometry.packed_data.push_back(z);
 
     } else if (type == "f") {
-      // COMPILE-TIME CHECK: Only parse faces if the Topology supports them!
+      // FIX: Only parse face indices here. DO NOT BUILD.
+      // We use 'if constexpr' to check if the topology even supports faces.
       if constexpr (igneous::data::SurfaceTopology<Topo>) {
         std::string v_str;
         while (iss >> v_str) {
-          // OBJ is 1-based, convert to 0-based
           size_t slash = v_str.find('/');
           int idx = std::stoi(v_str.substr(0, slash)) - 1;
-
-          // Direct push to the topology's vector
           mesh.topology.faces_to_vertices.push_back(static_cast<uint32_t>(idx));
         }
       }
-      // If Topo is PointTopology, this block is discarded by the compiler.
+      // If it's DiffusionTopology or PointTopology, we just ignore 'f' lines.
     }
   }
 
-  // Rebuild Topology (Generic Interface)
-  // Renamed from 'build_coboundaries' to 'build_connectivity' to match Concept
+  // 2. BUILD STEP (Once, after loading all data)
   size_t n_verts = mesh.geometry.num_points();
-  mesh.topology.build_connectivity(n_verts);
+
+  if constexpr (std::is_same_v<Topo, igneous::data::TriangleTopology>) {
+    // Triangle topology needs the count to resize arrays
+    mesh.topology.build({n_verts});
+  } else if constexpr (std::is_same_v<Topo, igneous::data::DiffusionTopology>) {
+    // Diffusion topology needs the raw vertex data for the KD-Tree.
+    // { vector } uses aggregate initialization for the Input struct.
+    mesh.topology.build({mesh.geometry.packed_data});
+  } else {
+    // Fallback (PointTopology)
+    mesh.topology.build({});
+  }
 
   std::cout << "[IO] Loaded " << filename << " (" << n_verts << " verts)\n";
 }
