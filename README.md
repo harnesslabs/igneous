@@ -42,6 +42,13 @@ cmake --build build -j8
 
 Set `IGNEOUS_BENCH_MODE=1` to disable heavy export paths in runtime apps.
 
+Runtime backend controls:
+
+- `IGNEOUS_BACKEND=cpu` for single-thread CPU execution.
+- `IGNEOUS_BACKEND=parallel` (default) for threaded CPU execution.
+- `IGNEOUS_BACKEND=gpu` currently routes to threaded CPU execution path.
+- `IGNEOUS_NUM_THREADS=<N>` to override worker count for threaded kernels.
+
 ## Tests
 
 ```bash
@@ -70,6 +77,7 @@ Current suites:
 
 ```bash
 ./build/bench_dod --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
+./build/bench_pipelines --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
 ```
 
 Benchmark groups:
@@ -84,6 +92,19 @@ Benchmark groups:
 - `bench_weak_derivative`
 - `bench_curl_energy`
 - `bench_hodge_solve`
+
+Pipeline benchmark groups:
+
+- `bench_pipeline_diffusion_main`
+- `bench_pipeline_spectral_main`
+- `bench_pipeline_hodge_main`
+- `bench_hodge_phase_topology`
+- `bench_hodge_phase_eigenbasis`
+- `bench_hodge_phase_gram`
+- `bench_hodge_phase_weak_derivative`
+- `bench_hodge_phase_curl_energy`
+- `bench_hodge_phase_solve`
+- `bench_hodge_phase_circular`
 
 ## Performance Workflow Artifacts
 

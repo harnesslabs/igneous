@@ -8,6 +8,7 @@
 #include <limits>
 #include <vector>
 
+#include <igneous/core/parallel.hpp>
 #include <igneous/data/mesh.hpp>
 #include <igneous/ops/geometry.hpp>
 
@@ -95,42 +96,48 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
   }
 
   workspace.gamma_phi_x.assign(n0, std::vector<Eigen::VectorXf>(3));
-  for (int k = 0; k < n0; ++k) {
-    for (int d = 0; d < 3; ++d) {
-      workspace.gamma_phi_x[k][d].resize(n_verts);
-      carre_du_champ(mesh, U.col(k), workspace.coords[d], bandwidth,
-                     workspace.gamma_phi_x[k][d]);
-    }
-  }
+  core::parallel_for_index(
+      0, n0,
+      [&](int k) {
+        for (int d = 0; d < 3; ++d) {
+          workspace.gamma_phi_x[k][d].resize(n_verts);
+          carre_du_champ(mesh, U.col(k), workspace.coords[d], bandwidth,
+                         workspace.gamma_phi_x[k][d]);
+        }
+      },
+      8);
 
-  workspace.gamma_phi_phi.resize(n_verts);
+  core::parallel_for_index(
+      0, n0,
+      [&](int k) {
+        Eigen::VectorXf gamma_phi_phi_local(n_verts);
 
-  for (int k = 0; k < n0; ++k) {
-    for (int l = k; l < n0; ++l) {
-      carre_du_champ(mesh, U.col(k), U.col(l), bandwidth,
-                     workspace.gamma_phi_phi);
+        for (int l = k; l < n0; ++l) {
+          carre_du_champ(mesh, U.col(k), U.col(l), bandwidth,
+                         gamma_phi_phi_local);
 
-      for (int a = 0; a < 3; ++a) {
-        for (int b = 0; b < 3; ++b) {
-          const float val =
-              (((workspace.gamma_phi_phi.array() *
-                 workspace.gamma_xx[a][b].array()) -
-                (workspace.gamma_phi_x[k][b].array() *
-                 workspace.gamma_phi_x[l][a].array())) *
-               mu_arr)
-                  .sum();
+          for (int a = 0; a < 3; ++a) {
+            for (int b = 0; b < 3; ++b) {
+              const float val =
+                  (((gamma_phi_phi_local.array() *
+                     workspace.gamma_xx[a][b].array()) -
+                    (workspace.gamma_phi_x[k][b].array() *
+                     workspace.gamma_phi_x[l][a].array())) *
+                   mu_arr)
+                      .sum();
 
-          const int row = k * 3 + a;
-          const int col = l * 3 + b;
+              const int row = k * 3 + a;
+              const int col = l * 3 + b;
 
-          E_up(row, col) = val;
-          if (row != col) {
-            E_up(col, row) = val;
+              E_up(row, col) = val;
+              if (row != col) {
+                E_up(col, row) = val;
+              }
+            }
           }
         }
-      }
-    }
-  }
+      },
+      8);
 
   return E_up;
 }
