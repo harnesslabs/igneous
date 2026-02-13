@@ -953,3 +953,25 @@ Use one entry per optimization hypothesis.
 - Decision: `kept`
 - Notes:
   - Phase-level topology drift was small in absolute terms (~0.13 ms) and did not change the end-to-end Hodge improvement decision.
+
+## 2026-02-13 Parallel 1-Form Gram Block Assembly
+- Timestamp: 2026-02-13T20:08:14Z
+- Commit: 91cf268 (working tree with uncommitted changes)
+- Hypothesis: Parallelize `(i,k)` block assembly in `compute_1form_gram_matrix` to reduce Gram phase cost and improve end-to-end Hodge throughput.
+- Files touched:
+  - `include/igneous/ops/geometry.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_hodge_phase_gram|bench_hodge_phase_weak_derivative' --benchmark_min_time=0.12s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_pipelines_20260213-gram-par-h1-10r.json --benchmark_out_format=json`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_1form_gram/2000/16|bench_eigenbasis/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_dod_20260213-gram-par-h1-10r.json --benchmark_out_format=json`
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (5 runs)
+- Results vs prior `weakderiv-par-h1` state:
+  - `bench_pipeline_hodge_main`: `123.377 ms -> 116.477 ms` (`-5.59%`)
+  - `bench_hodge_phase_gram`: `6.404 ms -> 1.174 ms` (`-81.66%`)
+  - `bench_hodge_phase_eigenbasis`: `89.811 ms -> 89.032 ms` (`-0.87%`)
+  - `bench_hodge_phase_weak_derivative`: `2.754 ms -> 2.761 ms` (`+0.26%`)
+- App-level throughput (`igneous-hodge`, 5 runs, bench mode):
+  - observed run set: `0.13, 0.12, 0.12, 0.12, 0.12`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - This change preserved spectral performance and improved Hodge main despite the eigenbasis phase still dominating overall runtime.

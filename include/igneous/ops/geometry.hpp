@@ -7,6 +7,7 @@
 #include <cassert>
 #include <type_traits>
 
+#include <igneous/core/parallel.hpp>
 #include <igneous/data/mesh.hpp>
 
 namespace igneous::ops {
@@ -177,26 +178,30 @@ Eigen::MatrixXf compute_1form_gram_matrix(const MeshT &mesh, float bandwidth,
   const auto &U = mesh.topology.eigen_basis;
   const auto &mu = mesh.topology.mu;
 
-  workspace.weights.resize(n_verts);
+  core::parallel_for_index(
+      0, n_basis,
+      [&](int i) {
+        thread_local Eigen::VectorXf weights_local;
+        weights_local.resize(n_verts);
 
-  for (int i = 0; i < n_basis; ++i) {
-    for (int k = i; k < n_basis; ++k) {
-      workspace.weights = U.col(i).cwiseProduct(U.col(k)).cwiseProduct(mu);
+        for (int k = i; k < n_basis; ++k) {
+          weights_local = U.col(i).cwiseProduct(U.col(k)).cwiseProduct(mu);
 
-      for (int a = 0; a < 3; ++a) {
-        for (int b = 0; b < 3; ++b) {
-          const float val = workspace.weights.dot(workspace.gamma_coords[a][b]);
-          const int row = i * 3 + a;
-          const int col = k * 3 + b;
+          for (int a = 0; a < 3; ++a) {
+            for (int b = 0; b < 3; ++b) {
+              const float val = weights_local.dot(workspace.gamma_coords[a][b]);
+              const int row = i * 3 + a;
+              const int col = k * 3 + b;
 
-          G(row, col) = val;
-          if (row != col) {
-            G(col, row) = val;
+              G(row, col) = val;
+              if (row != col) {
+                G(col, row) = val;
+              }
+            }
           }
         }
-      }
-    }
-  }
+      },
+      8);
 
   return G;
 }
