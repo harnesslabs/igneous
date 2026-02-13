@@ -66,10 +66,10 @@ add_executable(bench_geometry benches/bench_geometry.cpp)
 target_link_libraries(bench_geometry PRIVATE igneous fmt::fmt)
 
 add_executable(bench_dod benches/bench_dod.cpp)
-target_link_libraries(bench_dod PRIVATE igneous benchmark::benchmark_main)
+target_link_libraries(bench_dod PRIVATE igneous benchmark::benchmark)
 
 add_executable(bench_pipelines benches/bench_pipelines.cpp)
-target_link_libraries(bench_pipelines PRIVATE igneous benchmark::benchmark_main)
+target_link_libraries(bench_pipelines PRIVATE igneous benchmark::benchmark)
 
 add_executable(igneous-mesh src/main_mesh.cpp)
 target_link_libraries(igneous-mesh PRIVATE igneous fmt::fmt)
