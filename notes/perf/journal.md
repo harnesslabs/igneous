@@ -632,3 +632,103 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `rejected`
 - Notes: Strong isolated Markov win, but rejected due regressions on other primary diffusion-derived kernels.
+
+## 2026-02-13 Real-World Pipeline Harness
+- Timestamp: 2026-02-13T18:48:01Z
+- Commit: 88ea1af (working tree with uncommitted changes)
+- Hypothesis: Add an end-to-end benchmark harness mirroring `main_diffusion`, `main_spectral`, and `main_hodge` to target dominant real-world phases instead of only micro-kernels.
+- Files touched:
+  - `benches/bench_pipelines.cpp`
+  - `CMakeLists.txt`
+- Benchmark command:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Baseline characterization (initial run):
+  - `bench_pipeline_hodge_main`: `323.133 ms`
+  - `bench_hodge_phase_eigenbasis`: `123.883 ms`
+  - `bench_hodge_phase_curl_energy`: `144.710 ms`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Harness exposed real bottlenecks (`eigenbasis` and `curl_energy`) and now guides optimization priority.
+
+## 2026-02-13 Curl-Energy Coupling Matrix (Real-World Recheck, Rejected)
+- Timestamp: 2026-02-13T18:49:55Z
+- Commit: 88ea1af (working tree with uncommitted changes)
+- Hypothesis: Precompute `gamma_phi_x` coupling matrices and use matrix lookups in `compute_curl_energy_matrix` to remove one vector dot term from the hot inner loop.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+- Benchmark command:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_hodge_phase_curl_energy|bench_pipeline_hodge_main' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true` (A/B)
+- A/B CPU-time results (`10 reps`):
+  - with patch: `bench_hodge_phase_curl_energy=143.680 ms`, `bench_pipeline_hodge_main=318.897 ms`
+  - baseline: `bench_hodge_phase_curl_energy=145.345 ms`, `bench_pipeline_hodge_main=321.781 ms`
+  - deltas: `curl_energy -1.15%`, `pipeline_hodge -0.90%`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Improvement remained below keep threshold on primary real-world target.
+
+## 2026-02-13 Adaptive Arnoldi NCV (Large Basis)
+- Timestamp: 2026-02-13T18:58:25Z
+- Commit: 88ea1af (working tree with uncommitted changes)
+- Hypothesis: Use a compact Arnoldi subspace only for large basis solves (`n_eigenvectors >= 32`) with automatic fallback to the full subspace if convergence is incomplete.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_pipeline_spectral_main' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true` (A/B off/on)
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (5-run off/on)
+- A/B CPU-time results (`bench_pipelines`, 5 reps):
+  - `bench_pipeline_hodge_main`: `320.505 ms -> 306.240 ms` (`-4.45%`)
+  - `bench_hodge_phase_eigenbasis`: `125.386 ms -> 108.015 ms` (`-13.85%`)
+- App-level A/B (`igneous-hodge`, 5 runs):
+  - baseline mean: `0.322 s`
+  - candidate mean: `0.302 s`
+  - delta: `-6.21%`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Cleared keep threshold on real-world throughput target with stable convergence via fallback path.
+
+## 2026-02-13 Adaptive NCV `k+8` Sweep (Rejected)
+- Timestamp: 2026-02-13T18:52:58Z
+- Commit: 88ea1af (working tree with uncommitted changes)
+- Hypothesis: Tighten compact Arnoldi space to `n_eigenvectors + 8` for additional speed.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp` (reverted)
+- Benchmark command:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Results:
+  - `bench_hodge_phase_eigenbasis`: `180.231 ms` (major regression)
+  - `bench_pipeline_hodge_main`: `385.794 ms` (major regression)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Compact space was too small and convergence cost exploded.
+
+## 2026-02-13 Adaptive NCV `k+12` Sweep (Rejected)
+- Timestamp: 2026-02-13T18:53:36Z
+- Commit: 88ea1af (working tree with uncommitted changes)
+- Hypothesis: Use `n_eigenvectors + 12` compact Arnoldi size as a middle ground.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp` (reverted)
+- Benchmark command:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Results:
+  - `bench_hodge_phase_eigenbasis`: `118.798 ms`
+  - `bench_pipeline_hodge_main`: `316.084 ms`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Better than baseline but dominated by the `k+16` variant.
+
+## 2026-02-13 Spectral Gram Eigenvalues-Only (Rejected)
+- Timestamp: 2026-02-13T18:59:36Z
+- Commit: 88ea1af (working tree with uncommitted changes)
+- Hypothesis: Use `Eigen::EigenvaluesOnly` for Gram condition estimation in spectral pipeline to skip unnecessary eigenvector computation.
+- Files touched:
+  - `src/main_spectral.cpp` (reverted)
+  - `benches/bench_pipelines.cpp` (reverted)
+- Benchmark command:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main' --benchmark_min_time=0.1s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true` (A/B)
+- A/B CPU-time results:
+  - with change: `34.238 ms`
+  - baseline: `33.858 ms`
+  - delta: `+1.12%`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: No reliable throughput gain.
