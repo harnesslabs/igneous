@@ -874,3 +874,33 @@ Use one entry per optimization hypothesis.
 - Decision: `kept`
 - Notes:
   - First dedupe-only attempt was rejected for small meshes; dual-path resolved the regression.
+
+## 2026-02-13 Spectral CSR MatVec Operator (Tuned)
+- Timestamp: 2026-02-13T19:57:57Z
+- Commit: c136055 (working tree with uncommitted changes)
+- Hypothesis: Replace `Spectra::SparseGenMatProd` with a custom Markov CSR matvec operator over `markov_row_offsets/col_indices/values` to cut eigenbasis time in diffusion/spectral/hodge pipelines.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp`
+- Implementation notes:
+  - Added `MarkovCsrMatProd` with unrolled row-dot loops over diffusion CSR arrays.
+  - `compute_eigenbasis` now dispatches to CSR op when diffusion CSR storage is present; otherwise keeps sparse-Eigen op path.
+  - Initial variant with lower parallel threshold (`3072`) regressed 4k Hodge eigenbasis and was rejected.
+  - Kept variant uses higher threshold (`8192`) to avoid over-threading small matvecs.
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_hodge_phase_eigenbasis|bench_pipeline_hodge_main|bench_hodge_phase_topology' --benchmark_min_time=0.12s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_pipelines_20260213-spectral-csr-h2-10r.json --benchmark_out_format=json`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_eigenbasis/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_dod_20260213-spectral-csr-h2-10r.json --benchmark_out_format=json`
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-spectral assets/bunny.obj` (5 runs)
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (5 runs)
+- Results vs pre-change threaded baseline:
+  - `bench_pipeline_spectral_main`: `30.437 ms -> 23.198 ms` (`-23.78%`)
+  - `bench_hodge_phase_eigenbasis`: `106.645 ms -> 93.286 ms` (`-12.53%`)
+  - `bench_pipeline_hodge_main`: `148.748 ms -> 137.105 ms` (`-7.83%`)
+  - `bench_hodge_phase_topology`: `1.389 ms -> 1.403 ms` (`+1.04%`)
+  - `bench_eigenbasis/2000/16`: `14.825 ms -> 12.920 ms` (`-12.85%`)
+- App-level throughput (`main_*`, 5 runs, bench mode):
+  - `igneous-spectral assets/bunny.obj`: `~0.03 s -> ~0.02 s`
+  - `igneous-hodge`: `~0.15 s -> ~0.14 s`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - Full pipeline check (`3 reps`) also showed `bench_pipeline_hodge_main` improvement (`-8.24%`) despite small drift in some downstream phase kernels.
