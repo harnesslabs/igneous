@@ -769,3 +769,35 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Real-world throughput gain is large; users can force serial CPU behavior when needed.
+
+## 2026-02-13 Threaded Circular-Coordinate Assembly
+- Timestamp: 2026-02-13T19:13:00Z
+- Commit: a816dc6 (working tree with uncommitted changes)
+- Hypothesis: Extend threaded backend to `compute_circular_coordinates` by parallelizing `gamma_x_phi` precompute and per-column `X_op` assembly to reduce the next-largest Hodge phase after threaded curl-energy.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_circular|bench_hodge_phase_curl_energy|bench_hodge_phase_eigenbasis|bench_hodge_phase_weak_derivative' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BACKEND=cpu IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_circular|bench_hodge_phase_curl_energy|bench_hodge_phase_eigenbasis|bench_hodge_phase_weak_derivative' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (5 runs)
+- A/B results (`bench_pipelines`, serial CPU vs threaded default):
+  - `bench_pipeline_hodge_main`: `311.486 ms -> 141.164 ms` (`-54.68%`)
+  - `bench_hodge_phase_circular`: `27.441 ms -> 2.815 ms` (`-89.74%`)
+  - `bench_hodge_phase_curl_energy`: `151.985 ms -> 0.848 ms` (`-99.44%`)
+  - `bench_hodge_phase_eigenbasis`: `110.787 ms -> 109.603 ms` (`-1.07%`)
+- App-level throughput (`igneous-hodge`, 5 runs):
+  - previous threaded mean: `0.180 s`
+  - candidate mean: `0.160 s`
+  - delta: `-11.11%`
+- Deep benchmark highlight (vs `bench_dod_20260213-120652.json`):
+  - `bench_1form_gram/2000/16`: `-3.91%`
+  - `bench_curl_energy/2000/16`: `+2.29%` (still far below pre-thread baseline class)
+- Profile traces:
+  - `notes/perf/profiles/20260213-121355/time-profiler.trace` (serial CPU)
+  - `notes/perf/profiles/20260213-121356/time-profiler.trace` (threaded)
+  - `notes/perf/profiles/20260213-121411/cpu-counters.trace` (serial CPU)
+  - `notes/perf/profiles/20260213-121412/cpu-counters.trace` (threaded)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Additional real-world Hodge throughput gain while preserving backend switchability.
