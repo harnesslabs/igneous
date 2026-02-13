@@ -135,9 +135,12 @@ static void bench_diffusion_build(benchmark::State &state) {
 static void bench_markov_step(benchmark::State &state) {
   DiffusionMesh mesh = make_diffusion_cloud(static_cast<size_t>(state.range(0)));
   Eigen::VectorXf u = Eigen::VectorXf::Ones(static_cast<int>(mesh.geometry.num_points()));
+  Eigen::VectorXf u_next =
+      Eigen::VectorXf::Zero(static_cast<int>(mesh.geometry.num_points()));
 
   for (auto _ : state) {
-    u = mesh.topology.P * u;
+    igneous::ops::apply_markov_transition(mesh, u, u_next);
+    u.swap(u_next);
     benchmark::DoNotOptimize(u.data());
   }
 }

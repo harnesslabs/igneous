@@ -10,6 +10,7 @@
 #include <igneous/data/mesh.hpp>
 #include <igneous/io/exporter.hpp>
 #include <igneous/io/importer.hpp>
+#include <igneous/ops/geometry.hpp>
 #include <igneous/ops/transform.hpp>
 
 using namespace igneous;
@@ -55,6 +56,7 @@ int main(int argc, char **argv) {
 
   const size_t n_verts = mesh.geometry.num_points();
   Eigen::VectorXf u = Eigen::VectorXf::Zero(static_cast<int>(n_verts));
+  Eigen::VectorXf u_next = Eigen::VectorXf::Zero(static_cast<int>(n_verts));
 
   int max_y_idx = 0;
   float max_y = -1e9f;
@@ -73,7 +75,8 @@ int main(int argc, char **argv) {
 
   const int steps = bench_mode ? 20 : 100;
   for (int t = 1; t <= steps; ++t) {
-    u = P * u;
+    ops::apply_markov_transition(mesh, u, u_next);
+    u.swap(u_next);
 
     if (!bench_mode && t % 5 == 0) {
       const std::string fname = std::format("{}/heat_{:03}.ply", output_dir, t);

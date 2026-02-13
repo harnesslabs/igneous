@@ -4,7 +4,9 @@
 #include <cmath>
 #include <igneous/core/algebra.hpp>
 #include <igneous/data/buffers.hpp>
+#include <igneous/data/mesh.hpp>
 #include <igneous/data/topology.hpp>
+#include <igneous/ops/geometry.hpp>
 
 TEST_CASE("DiffusionTopology produces stochastic Markov matrix and valid measure") {
   using Sig = igneous::core::Euclidean3D;
@@ -41,5 +43,33 @@ TEST_CASE("DiffusionTopology produces stochastic Markov matrix and valid measure
   CHECK(topo.mu.sum() == doctest::Approx(1.0f).epsilon(1e-3f));
   for (int i = 0; i < topo.mu.size(); ++i) {
     CHECK(topo.mu[i] >= 0.0f);
+  }
+}
+
+TEST_CASE("Diffusion CSR markov step matches sparse matrix product") {
+  using Sig = igneous::core::Euclidean3D;
+  using DiffusionMesh =
+      igneous::data::Mesh<Sig, igneous::data::DiffusionTopology>;
+
+  DiffusionMesh mesh;
+  mesh.geometry.reserve(24);
+  for (int i = 0; i < 24; ++i) {
+    const float t = static_cast<float>(i) / 24.0f;
+    mesh.geometry.push_point(
+        {std::cos(t * 6.283185f), std::sin(t * 6.283185f), 0.5f * t});
+  }
+
+  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
+                       mesh.geometry.z_span(), 0.05f, 8});
+
+  const int n = static_cast<int>(mesh.geometry.num_points());
+  Eigen::VectorXf u = Eigen::VectorXf::LinSpaced(n, -1.0f, 1.0f);
+  Eigen::VectorXf expected = mesh.topology.P * u;
+  Eigen::VectorXf actual = Eigen::VectorXf::Zero(n);
+
+  igneous::ops::apply_markov_transition(mesh, u, actual);
+
+  for (int i = 0; i < n; ++i) {
+    CHECK(actual[i] == doctest::Approx(expected[i]).epsilon(1e-5f));
   }
 }

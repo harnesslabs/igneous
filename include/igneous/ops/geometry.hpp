@@ -89,6 +89,41 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
 }
 
 template <typename MeshT>
+void apply_markov_transition(const MeshT &mesh,
+                             Eigen::Ref<const Eigen::VectorXf> input,
+                             Eigen::Ref<Eigen::VectorXf> output) {
+  const int expected_size = static_cast<int>(mesh.geometry.num_points());
+  assert(input.size() == expected_size);
+  assert(output.size() == expected_size);
+
+  if constexpr (requires {
+                  mesh.topology.markov_row_offsets;
+                  mesh.topology.markov_col_indices;
+                  mesh.topology.markov_values;
+                }) {
+    const auto &row_offsets = mesh.topology.markov_row_offsets;
+    const auto &col_indices = mesh.topology.markov_col_indices;
+    const auto &weights = mesh.topology.markov_values;
+
+    assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
+
+    for (int i = 0; i < expected_size; ++i) {
+      float acc = 0.0f;
+      const uint32_t begin = row_offsets[static_cast<size_t>(i)];
+      const uint32_t end = row_offsets[static_cast<size_t>(i) + 1];
+
+      for (uint32_t idx = begin; idx < end; ++idx) {
+        acc += weights[idx] * input[static_cast<int>(col_indices[idx])];
+      }
+
+      output[i] = acc;
+    }
+  } else {
+    output.noalias() = mesh.topology.P * input;
+  }
+}
+
+template <typename MeshT>
 Eigen::MatrixXf compute_1form_gram_matrix(const MeshT &mesh, float bandwidth,
                                           GeometryWorkspace<MeshT> &workspace) {
   const int n_basis = mesh.topology.eigen_basis.cols();

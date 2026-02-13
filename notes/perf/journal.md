@@ -68,3 +68,29 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Large gains across diffusion-derived Hodge kernels justify the retained CSR build cost.
+
+## 2026-02-13 Diffusion Markov-Step Kernel
+- Timestamp: 2026-02-13T16:17:39Z
+- Commit: f782968 (working tree with uncommitted changes)
+- Hypothesis: Replace `P * u` hot-loop calls with an explicit CSR row traversal kernel (`apply_markov_transition`) to reduce sparse matvec overhead in iterative diffusion.
+- Files touched:
+  - `include/igneous/ops/geometry.hpp`
+  - `src/main_diffusion.cpp`
+  - `benches/bench_dod.cpp`
+  - `tests/test_topology_diffusion.cpp`
+- Benchmark commands:
+  - `./scripts/perf/run_deep_bench.sh`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_markov_step/2000|bench_diffusion_build/2000|bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_markov_step/2000`: `25.3 us` mean
+  - `bench_diffusion_build/2000`: `3.42 ms` mean
+- Deep results (vs `bench_dod_20260213-090922.json`):
+  - `bench_markov_step/2000`: `-18.26%`
+  - `bench_diffusion_build/2000`: `-3.89%`
+  - Other benchmark groups moved within expected run-to-run noise under concurrent load.
+- Profile traces:
+  - `notes/perf/profiles/20260213-091713/time-profiler.trace`
+  - `notes/perf/profiles/20260213-091725/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`), including CSR-vs-sparse-product equality.
+- Decision: `kept`
+- Notes: This optimization improves both isolated Markov stepping and end-to-end diffusion iteration cost while preserving spectral compatibility through retained `P`.
