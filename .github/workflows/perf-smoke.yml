@@ -33,12 +33,21 @@ jobs:
         id: baseline
         shell: bash
         run: |
-          BASE_SHA="$(git merge-base HEAD origin/main || true)"
-          if [[ -z "$BASE_SHA" ]]; then
-            BASE_SHA="$BASELINE_FALLBACK_SHA"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            BASE_REF="${{ github.base_ref }}"
+          else
+            BASE_REF="main"
+            BASE_SHA="$(git merge-base HEAD origin/main || true)"
+            if [[ -z "$BASE_SHA" ]]; then
+              BASE_SHA="$BASELINE_FALLBACK_SHA"
+              BASE_REF="main (fallback)"
+            fi
           fi
+
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
-          echo "Using baseline SHA: $BASE_SHA"
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+          echo "Using baseline SHA: $BASE_SHA (ref: $BASE_REF)"
 
       - name: Select smoke thread count
         id: threads
@@ -210,6 +219,7 @@ jobs:
           {
             echo "# Perf Smoke Report"
             echo
+            echo "Baseline ref: \`${{ steps.baseline.outputs.base_ref }}\`"
             echo "Baseline: \`${{ steps.baseline.outputs.base_sha }}\`"
             echo "Backend: \`${IGNEOUS_BACKEND}\`"
             echo "Threads: \`${IGNEOUS_NUM_THREADS}\`"
