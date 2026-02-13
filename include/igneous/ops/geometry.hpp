@@ -61,11 +61,11 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
       const float hi = h[i];
       float acc = 0.0f;
 
-      const uint32_t begin = row_offsets[static_cast<size_t>(i)];
-      const uint32_t end = row_offsets[static_cast<size_t>(i) + 1];
+      const int begin = row_offsets[static_cast<size_t>(i)];
+      const int end = row_offsets[static_cast<size_t>(i) + 1];
 
-      for (uint32_t idx = begin; idx < end; ++idx) {
-        const int j = static_cast<int>(col_indices[idx]);
+      for (int idx = begin; idx < end; ++idx) {
+        const int j = col_indices[idx];
         const float w = weights[idx];
         acc += w * (f[j] - fi) * (h[j] - hi);
       }
@@ -112,23 +112,23 @@ void apply_markov_transition(const MeshT &mesh,
     float *output_data = output.data();
 
     for (int i = 0; i < expected_size; ++i) {
-      const uint32_t begin = row_offsets[static_cast<size_t>(i)];
-      const uint32_t end = row_offsets[static_cast<size_t>(i) + 1];
-      const uint32_t count = end - begin;
-      const uint32_t *cols = col_indices.data() + begin;
+      const int begin = row_offsets[static_cast<size_t>(i)];
+      const int end = row_offsets[static_cast<size_t>(i) + 1];
+      const int count = end - begin;
+      const int *cols = col_indices.data() + begin;
       const float *w = weights.data() + begin;
 
       float acc = 0.0f;
-      uint32_t idx = 0;
+      int idx = 0;
       for (; idx + 3 < count; idx += 4) {
-        acc += w[idx + 0] * input_data[static_cast<int>(cols[idx + 0])];
-        acc += w[idx + 1] * input_data[static_cast<int>(cols[idx + 1])];
-        acc += w[idx + 2] * input_data[static_cast<int>(cols[idx + 2])];
-        acc += w[idx + 3] * input_data[static_cast<int>(cols[idx + 3])];
+        acc += w[idx + 0] * input_data[cols[idx + 0]];
+        acc += w[idx + 1] * input_data[cols[idx + 1]];
+        acc += w[idx + 2] * input_data[cols[idx + 2]];
+        acc += w[idx + 3] * input_data[cols[idx + 3]];
       }
 
       for (; idx < count; ++idx) {
-        acc += w[idx] * input_data[static_cast<int>(cols[idx])];
+        acc += w[idx] * input_data[cols[idx]];
       }
 
       output_data[i] = acc;

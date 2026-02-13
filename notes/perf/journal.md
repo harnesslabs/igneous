@@ -205,3 +205,41 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Cleared the acceptance threshold for the primary flow kernel target.
+
+## 2026-02-13 Curl-Energy Manual Dot Loop (Rejected)
+- Timestamp: 2026-02-13T16:34:02Z
+- Commit: 7b409e9 (working tree with uncommitted changes)
+- Hypothesis: Remove Eigen temporary vectors in curl-energy assembly by switching to a manual fused weighted loop.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_curl_energy/2000/16|bench_weak_derivative/2000/16|bench_hodge_solve/2000/16|bench_1form_gram/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_curl_energy/2000/16`: `8.08 ms` mean (regression)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Scalar manual loop lost Eigen vectorization and regressed the primary target.
+
+## 2026-02-13 Diffusion Sparse Assembly From CSR
+- Timestamp: 2026-02-13T16:37:59Z
+- Commit: 7b409e9 (working tree with uncommitted changes)
+- Hypothesis: Build `P` by materializing a compressed row-major sparse matrix directly from existing diffusion CSR buffers, then convert once to col-major, avoiding `setFromTriplets`.
+- Files touched:
+  - `include/igneous/data/topology.hpp`
+  - `include/igneous/ops/geometry.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_markov_step/2000|bench_eigenbasis/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+- Smoke results:
+  - `bench_diffusion_build/2000`: `3.10 ms` mean
+  - `bench_eigenbasis/2000/16`: `15.02 ms` mean
+- Deep results (vs `bench_dod_20260213-093101.json`):
+  - `bench_diffusion_build/2000`: `-10.68%`
+  - `bench_eigenbasis/2000/16`: `-0.11%`
+  - `bench_markov_step/2000`: `+0.08%`
+- Profile traces:
+  - `notes/perf/profiles/20260213-093726/time-profiler.trace`
+  - `notes/perf/profiles/20260213-093737/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Significant diffusion build improvement with neutral downstream spectral/Hodge performance.

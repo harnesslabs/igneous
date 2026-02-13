@@ -249,14 +249,15 @@ struct DiffusionTopology {
   };
 
   using SparseMatrixT = Eigen::SparseMatrix<float>;
+  using RowSparseMatrixT = Eigen::SparseMatrix<float, Eigen::RowMajor>;
 
   SparseMatrixT P;
   Eigen::VectorXf mu;
   Eigen::MatrixXf eigen_basis;
 
   // Direct CSR view for hot diffusion operators.
-  std::vector<uint32_t> markov_row_offsets;
-  std::vector<uint32_t> markov_col_indices;
+  std::vector<int> markov_row_offsets;
+  std::vector<int> markov_col_indices;
   std::vector<float> markov_values;
 
   [[nodiscard]] size_t num_primitives() const {
@@ -322,16 +323,13 @@ struct DiffusionTopology {
     markov_col_indices.reserve(row_capacity);
     markov_values.reserve(row_capacity);
 
-    std::vector<Eigen::Triplet<float>> triplets;
-    triplets.reserve(row_capacity);
-
     std::vector<uint32_t> ret_index(static_cast<size_t>(k_neighbors));
     std::vector<float> out_dist_sqr(static_cast<size_t>(k_neighbors));
     mu.resize(static_cast<int>(n_verts));
     mu.setZero();
 
     for (size_t i = 0; i < n_verts; ++i) {
-      markov_row_offsets[i] = static_cast<uint32_t>(markov_col_indices.size());
+      markov_row_offsets[i] = static_cast<int>(markov_col_indices.size());
       const float query_pt[3] = {input.x[i], input.y[i], input.z[i]};
       const size_t num_results = tree.knnSearch(
           query_pt, static_cast<size_t>(k_neighbors), ret_index.data(),
@@ -352,11 +350,10 @@ struct DiffusionTopology {
       }
 
       if (row_mass <= 1e-12f) {
-        markov_col_indices.push_back(static_cast<uint32_t>(i));
+        markov_col_indices.push_back(static_cast<int>(i));
         markov_values.push_back(1.0f);
-        triplets.emplace_back(static_cast<int>(i), static_cast<int>(i), 1.0f);
         mu[static_cast<int>(i)] = 1.0f;
-        markov_row_offsets[i + 1] = static_cast<uint32_t>(markov_col_indices.size());
+        markov_row_offsets[i + 1] = static_cast<int>(markov_col_indices.size());
         continue;
       }
 
@@ -370,21 +367,27 @@ struct DiffusionTopology {
         const uint32_t j = ret_index[k];
         const float normalized = k_val * inv_row_mass;
 
-        markov_col_indices.push_back(j);
+        markov_col_indices.push_back(static_cast<int>(j));
         markov_values.push_back(normalized);
-        triplets.emplace_back(static_cast<int>(i), static_cast<int>(j), normalized);
       }
 
       mu[static_cast<int>(i)] = row_mass;
-      markov_row_offsets[i + 1] = static_cast<uint32_t>(markov_col_indices.size());
+      markov_row_offsets[i + 1] = static_cast<int>(markov_col_indices.size());
     }
 
-    markov_row_offsets[n_verts] = static_cast<uint32_t>(markov_col_indices.size());
+    markov_row_offsets[n_verts] = static_cast<int>(markov_col_indices.size());
 
-    P.resize(static_cast<int>(n_verts), static_cast<int>(n_verts));
-    P.setFromTriplets(
-        triplets.begin(), triplets.end(),
-        [](const float a, const float b) { return a + b; });
+    const int nnz = static_cast<int>(markov_col_indices.size());
+    RowSparseMatrixT P_row(static_cast<int>(n_verts), static_cast<int>(n_verts));
+    P_row.resizeNonZeros(nnz);
+    std::copy(markov_row_offsets.begin(), markov_row_offsets.end(),
+              P_row.outerIndexPtr());
+    std::copy(markov_col_indices.begin(), markov_col_indices.end(),
+              P_row.innerIndexPtr());
+    std::copy(markov_values.begin(), markov_values.end(), P_row.valuePtr());
+    P_row.finalize();
+
+    P = P_row;
     P.makeCompressed();
 
     const float mu_sum = mu.sum();
