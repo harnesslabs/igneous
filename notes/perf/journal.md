@@ -975,3 +975,81 @@ Use one entry per optimization hypothesis.
 - Decision: `kept`
 - Notes:
   - This change preserved spectral performance and improved Hodge main despite the eigenbasis phase still dominating overall runtime.
+
+## 2026-02-13 Persistent Worker Pool for `parallel_for_index`
+- Timestamp: 2026-02-13T20:28:59Z
+- Commit: 0742e0f
+- Hypothesis: Replace per-call thread spawn/join with a persistent worker pool to reduce parallel scheduler overhead in repeated small/medium kernels.
+- Files touched:
+  - `include/igneous/core/parallel.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_diffusion_main|bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_topology|bench_hodge_phase_gram|bench_hodge_phase_weak_derivative|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.15s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_pipelines_20260213-workerpool-cpuparallel-v2.json --benchmark_out_format=json`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_markov_step/2000|bench_diffusion_build/2000|bench_eigenbasis/2000/16|bench_1form_gram/2000/16|bench_weak_derivative/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_dod_20260213-workerpool-cpuparallel-v2.json --benchmark_out_format=json`
+  - `ctest --test-dir build --output-on-failure`
+- Results vs latest pipeline baseline (`notes/perf/results/bench_pipelines_20260213-current-head.txt`):
+  - `bench_pipeline_diffusion_main/20`: `1.327 ms -> 1.295 ms` (`-2.43%`)
+  - `bench_pipeline_diffusion_main/100`: `3.190 ms -> 3.002 ms` (`-5.88%`)
+  - `bench_pipeline_spectral_main`: `23.345 ms -> 23.120 ms` (`-0.96%`)
+  - `bench_pipeline_hodge_main`: `118.157 ms -> 115.609 ms` (`-2.16%`)
+  - `bench_hodge_phase_topology`: `1.347 ms -> 1.228 ms` (`-8.79%`)
+  - `bench_hodge_phase_weak_derivative`: `2.755 ms -> 2.579 ms` (`-6.39%`)
+  - `bench_hodge_phase_gram`: `1.106 ms -> 1.142 ms` (`+3.32%`)
+- Deep benchmark artifact:
+  - `notes/perf/results/bench_pipelines_20260213-workerpool-cpuparallel-v2.json`
+  - `notes/perf/results/bench_dod_20260213-workerpool-cpuparallel-v2.json`
+- Profile traces: not captured for this incremental pass.
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - Primary deep target (`bench_pipeline_diffusion_main/100`) cleared the 3% gate.
+  - Small regressions/noise remain in some phase kernels; no correctness drift observed.
+
+## 2026-02-13 Metal Diffusion CSR Backend + GPU Offload Gating
+- Timestamp: 2026-02-13T20:28:59Z
+- Commit: 7984261
+- Hypothesis: Add a real Metal backend for diffusion CSR kernels (`apply_markov_transition`, `carre_du_champ`) and gate offload by problem size to avoid regressions on small real-world meshes.
+- Files touched:
+  - `CMakeLists.txt`
+  - `include/igneous/core/gpu.hpp`
+  - `include/igneous/data/topology.hpp`
+  - `include/igneous/ops/geometry.hpp`
+  - `src/core/metal_diffusion.mm`
+  - `src/core/gpu_stub.cpp`
+- Implementation notes:
+  - Added Apple Metal runtime for CSR matvec and CSR `carre_du_champ` with per-topology CSR buffer cache.
+  - Added topology cache invalidation hooks on `build()` and `clear()`.
+  - Added runtime gating controls:
+    - `IGNEOUS_BACKEND=gpu` to enable GPU path.
+    - `IGNEOUS_GPU_MIN_ROWS` (default `8192`) to gate offload.
+    - `IGNEOUS_GPU_FORCE=1` to force offload for experiments.
+- Benchmark commands:
+  - `IGNEOUS_BACKEND=gpu IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_diffusion_main|bench_pipeline_hodge_main|bench_pipeline_spectral_main' --benchmark_min_time=0.15s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_pipelines_20260213-gpu-gated-h1.json --benchmark_out_format=json`
+  - `IGNEOUS_BACKEND=gpu IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_markov_step/2000|bench_1form_gram/2000/16|bench_weak_derivative/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_dod_20260213-gpu-gated-h1.json --benchmark_out_format=json`
+  - `IGNEOUS_BACKEND=gpu IGNEOUS_GPU_FORCE=1 ...` with the same diffusion filters for forced-offload A/B.
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-diffusion assets/bunny.obj` (3 runs, plus GPU gated/forced variants)
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (3 runs, plus GPU gated/forced variants)
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-spectral assets/bunny.obj` (3 runs, plus GPU gated/forced variants)
+- Results (`GPU gated` vs `CpuParallel`, wall time):
+  - `bench_pipeline_diffusion_main/20`: `1.295 ms -> 1.204 ms` (`-7.04%`)
+  - `bench_pipeline_diffusion_main/100`: `3.002 ms -> 2.986 ms` (`-0.54%`)
+  - `bench_pipeline_spectral_main`: `23.120 ms -> 22.217 ms` (`-3.90%`)
+  - `bench_pipeline_hodge_main`: `115.609 ms -> 116.474 ms` (`+0.75%`)
+- Results (`GPU forced` vs `CpuParallel`, wall time):
+  - `bench_pipeline_diffusion_main/20`: `1.295 ms -> 4.968 ms` (`+283.67%`)
+  - `bench_pipeline_diffusion_main/100`: `3.002 ms -> 19.627 ms` (`+553.76%`)
+  - `bench_markov_step/2000`: `17.24 us -> 178.75 us` (`+936.82%`)
+- App-level timings (`notes/perf/results/main_timings_20260213-gpu-gating-h1.txt`):
+  - `igneous-diffusion assets/bunny.obj`: cpuparallel/gpu-gated `~0.03-0.04 s`; gpu-forced `~0.04-0.05 s`.
+  - `igneous-hodge`: cpuparallel/gpu-gated `~0.14-0.15 s`; gpu-forced `~0.21-0.22 s`.
+  - `igneous-spectral assets/bunny.obj`: cpuparallel/gpu-gated `~0.05-0.06 s`; gpu-forced `~0.06 s`.
+- Deep benchmark artifact:
+  - `notes/perf/results/bench_pipelines_20260213-gpu-gated-h1.json`
+  - `notes/perf/results/bench_dod_20260213-gpu-gated-h1.json`
+  - `notes/perf/results/bench_pipelines_20260213-gpu-force-h1.json`
+  - `notes/perf/results/bench_dod_20260213-gpu-force-h1.json`
+- Profile traces: not captured for this incremental pass.
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - This is a capability/infrastructure commit; current real-world mesh sizes are below the default offload threshold, so throughput remains CPU-favored.
+  - Forced offload is currently not competitive on 2k-4k point workloads.

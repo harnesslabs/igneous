@@ -46,8 +46,10 @@ Runtime backend controls:
 
 - `IGNEOUS_BACKEND=cpu` for single-thread CPU execution.
 - `IGNEOUS_BACKEND=parallel` (default) for threaded CPU execution.
-- `IGNEOUS_BACKEND=gpu` currently routes to threaded CPU execution path.
+- `IGNEOUS_BACKEND=gpu` enables Metal diffusion kernels on Apple platforms.
 - `IGNEOUS_NUM_THREADS=<N>` to override worker count for threaded kernels.
+- `IGNEOUS_GPU_MIN_ROWS=<N>` sets minimum vertex count for GPU offload (default `8192`).
+- `IGNEOUS_GPU_FORCE=1` forces GPU offload for debugging/profiling.
 - Workload guidance for backend choice: `notes/perf/backend-guidance.md`.
 
 ## Tests
