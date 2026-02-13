@@ -178,10 +178,13 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
 
   for (int a = 0; a < 3; ++a) {
     workspace.gamma_x_phi_mat[a].resize(n_verts_i, n0);
-    for (int t = 0; t < n0; ++t) {
-      carre_du_champ(mesh, workspace.coords[a], U.col(t), bandwidth,
-                     workspace.gamma_x_phi_mat[a].col(t));
-    }
+    core::parallel_for_index(
+        0, n0,
+        [&](int t) {
+          carre_du_champ(mesh, workspace.coords[a], U.col(t), bandwidth,
+                         workspace.gamma_x_phi_mat[a].col(t));
+        },
+        8);
   }
 
   Eigen::MatrixXf alpha_mat(n0, 3);
@@ -195,16 +198,18 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
   const Eigen::MatrixXf U_t = U.transpose();
 
   Eigen::MatrixXf X_op(n0, n0);
-  workspace.weight.resize(n_verts_i);
-
-  for (int t = 0; t < n0; ++t) {
-    workspace.weight =
-        mu.array() *
-        ((workspace.gamma_x_phi_mat[0].col(t).array() * q.col(0).array()) +
-         (workspace.gamma_x_phi_mat[1].col(t).array() * q.col(1).array()) +
-         (workspace.gamma_x_phi_mat[2].col(t).array() * q.col(2).array()));
-    X_op.col(t).noalias() = U_t * workspace.weight;
-  }
+  core::parallel_for_index(
+      0, n0,
+      [&](int t) {
+        Eigen::VectorXf weight_local(n_verts_i);
+        weight_local =
+            mu.array() *
+            ((workspace.gamma_x_phi_mat[0].col(t).array() * q.col(0).array()) +
+             (workspace.gamma_x_phi_mat[1].col(t).array() * q.col(1).array()) +
+             (workspace.gamma_x_phi_mat[2].col(t).array() * q.col(2).array()));
+        X_op.col(t).noalias() = U_t * weight_local;
+      },
+      8);
 
   Eigen::MatrixXf L_eps = X_op - epsilon * Eigen::MatrixXf::Identity(n0, n0);
 
