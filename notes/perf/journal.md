@@ -94,3 +94,40 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`), including CSR-vs-sparse-product equality.
 - Decision: `kept`
 - Notes: This optimization improves both isolated Markov stepping and end-to-end diffusion iteration cost while preserving spectral compatibility through retained `P`.
+
+## 2026-02-13 Diffusion Build Scratch Reuse (Rejected)
+- Timestamp: 2026-02-13T16:19:08Z
+- Commit: 79b2fd3 (working tree with uncommitted changes)
+- Hypothesis: Reuse `DiffusionTopology::build` scratch allocations (triplets + KNN buffers) to reduce repeated build overhead.
+- Files touched:
+  - `include/igneous/data/topology.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_markov_step/2000' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_diffusion_build/2000`: `3.52 ms` mean
+  - `bench_markov_step/2000`: `25.6 us` mean
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: No meaningful throughput gain on primary diffusion metrics; change was reverted.
+
+## 2026-02-13 Diffusion Markov Inner-Loop Unroll
+- Timestamp: 2026-02-13T16:21:33Z
+- Commit: 79b2fd3 (working tree with uncommitted changes)
+- Hypothesis: Replace index-heavy CSR accumulation with pointer-based unrolled accumulation inside `apply_markov_transition` to reduce per-edge overhead.
+- Files touched:
+  - `include/igneous/ops/geometry.hpp`
+- Benchmark commands:
+  - `./scripts/perf/run_deep_bench.sh`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_markov_step/2000' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_markov_step/2000`: `17.6 us` mean
+  - `bench_diffusion_build/2000`: `3.44 ms` mean
+- Deep results (vs `bench_dod_20260213-091622.json`):
+  - `bench_markov_step/2000`: `-31.79%`
+  - `bench_diffusion_build/2000`: `-2.56%`
+- Profile traces:
+  - `notes/perf/profiles/20260213-092110/time-profiler.trace`
+  - `notes/perf/profiles/20260213-092120/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: High-confidence Markov-step throughput gain with no API churn.

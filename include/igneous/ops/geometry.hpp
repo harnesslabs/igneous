@@ -106,17 +106,32 @@ void apply_markov_transition(const MeshT &mesh,
     const auto &weights = mesh.topology.markov_values;
 
     assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
+    assert(input.data() != output.data());
+
+    const float *input_data = input.data();
+    float *output_data = output.data();
 
     for (int i = 0; i < expected_size; ++i) {
-      float acc = 0.0f;
       const uint32_t begin = row_offsets[static_cast<size_t>(i)];
       const uint32_t end = row_offsets[static_cast<size_t>(i) + 1];
+      const uint32_t count = end - begin;
+      const uint32_t *cols = col_indices.data() + begin;
+      const float *w = weights.data() + begin;
 
-      for (uint32_t idx = begin; idx < end; ++idx) {
-        acc += weights[idx] * input[static_cast<int>(col_indices[idx])];
+      float acc = 0.0f;
+      uint32_t idx = 0;
+      for (; idx + 3 < count; idx += 4) {
+        acc += w[idx + 0] * input_data[static_cast<int>(cols[idx + 0])];
+        acc += w[idx + 1] * input_data[static_cast<int>(cols[idx + 1])];
+        acc += w[idx + 2] * input_data[static_cast<int>(cols[idx + 2])];
+        acc += w[idx + 3] * input_data[static_cast<int>(cols[idx + 3])];
       }
 
-      output[i] = acc;
+      for (; idx < count; ++idx) {
+        acc += w[idx] * input_data[static_cast<int>(cols[idx])];
+      }
+
+      output_data[i] = acc;
     }
   } else {
     output.noalias() = mesh.topology.P * input;
