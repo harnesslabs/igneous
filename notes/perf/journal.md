@@ -846,3 +846,31 @@ Use one entry per optimization hypothesis.
 - Notes:
   - Static-range scheduler prototype was tested and rejected due imbalance on irregular triangular work; final scheduler uses coarse dynamic chunking.
   - Small flow workloads (`<= 62.5k verts`) remain better on serial CPU due thread startup overhead; large grids and pipeline workloads are strongly improved.
+
+## 2026-02-13 TriangleTopology Neighbor Build Dual-Path
+- Timestamp: 2026-02-13T19:51:26Z
+- Commit: e6f4bde (working tree with uncommitted changes)
+- Hypothesis: Replace the stamp-based neighbor build with a dedupe-based path for large meshes and keep the stamp path for small meshes to improve topology throughput without tiny-mesh regressions.
+- Files touched:
+  - `include/igneous/data/topology.hpp`
+- Implementation notes:
+  - Threaded unpack of `faces_to_vertices -> face_v{0,1,2}`.
+  - New large-mesh neighbor path: per-vertex unique-neighbor gather with thread-local scratch vectors, then count/prefix/write passes.
+  - Small-mesh fallback (`num_vertices < 50000`): retained original stamp algorithm for best low-overhead behavior.
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_geometry`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_min_time=0.2s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_dod_20260213-tri-nei-h3.json --benchmark_out_format=json`
+- Results vs pre-hypothesis threaded baseline:
+  - `bench_mesh_topology_build/400`: `4.566 ms -> 2.966 ms` (`-35.04%`)
+  - `bench_curvature_kernel/400`: `0.984 ms -> 0.977 ms` (`-0.71%`)
+  - `bench_flow_kernel/400`: `0.334 ms -> 0.330 ms` (`-1.33%`)
+  - `bench_diffusion_build/2000`: `0.753 ms -> 0.757 ms` (`+0.42%`)
+- Geometry benchmark topology deltas:
+  - `Grid 100x100`: `0.403 -> 0.346 ms` (`-14.14%`)
+  - `Grid 250x250`: `2.308 -> 1.862 ms` (`-19.32%`)
+  - `Grid 500x500`: `7.816 -> 5.028 ms` (`-35.67%`)
+  - `Grid 1000x1000`: `31.840 -> 17.853 ms` (`-43.93%`)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - First dedupe-only attempt was rejected for small meshes; dual-path resolved the regression.
