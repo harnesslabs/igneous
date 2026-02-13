@@ -77,6 +77,7 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
                                            HodgeWorkspace<MeshT> &workspace) {
   const auto &U = mesh.topology.eigen_basis;
   const auto &mu = mesh.topology.mu;
+  const auto mu_arr = mu.array();
   const int n0 = U.cols();
   const int n_basis = 3 * n0;
   const int n_verts = static_cast<int>(mesh.geometry.num_points());
@@ -111,12 +112,13 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
 
       for (int a = 0; a < 3; ++a) {
         for (int b = 0; b < 3; ++b) {
-          const Eigen::VectorXf term1 =
-              workspace.gamma_phi_phi.cwiseProduct(workspace.gamma_xx[a][b]);
-          const Eigen::VectorXf term2 = workspace.gamma_phi_x[k][b].cwiseProduct(
-              workspace.gamma_phi_x[l][a]);
-
-          const float val = (term1 - term2).dot(mu);
+          const float val =
+              (((workspace.gamma_phi_phi.array() *
+                 workspace.gamma_xx[a][b].array()) -
+                (workspace.gamma_phi_x[k][b].array() *
+                 workspace.gamma_phi_x[l][a].array())) *
+               mu_arr)
+                  .sum();
 
           const int row = k * 3 + a;
           const int col = l * 3 + b;

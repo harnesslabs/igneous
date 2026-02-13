@@ -420,3 +420,27 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Cleared threshold on the primary target (`weak_derivative`) with no material regressions elsewhere.
+
+## 2026-02-13 Curl-Energy Array Fusion
+- Timestamp: 2026-02-13T18:19:26Z
+- Commit: 1ab1f43 (working tree with uncommitted changes)
+- Hypothesis: Replace temporary-vector assembly in curl-energy accumulation with a fused Eigen array expression to keep SIMD packetization and reduce temporary traffic.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+- Smoke results:
+  - `bench_curl_energy/2000/16`: `5.94 ms` mean
+  - `bench_weak_derivative/2000/16`: `1.43 ms` mean
+- Deep results (vs `bench_dod_20260213-095422.json`):
+  - `bench_curl_energy/2000/16`: `-3.43%`
+  - `bench_weak_derivative/2000/16`: `-0.33%`
+  - `bench_1form_gram/2000/16`: `-0.03%`
+  - `bench_hodge_solve/2000/16`: `+1.51%`
+- Profile traces:
+  - `notes/perf/profiles/20260213-111704/time-profiler.trace`
+  - `notes/perf/profiles/20260213-111715/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Cleared keep threshold on primary target (`curl_energy`) with no material regressions on downstream kernels.
