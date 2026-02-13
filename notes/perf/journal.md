@@ -155,3 +155,53 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Very large topology-build gain; this removes the dominant mesh pipeline bottleneck identified in previous runs.
+
+## 2026-02-13 Curvature SoA Fast Path (Rejected)
+- Timestamp: 2026-02-13T16:30:05Z
+- Commit: 2ccddc0 (working tree with uncommitted changes)
+- Hypothesis: Specialize triangle curvature kernel to direct SoA arithmetic and avoid `get_vec3`/operator object churn inside inner loops.
+- Files touched:
+  - `include/igneous/ops/curvature.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_mesh_topology_build/400|bench_curvature_kernel/400|bench_flow_kernel/400' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_curvature_kernel/400`: `7.27 ms` mean (no material improvement)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Throughput change was below acceptance threshold; code reverted.
+
+## 2026-02-13 Spectral Adaptive NCV (Rejected)
+- Timestamp: 2026-02-13T16:30:54Z
+- Commit: 2ccddc0 (working tree with uncommitted changes)
+- Hypothesis: Use smaller Arnoldi subspace (`ncv`) first with fallback to cut eigensolver runtime while preserving convergence.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_eigenbasis/2000/16|bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_eigenbasis/2000/16`: `20.25 ms` mean (`+32%` regression)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Large regression in primary eigenbasis benchmark; code reverted.
+
+## 2026-02-13 Flow SoA Triangle Path
+- Timestamp: 2026-02-13T16:32:12Z
+- Commit: 2ccddc0 (working tree with uncommitted changes)
+- Hypothesis: Specialize triangle mean-curvature flow to direct SoA+CSR loops to reduce neighbor gather/set overhead.
+- Files touched:
+  - `include/igneous/ops/flow.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_flow_kernel/400|bench_curvature_kernel/400|bench_mesh_topology_build/400' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+- Smoke results:
+  - `bench_flow_kernel/400`: `0.583 ms` mean
+- Deep results (vs `bench_dod_20260213-092505.json`):
+  - `bench_flow_kernel/400`: `-3.99%`
+  - `bench_mesh_topology_build/400`: `+0.30%`
+  - `bench_curvature_kernel/400`: `+0.30%`
+- Profile traces:
+  - `notes/perf/profiles/20260213-093150/time-profiler.trace`
+  - `notes/perf/profiles/20260213-093200/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Cleared the acceptance threshold for the primary flow kernel target.

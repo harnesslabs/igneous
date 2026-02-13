@@ -3,6 +3,7 @@
 #include <igneous/core/blades.hpp>
 #include <igneous/data/mesh.hpp>
 #include <igneous/data/topology.hpp>
+#include <type_traits>
 #include <vector>
 
 namespace igneous::ops {
@@ -21,6 +22,44 @@ void integrate_mean_curvature_flow(data::Mesh<Sig, Topo> &mesh, float dt,
   const size_t num_verts = geometry.num_points();
 
   workspace.displacements.assign(num_verts, {0.0f, 0.0f, 0.0f});
+
+  if constexpr (std::is_same_v<Topo, data::TriangleTopology>) {
+    const auto &x = geometry.x;
+    const auto &y = geometry.y;
+    const auto &z = geometry.z;
+    const auto &neighbor_offsets = topology.vertex_neighbor_offsets;
+    const auto &neighbor_data = topology.vertex_neighbor_data;
+
+    for (size_t i = 0; i < num_verts; ++i) {
+      const uint32_t begin = neighbor_offsets[i];
+      const uint32_t end = neighbor_offsets[i + 1];
+      if (begin == end) {
+        continue;
+      }
+
+      float sx = 0.0f;
+      float sy = 0.0f;
+      float sz = 0.0f;
+      for (uint32_t idx = begin; idx < end; ++idx) {
+        const uint32_t n_idx = neighbor_data[idx];
+        sx += x[n_idx];
+        sy += y[n_idx];
+        sz += z[n_idx];
+      }
+
+      const float inv_count = 1.0f / static_cast<float>(end - begin);
+      workspace.displacements[i] = {sx * inv_count - x[i], sy * inv_count - y[i],
+                                    sz * inv_count - z[i]};
+    }
+
+    for (size_t i = 0; i < num_verts; ++i) {
+      const core::Vec3 &d = workspace.displacements[i];
+      geometry.x[i] += d.x * dt;
+      geometry.y[i] += d.y * dt;
+      geometry.z[i] += d.z * dt;
+    }
+    return;
+  }
 
   for (size_t i = 0; i < num_verts; ++i) {
     const auto neighbors = topology.get_vertex_neighbors(static_cast<uint32_t>(i));
