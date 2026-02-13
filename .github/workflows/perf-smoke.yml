@@ -178,7 +178,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo "body<<'EOF'"
+            echo "body<<EOF"
             cat artifacts/perf/reports/smoke-summary.md
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
