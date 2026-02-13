@@ -1157,3 +1157,61 @@ Use one entry per optimization hypothesis.
 - Decision: `kept`
 - Notes:
   - Default `IGNEOUS_BACKEND=gpu` now captures long-step diffusion wins without globally forcing GPU on short-step kernels.
+
+## 2026-02-13 Spectral `mu`-Init Arnoldi (Rejected)
+- Timestamp: 2026-02-13T21:02:11Z
+- Commit: not committed (reverted)
+- Hypothesis: Initialize Spectra Arnoldi with stationary measure `mu` to reduce convergence iterations.
+- Files touched (reverted):
+  - `include/igneous/ops/spectral.hpp`
+- Results:
+  - Improved `bench_pipeline_spectral_main` but regressed Hodge eigenbasis-heavy path.
+  - `bench_pipeline_hodge_main`: `+6.73%` regression.
+  - `bench_hodge_phase_eigenbasis`: `+7.71%` regression.
+- Decision: `rejected`
+- Notes:
+  - Initialization direction appears to hurt 64-mode convergence behavior.
+
+## 2026-02-13 Skip Compact NCV for k>=64 (Rejected)
+- Timestamp: 2026-02-13T21:03:54Z
+- Commit: not committed (reverted)
+- Hypothesis: Disable compact-`ncv` pre-pass for high-rank solves to avoid fallback overhead.
+- Files touched (reverted):
+  - `include/igneous/ops/spectral.hpp`
+- Results:
+  - `bench_pipeline_hodge_main`: `+7.01%` regression.
+  - `bench_hodge_phase_eigenbasis`: `+4.73%` regression.
+- Decision: `rejected`
+- Notes:
+  - Compact pre-pass was not the bottleneck for current data.
+
+## 2026-02-13 Symmetric Diffusion Eigensolver (Large-Graph Path)
+- Timestamp: 2026-02-13T21:05:27Z
+- Commit: 6e2b2fb
+- Hypothesis: For diffusion topologies on larger graphs, solve eigenbasis through symmetric similarity transform (`D^{-1/2} K D^{-1/2}`) with `SymEigsSolver`, then map back to right eigenvectors of `P`.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp`
+- Implementation notes:
+  - Added `MarkovSymmetricCsrMatProd` for transformed operator matvec.
+  - Uses symmetric solver path for `n >= 2200`, then maps basis by multiplying columns with `inv_sqrt_mu`.
+  - Falls back to existing generic CSR Arnoldi path on failure or smaller graphs.
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.15s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_pipelines_20260213-spectral-sym-h2.json --benchmark_out_format=json`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_eigenbasis/2000/16|bench_1form_gram/2000/16|bench_weak_derivative/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_dod_20260213-spectral-sym-h2.json --benchmark_out_format=json`
+  - strict A/B file-toggle validation against pre-change `spectral.hpp`.
+- Results vs pre-hypothesis pipeline baseline:
+  - `bench_pipeline_spectral_main`: `23.120 ms -> 17.936 ms` (`-22.42%`)
+  - `bench_pipeline_hodge_main`: `115.609 ms -> 103.083 ms` (`-10.84%`)
+  - `bench_hodge_phase_eigenbasis`: `89.066 ms -> 75.774 ms` (`-14.92%`)
+- Microbench guardrails:
+  - `bench_eigenbasis/2000/16`: `+0.05%` (effectively unchanged via small-graph fallback path).
+- Deep benchmark artifact:
+  - `notes/perf/results/bench_pipelines_20260213-spectral-sym-h2.json`
+  - `notes/perf/results/bench_dod_20260213-spectral-sym-h2.json`
+  - A/B traces:
+    - `notes/perf/results/bench_pipelines_20260213-spectral-sym-h1-candidateA.txt`
+    - `notes/perf/results/bench_pipelines_20260213-spectral-sym-h1-baselineA.txt`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - This is the largest Hodge pipeline win in the current optimization wave.
