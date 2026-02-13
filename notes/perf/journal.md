@@ -826,6 +826,10 @@ Use one entry per optimization hypothesis.
   - `bench_hodge_phase_eigenbasis`: `107.208 ms -> 106.645 ms` (`-0.53%`)
   - `bench_hodge_phase_curl_energy`: `143.066 ms -> 14.958 ms` (`-89.54%`)
   - `bench_hodge_phase_circular`: `25.405 ms -> 5.308 ms` (`-79.11%`)
+- App-level throughput (`main_*`, 3 runs, `/usr/bin/time -p`, bench mode):
+  - `igneous-diffusion assets/bunny.obj`: `0.01 s -> 0.00 s`
+  - `igneous-spectral assets/bunny.obj`: `0.04 s -> 0.03 s`
+  - `igneous-hodge`: `0.30 s -> 0.15 s`
 - Delta vs pre-change threaded baseline (`bench_pipelines_20260213-current.txt`, wall time):
   - `bench_pipeline_diffusion_main/100`: `5.914 ms -> 3.093 ms` (`-47.71%`)
   - `bench_pipeline_spectral_main`: `33.395 ms -> 30.437 ms` (`-8.86%`)
