@@ -801,3 +801,44 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Additional real-world Hodge throughput gain while preserving backend switchability.
+
+## 2026-02-13 Threaded Geometry + Diffusion Topology Build (Global CPU Pass)
+- Timestamp: 2026-02-13T19:35:18Z
+- Commit: 73a8b91 (working tree with uncommitted changes)
+- Hypothesis: Extend threaded backend beyond Hodge by parallelizing high-cardinality geometry kernels (`curvature`, `flow`) and `DiffusionTopology::build`; tune scheduler granularity for mixed regular/irregular kernels.
+- Files touched:
+  - `include/igneous/core/parallel.hpp`
+  - `include/igneous/data/topology.hpp`
+  - `include/igneous/ops/curvature.hpp`
+  - `include/igneous/ops/flow.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_geometry`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_dod_20260213-123249.json --benchmark_out_format=json`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_min_time=0.12s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_pipelines_20260213-1233-threaded.json --benchmark_out_format=json`
+  - `IGNEOUS_BACKEND=cpu IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_min_time=0.12s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_pipelines_20260213-1233-cpu.json --benchmark_out_format=json`
+  - `ctest --test-dir build --output-on-failure`
+- A/B results (`bench_pipelines`, 10 reps, serial CPU vs threaded default, wall time):
+  - `bench_pipeline_diffusion_main/20`: `4.228 ms -> 1.342 ms` (`-68.25%`)
+  - `bench_pipeline_diffusion_main/100`: `5.927 ms -> 3.093 ms` (`-47.82%`)
+  - `bench_pipeline_spectral_main`: `33.384 ms -> 30.437 ms` (`-8.83%`)
+  - `bench_pipeline_hodge_main`: `302.312 ms -> 148.748 ms` (`-50.80%`)
+  - `bench_hodge_phase_topology`: `6.136 ms -> 1.389 ms` (`-77.37%`)
+  - `bench_hodge_phase_eigenbasis`: `107.208 ms -> 106.645 ms` (`-0.53%`)
+  - `bench_hodge_phase_curl_energy`: `143.066 ms -> 14.958 ms` (`-89.54%`)
+  - `bench_hodge_phase_circular`: `25.405 ms -> 5.308 ms` (`-79.11%`)
+- Delta vs pre-change threaded baseline (`bench_pipelines_20260213-current.txt`, wall time):
+  - `bench_pipeline_diffusion_main/100`: `5.914 ms -> 3.093 ms` (`-47.71%`)
+  - `bench_pipeline_spectral_main`: `33.395 ms -> 30.437 ms` (`-8.86%`)
+  - `bench_pipeline_hodge_main`: `154.395 ms -> 148.748 ms` (`-3.66%`)
+- Deep `bench_dod` delta vs pre-change baseline (wall time):
+  - `bench_curvature_kernel/400`: `7.239 ms -> 0.998 ms` (`-86.21%`)
+  - `bench_flow_kernel/400`: `0.519 ms -> 0.335 ms` (`-35.44%`)
+  - `bench_diffusion_build/2000`: `2.904 ms -> 0.770 ms` (`-73.48%`)
+- Geometry benchmark highlights (`bench_geometry`, pre-change vs latest threaded run):
+  - `Grid 500x500`: `Curv 12.125 -> 1.421 ms` (`-88.28%`), `Flow 0.826 -> 0.413 ms` (`-50.00%`)
+  - `Grid 1000x1000`: `Curv 46.532 -> 5.180 ms` (`-88.87%`), `Flow 3.397 -> 0.856 ms` (`-74.80%`)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - Static-range scheduler prototype was tested and rejected due imbalance on irregular triangular work; final scheduler uses coarse dynamic chunking.
+  - Small flow workloads (`<= 62.5k verts`) remain better on serial CPU due thread startup overhead; large grids and pipeline workloads are strongly improved.

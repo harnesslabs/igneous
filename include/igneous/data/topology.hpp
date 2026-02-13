@@ -11,6 +11,8 @@
 #include <span>
 #include <vector>
 
+#include <igneous/core/parallel.hpp>
+
 namespace igneous::data {
 
 template <typename T>
@@ -315,69 +317,103 @@ struct DiffusionTopology {
     KDTree tree(3, adaptor, nanoflann::KDTreeSingleIndexAdaptorParams(32));
     tree.buildIndex();
 
-    const size_t row_capacity = n_verts * static_cast<size_t>(k_neighbors);
-
     markov_row_offsets.assign(n_verts + 1, 0);
-    markov_col_indices.clear();
-    markov_values.clear();
-    markov_col_indices.reserve(row_capacity);
-    markov_values.reserve(row_capacity);
-
-    std::vector<uint32_t> ret_index(static_cast<size_t>(k_neighbors));
-    std::vector<float> out_dist_sqr(static_cast<size_t>(k_neighbors));
     mu.resize(static_cast<int>(n_verts));
     mu.setZero();
+    const size_t row_stride = static_cast<size_t>(k_neighbors);
+    const size_t row_capacity = n_verts * row_stride;
 
+    std::vector<int> row_counts(n_verts, 0);
+    std::vector<int> row_cols(row_capacity, 0);
+    std::vector<float> row_values(row_capacity, 0.0f);
+
+    core::parallel_for_index(
+        0, static_cast<int>(n_verts),
+        [&](int row_idx) {
+          const size_t i = static_cast<size_t>(row_idx);
+          const size_t base = i * row_stride;
+
+          std::vector<uint32_t> ret_index(static_cast<size_t>(k_neighbors));
+          std::vector<float> out_dist_sqr(static_cast<size_t>(k_neighbors));
+
+          const float query_pt[3] = {input.x[i], input.y[i], input.z[i]};
+          const size_t num_results = tree.knnSearch(
+              query_pt, static_cast<size_t>(k_neighbors), ret_index.data(),
+              out_dist_sqr.data());
+
+          float row_mass = 0.0f;
+          for (size_t k = 0; k < num_results; ++k) {
+            const float k_val = std::exp(-out_dist_sqr[k] / t_sq);
+            if (k_val < 1e-8f) {
+              out_dist_sqr[k] = 0.0f;
+              continue;
+            }
+
+            out_dist_sqr[k] = k_val;
+            row_mass += k_val;
+          }
+
+          if (row_mass <= 1e-12f) {
+            row_cols[base] = static_cast<int>(i);
+            row_values[base] = 1.0f;
+            row_counts[i] = 1;
+            mu[row_idx] = 1.0f;
+            return;
+          }
+
+          const float inv_row_mass = 1.0f / row_mass;
+          int count = 0;
+          for (size_t k = 0; k < num_results; ++k) {
+            const float k_val = out_dist_sqr[k];
+            if (k_val <= 0.0f) {
+              continue;
+            }
+
+            row_cols[base + static_cast<size_t>(count)] =
+                static_cast<int>(ret_index[k]);
+            row_values[base + static_cast<size_t>(count)] = k_val * inv_row_mass;
+            ++count;
+          }
+
+          if (count == 0) {
+            row_cols[base] = static_cast<int>(i);
+            row_values[base] = 1.0f;
+            row_counts[i] = 1;
+            mu[row_idx] = 1.0f;
+            return;
+          }
+
+          row_counts[i] = count;
+          mu[row_idx] = row_mass;
+        },
+        64);
+
+    int nnz = 0;
     for (size_t i = 0; i < n_verts; ++i) {
-      markov_row_offsets[i] = static_cast<int>(markov_col_indices.size());
-      const float query_pt[3] = {input.x[i], input.y[i], input.z[i]};
-      const size_t num_results = tree.knnSearch(
-          query_pt, static_cast<size_t>(k_neighbors), ret_index.data(),
-          out_dist_sqr.data());
-
-      float row_mass = 0.0f;
-      for (size_t k = 0; k < num_results; ++k) {
-        const float dist_sq = out_dist_sqr[k];
-
-        const float k_val = std::exp(-dist_sq / t_sq);
-        if (k_val < 1e-8f) {
-          out_dist_sqr[k] = 0.0f;
-          continue;
-        }
-
-        out_dist_sqr[k] = k_val;
-        row_mass += k_val;
-      }
-
-      if (row_mass <= 1e-12f) {
-        markov_col_indices.push_back(static_cast<int>(i));
-        markov_values.push_back(1.0f);
-        mu[static_cast<int>(i)] = 1.0f;
-        markov_row_offsets[i + 1] = static_cast<int>(markov_col_indices.size());
-        continue;
-      }
-
-      const float inv_row_mass = 1.0f / row_mass;
-      for (size_t k = 0; k < num_results; ++k) {
-        const float k_val = out_dist_sqr[k];
-        if (k_val <= 0.0f) {
-          continue;
-        }
-
-        const uint32_t j = ret_index[k];
-        const float normalized = k_val * inv_row_mass;
-
-        markov_col_indices.push_back(static_cast<int>(j));
-        markov_values.push_back(normalized);
-      }
-
-      mu[static_cast<int>(i)] = row_mass;
-      markov_row_offsets[i + 1] = static_cast<int>(markov_col_indices.size());
+      markov_row_offsets[i] = nnz;
+      nnz += row_counts[i];
     }
+    markov_row_offsets[n_verts] = nnz;
 
-    markov_row_offsets[n_verts] = static_cast<int>(markov_col_indices.size());
+    markov_col_indices.resize(static_cast<size_t>(nnz));
+    markov_values.resize(static_cast<size_t>(nnz));
 
-    const int nnz = static_cast<int>(markov_col_indices.size());
+    core::parallel_for_index(
+        0, static_cast<int>(n_verts),
+        [&](int row_idx) {
+          const size_t i = static_cast<size_t>(row_idx);
+          const int begin = markov_row_offsets[i];
+          const int count = row_counts[i];
+          const size_t src_base = i * row_stride;
+          for (int k = 0; k < count; ++k) {
+            markov_col_indices[static_cast<size_t>(begin + k)] =
+                row_cols[src_base + static_cast<size_t>(k)];
+            markov_values[static_cast<size_t>(begin + k)] =
+                row_values[src_base + static_cast<size_t>(k)];
+          }
+        },
+        64);
+
     RowSparseMatrixT P_row(static_cast<int>(n_verts), static_cast<int>(n_verts));
     P_row.resizeNonZeros(nnz);
     std::copy(markov_row_offsets.begin(), markov_row_offsets.end(),

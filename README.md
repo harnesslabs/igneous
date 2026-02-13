@@ -48,6 +48,7 @@ Runtime backend controls:
 - `IGNEOUS_BACKEND=parallel` (default) for threaded CPU execution.
 - `IGNEOUS_BACKEND=gpu` currently routes to threaded CPU execution path.
 - `IGNEOUS_NUM_THREADS=<N>` to override worker count for threaded kernels.
+- Workload guidance for backend choice: `notes/perf/backend-guidance.md`.
 
 ## Tests
 

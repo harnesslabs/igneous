@@ -71,21 +71,29 @@ void parallel_for_index(int begin, int end, Fn &&fn, int min_parallel_range = 32
   }
 
   workers = std::max(1, std::min(workers, total));
+  const int grain = std::max(1, total / (workers * 8));
   std::atomic<int> next(begin);
   std::vector<std::thread> threads;
-  threads.reserve(static_cast<size_t>(workers));
+  threads.reserve(static_cast<size_t>(workers - 1));
 
-  for (int t = 0; t < workers; ++t) {
-    threads.emplace_back([&]() {
-      while (true) {
-        const int i = next.fetch_add(1, std::memory_order_relaxed);
-        if (i >= end) {
-          break;
-        }
+  auto run_worker = [&]() {
+    while (true) {
+      const int chunk_begin = next.fetch_add(grain, std::memory_order_relaxed);
+      if (chunk_begin >= end) {
+        break;
+      }
+      const int chunk_end = std::min(end, chunk_begin + grain);
+      for (int i = chunk_begin; i < chunk_end; ++i) {
         fn(i);
       }
-    });
+    }
+  };
+
+  for (int t = 1; t < workers; ++t) {
+    threads.emplace_back(run_worker);
   }
+
+  run_worker();
 
   for (auto &thread : threads) {
     thread.join();
