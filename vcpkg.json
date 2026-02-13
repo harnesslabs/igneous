@@ -9,6 +9,7 @@
     "xsimd",
     "eigen3",
     "nanoflann",
-    "spectra"
+    "spectra",
+    "benchmark"
   ]
 }

@@ -1,73 +1,108 @@
 #pragma once
-#include <algorithm> // for std::max
+
 #include <igneous/core/blades.hpp>
+#include <igneous/core/parallel.hpp>
 #include <igneous/data/mesh.hpp>
+#include <igneous/data/topology.hpp>
+#include <type_traits>
 #include <vector>
 
 namespace igneous::ops {
 
-using igneous::core::IsSignature;
-using igneous::core::Vec3;
-using igneous::data::Mesh;
+template <core::IsSignature Sig, data::SurfaceTopology Topo>
+struct FlowWorkspace {
+  std::vector<core::Vec3> displacements;
+};
 
-template <IsSignature Sig>
-void integrate_mean_curvature_flow(Mesh<Sig> &mesh, double dt) {
-  // Use Vec3 (12 bytes) instead of Multivector (32 bytes)
-  // This reduces the 'displacements' buffer size by ~60%
-  // and makes the math operations pure SIMD candidates.
-
+template <core::IsSignature Sig, data::SurfaceTopology Topo>
+void integrate_mean_curvature_flow(data::Mesh<Sig, Topo> &mesh, float dt,
+                                   FlowWorkspace<Sig, Topo> &workspace) {
   auto &geometry = mesh.geometry;
   const auto &topology = mesh.topology;
 
-  size_t num_verts = geometry.num_points();
+  const size_t num_verts = geometry.num_points();
 
-  // 1. COMPUTE FLOW
-  // Allocation: 1M verts * 12 bytes = 12MB (vs 32MB before)
-  // This fits much better in L3 Cache.
-  std::vector<Vec3> displacements(num_verts);
-
-  for (size_t i = 0; i < num_verts; ++i) {
-    auto faces = topology.get_faces_for_vertex(i);
-    if (faces.empty())
-      continue; // displacements[i] is already {0,0,0}
-
-    Vec3 sum_neighbors = {0.0f, 0.0f, 0.0f};
-    double count = 0.0;
-
-    for (uint32_t f_idx : faces) {
-      uint32_t i0 = topology.get_vertex_for_face(f_idx, 0);
-      uint32_t i1 = topology.get_vertex_for_face(f_idx, 1);
-      uint32_t i2 = topology.get_vertex_for_face(f_idx, 2);
-
-      // Fast Blade Access (No padding read)
-      if (i0 != i)
-        sum_neighbors = sum_neighbors + geometry.get_vec3(i0);
-      if (i1 != i)
-        sum_neighbors = sum_neighbors + geometry.get_vec3(i1);
-      if (i2 != i)
-        sum_neighbors = sum_neighbors + geometry.get_vec3(i2);
-
-      count += 2.0;
-    }
-
-    float inv_c = 1.0f / std::max(1.0, count);
-    Vec3 average_pos = sum_neighbors * inv_c;
-
-    displacements[i] = average_pos - geometry.get_vec3(i);
+  if (workspace.displacements.size() != num_verts) {
+    workspace.displacements.resize(num_verts);
   }
 
-  // 2. INTEGRATE
-  // This loop is perfectly linear and trivial for the compiler to vectorise.
-  // It loads 12 bytes, adds 12 bytes, writes 12 bytes.
-  float dt_f = (float)dt;
+  if constexpr (std::is_same_v<Topo, data::TriangleTopology>) {
+    const auto &x = geometry.x;
+    const auto &y = geometry.y;
+    const auto &z = geometry.z;
+    const auto &neighbor_offsets = topology.vertex_neighbor_offsets;
+    const auto &neighbor_data = topology.vertex_neighbor_data;
 
-  for (size_t i = 0; i < num_verts; ++i) {
-    Vec3 p = geometry.get_vec3(i);
-    Vec3 d = displacements[i];
+    core::parallel_for_index(
+        0, static_cast<int>(num_verts),
+        [&](int vertex_idx) {
+          const size_t i = static_cast<size_t>(vertex_idx);
+          const uint32_t begin = neighbor_offsets[i];
+          const uint32_t end = neighbor_offsets[i + 1];
+          if (begin == end) {
+            workspace.displacements[i] = {0.0f, 0.0f, 0.0f};
+            return;
+          }
 
-    // Position Update: P += D * dt
-    geometry.set_vec3(i, p + d * dt_f);
+          float sx = 0.0f;
+          float sy = 0.0f;
+          float sz = 0.0f;
+          for (uint32_t idx = begin; idx < end; ++idx) {
+            const uint32_t n_idx = neighbor_data[idx];
+            sx += x[n_idx];
+            sy += y[n_idx];
+            sz += z[n_idx];
+          }
+
+          const float inv_count = 1.0f / static_cast<float>(end - begin);
+          workspace.displacements[i] = {sx * inv_count - x[i], sy * inv_count - y[i],
+                                        sz * inv_count - z[i]};
+        },
+        131072);
+
+    core::parallel_for_index(
+        0, static_cast<int>(num_verts),
+        [&](int vertex_idx) {
+          const size_t i = static_cast<size_t>(vertex_idx);
+          const core::Vec3 &d = workspace.displacements[i];
+          geometry.x[i] += d.x * dt;
+          geometry.y[i] += d.y * dt;
+          geometry.z[i] += d.z * dt;
+        },
+        131072);
+    return;
   }
+
+  core::parallel_for_index(
+      0, static_cast<int>(num_verts),
+      [&](int vertex_idx) {
+        const size_t i = static_cast<size_t>(vertex_idx);
+        const auto neighbors = topology.get_vertex_neighbors(static_cast<uint32_t>(i));
+        if (neighbors.empty()) {
+          workspace.displacements[i] = {0.0f, 0.0f, 0.0f};
+          return;
+        }
+
+        core::Vec3 sum_neighbors{0.0f, 0.0f, 0.0f};
+        for (uint32_t n_idx : neighbors) {
+          sum_neighbors = sum_neighbors + geometry.get_vec3(n_idx);
+        }
+
+        const float inv_count = 1.0f / static_cast<float>(neighbors.size());
+        const core::Vec3 average_pos = sum_neighbors * inv_count;
+        workspace.displacements[i] = average_pos - geometry.get_vec3(i);
+      },
+      131072);
+
+  core::parallel_for_index(
+      0, static_cast<int>(num_verts),
+      [&](int vertex_idx) {
+        const size_t i = static_cast<size_t>(vertex_idx);
+        const core::Vec3 p = geometry.get_vec3(i);
+        const core::Vec3 d = workspace.displacements[i];
+        geometry.set_vec3(i, p + d * dt);
+      },
+      131072);
 }
 
 } // namespace igneous::ops

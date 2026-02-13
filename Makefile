@@ -1,43 +1,39 @@
-.PHONY: all config build test test-all test-algebra test-simplex clean run bench bench-algebra bench-memory release debug
+.PHONY: all debug release build clean test test-all test-algebra test-topology test-ops bench bench-memory bench-geometry bench-dod bench-deep run-mesh run-diffusion run-spectral run-hodge
 
-# Default: Build everything
 all: build
 
-# --- Configuration ---
 debug:
 	cmake --preset default-local -DCMAKE_BUILD_TYPE=Debug
 
 release:
 	cmake --preset default-local -DCMAKE_BUILD_TYPE=Release
 
-config: debug
-
-# --- Building ---
-# Builds everything (library + all tests + all benchmarks)
 build:
 	cmake --build build
 
-# --- Testing ---
+clean:
+	rm -rf build
 
-# 1. Run ALL tests (via CTest)
 test: debug
-	cmake --build build --target test_algebra test_simplex
+	cmake --build build --target test_algebra test_topology_triangle test_topology_diffusion test_ops_curvature_flow test_ops_spectral_geometry test_ops_hodge test_io_meshes
 	ctest --test-dir build --output-on-failure --verbose
 
-# 2. Run ONLY Algebra tests (Fast iteration)
+test-all: test
+
 test-algebra: debug
 	cmake --build build --target test_algebra
 	./build/test_algebra
 
-# 3. Run ONLY Simplex tests (Fast iteration)
-test-simplex: debug
-	cmake --build build --target test_simplex
-	./build/test_simplex
+test-topology: debug
+	cmake --build build --target test_topology_triangle test_topology_diffusion
+	./build/test_topology_triangle
+	./build/test_topology_diffusion
 
-# --- Benchmarking ---
-bench-algebra: release
-	cmake --build build --target bench_algebra
-	./build/bench_algebra
+test-ops: debug
+	cmake --build build --target test_ops_curvature_flow test_ops_spectral_geometry test_ops_hodge
+	./build/test_ops_curvature_flow
+	./build/test_ops_spectral_geometry
+	./build/test_ops_hodge
 
 bench-memory: release
 	cmake --build build --target bench_memory
@@ -47,12 +43,28 @@ bench-geometry: release
 	cmake --build build --target bench_geometry
 	./build/bench_geometry
 
-# Run all benchmarks
-bench: bench-algebra bench-memory
+bench-dod: release
+	cmake --build build --target bench_dod
+	./build/bench_dod --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
 
-# --- Utilities ---
-check:
-	cmake --build build --target igneous
+bench-deep: release
+	cmake --build build --target bench_dod
+	./scripts/perf/run_deep_bench.sh
 
-clean:
-	rm -rf build
+bench: bench-memory bench-geometry bench-dod
+
+run-mesh: release
+	cmake --build build --target igneous-mesh
+	./build/igneous-mesh assets/bunny.obj
+
+run-diffusion: release
+	cmake --build build --target igneous-diffusion
+	./build/igneous-diffusion assets/bunny.obj
+
+run-spectral: release
+	cmake --build build --target igneous-spectral
+	./build/igneous-spectral assets/bunny.obj
+
+run-hodge: release
+	cmake --build build --target igneous-hodge
+	./build/igneous-hodge

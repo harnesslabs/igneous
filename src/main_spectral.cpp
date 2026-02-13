@@ -1,57 +1,67 @@
+#include <Eigen/Dense>
+#include <algorithm>
+#include <cstdlib>
 #include <filesystem>
+#include <format>
+#include <iostream>
+#include <vector>
+
+#include <igneous/core/algebra.hpp>
 #include <igneous/data/mesh.hpp>
 #include <igneous/io/exporter.hpp>
 #include <igneous/io/importer.hpp>
-#include <igneous/ops/geometry.hpp> // New
-#include <igneous/ops/spectral.hpp> // New
+#include <igneous/ops/geometry.hpp>
+#include <igneous/ops/spectral.hpp>
 #include <igneous/ops/transform.hpp>
 
 using namespace igneous;
 using DiffusionMesh = data::Mesh<core::Euclidean3D, data::DiffusionTopology>;
 
 int main(int argc, char **argv) {
-  if (argc < 2)
+  if (argc < 2) {
     return 1;
-  std::string input_path = argv[1];
+  }
+
+  const bool bench_mode = std::getenv("IGNEOUS_BENCH_MODE") != nullptr;
 
   DiffusionMesh mesh;
-  io::load_obj(mesh, input_path);
+  io::load_obj(mesh, argv[1]);
   ops::normalize(mesh);
 
-  // 1. Build Topology
-  // Bandwidth 0.005 is critical here. Too small = noise. Too large = blur.
-  float bandwidth = 0.005f;
-  mesh.topology.build({std::span{mesh.geometry.packed_data}, bandwidth, 32});
+  const float bandwidth = 0.005f;
+  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
+                       mesh.geometry.z_span(), bandwidth, 32});
 
-  // 2. Compute Spectral Basis
-  // We want the first 16 eigenfunctions
-  int n_basis = 16;
+  const int n_basis = 16;
   ops::compute_eigenbasis(mesh, n_basis);
 
-  // 3. Compute 1-Form Metric
-  // This is the "Mass Matrix" G
-  Eigen::MatrixXf G = ops::compute_1form_gram_matrix(mesh, bandwidth);
+  ops::GeometryWorkspace<DiffusionMesh> geometry_ws;
+  const Eigen::MatrixXf G = ops::compute_1form_gram_matrix(mesh, bandwidth, geometry_ws);
 
-  std::cout << "Gram Matrix Determinant: " << G.determinant() << "\n";
-  std::cout << "Condition Number approx: " << G.maxCoeff() / G.minCoeff()
-            << "\n";
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> solver(G);
+  if (solver.info() == Eigen::Success) {
+    const auto eigvals = solver.eigenvalues();
+    const float min_sv = std::max(1e-12f, eigvals.minCoeff());
+    const float max_sv = eigvals.maxCoeff();
+    std::cout << "Gram cond approx: " << (max_sv / min_sv) << "\n";
+  }
 
-  // 4. Visualize the Eigenfunctions
-  // Phi_0 is constant (stationary distribution).
-  // Phi_1 is the "Fiedler Vector" - cuts the mesh in half.
-  // Phi_2, Phi_3 ... are higher frequency harmonics.
-  std::string out_dir = "output_spectral";
-  std::filesystem::create_directory(out_dir);
+  if (!bench_mode) {
+    const std::string out_dir = "output_spectral";
+    std::filesystem::create_directory(out_dir);
 
-  for (int i = 0; i < 4; ++i) {
-    Eigen::VectorXf phi = mesh.topology.eigen_basis.col(i);
+    const int to_export =
+        std::min(4, static_cast<int>(mesh.topology.eigen_basis.cols()));
+    for (int i = 0; i < to_export; ++i) {
+      const Eigen::VectorXf phi = mesh.topology.eigen_basis.col(i);
+      std::vector<float> field(static_cast<size_t>(phi.size()));
+      for (int j = 0; j < phi.size(); ++j) {
+        field[static_cast<size_t>(j)] = phi[j];
+      }
 
-    // Convert to std::vector for exporter
-    std::vector<double> field(phi.data(), phi.data() + phi.size());
-
-    std::string name = std::format("{}/eigen_{}.ply", out_dir, i);
-    io::export_ply_solid(mesh, field, name, 0.01);
-    std::cout << "Exported " << name << "\n";
+      const std::string name = std::format("{}/eigen_{}.ply", out_dir, i);
+      io::export_ply_solid(mesh, field, name, 0.01);
+    }
   }
 
   return 0;
