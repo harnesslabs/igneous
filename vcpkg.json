@@ -6,6 +6,9 @@
     "fmt",
     "range-v3",
     "doctest",
-    "xsimd"
+    "xsimd",
+    "eigen3",
+    "nanoflann",
+    "spectra"
   ]
 }
