@@ -62,7 +62,7 @@ inline std::pair<double, double> compute_field_bounds(std::span<const Field> fie
   const double variance = (count > 0) ? std::max(0.0, (sum_sq / count) - (mean * mean)) : 0.0;
   const double std_dev = std::sqrt(variance);
 
-  return {-(sigma_clip * std_dev), sigma_clip * std_dev};
+  return {mean - (sigma_clip * std_dev), mean + (sigma_clip * std_dev)};
 }
 
 template <typename Sig, typename Topo, typename Field>
