@@ -732,3 +732,40 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `rejected`
 - Notes: No reliable throughput gain.
+
+## 2026-02-13 Threaded Curl-Energy Assembly + Backend Control
+- Timestamp: 2026-02-13T19:07:36Z
+- Commit: 9e02b50 (working tree with uncommitted changes)
+- Hypothesis: Parallelize `compute_curl_energy_matrix` over basis indices with thread-local temporaries; add runtime backend controls so users can choose serial CPU vs threaded CPU/GPU mode.
+- Files touched:
+  - `include/igneous/core/parallel.hpp`
+  - `include/igneous/ops/hodge.hpp`
+- Runtime controls introduced:
+  - `IGNEOUS_BACKEND=cpu` (forces serial CPU)
+  - `IGNEOUS_BACKEND=parallel` (or unset; uses threaded CPU)
+  - `IGNEOUS_BACKEND=gpu` (currently routes to threaded CPU path)
+  - `IGNEOUS_NUM_THREADS=<N>` (caps worker count)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_curl_energy|bench_hodge_phase_weak_derivative|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true` (threaded)
+  - `IGNEOUS_BACKEND=cpu IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_curl_energy|bench_hodge_phase_weak_derivative|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true` (serial baseline)
+  - `./scripts/perf/run_deep_bench.sh`
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (5-run before/after)
+- A/B results (`bench_pipelines`, serial CPU vs threaded default):
+  - `bench_pipeline_hodge_main`: `303.402 ms -> 161.566 ms` (`-46.75%`)
+  - `bench_hodge_phase_curl_energy`: `142.376 ms -> 0.859 ms` (`-99.40%` CPU-time metric)
+  - `bench_hodge_phase_weak_derivative`: `12.260 ms -> 12.165 ms` (`-0.78%`)
+  - `bench_hodge_phase_eigenbasis`: `106.716 ms -> 111.086 ms` (`+4.09%`)
+- App-level throughput (`igneous-hodge`, 5 runs):
+  - baseline mean: `0.308 s`
+  - threaded mean: `0.180 s`
+  - delta: `-41.56%`
+- Deep benchmark highlight (vs `bench_dod_20260213-115708.json`):
+  - `bench_curl_energy/2000/16` CPU-time: `6.030 ms -> 0.552 ms` (`-90.85%`)
+- Profile traces:
+  - `notes/perf/profiles/20260213-120846/time-profiler.trace` (serial CPU)
+  - `notes/perf/profiles/20260213-120826/time-profiler.trace` (threaded)
+  - `notes/perf/profiles/20260213-120904/cpu-counters.trace` (serial CPU)
+  - `notes/perf/profiles/20260213-120847/cpu-counters.trace` (threaded)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Real-world throughput gain is large; users can force serial CPU behavior when needed.
