@@ -183,7 +183,7 @@ void bench_hodge_phase_topology(benchmark::State &state) {
 
   for (auto _ : state) {
     build_diffusion_topology(mesh, kBandwidth, kNeighbors);
-    benchmark::DoNotOptimize(mesh.topology.P.nonZeros());
+    benchmark::DoNotOptimize(mesh.topology.markov_values.size());
   }
 }
 

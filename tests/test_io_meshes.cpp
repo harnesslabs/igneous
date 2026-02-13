@@ -36,7 +36,8 @@ TEST_CASE("OBJ import works for triangle, point, and diffusion topologies") {
   igneous::data::Mesh<Sig, igneous::data::DiffusionTopology> diffusion_mesh;
   igneous::io::load_obj(diffusion_mesh, path);
   CHECK(diffusion_mesh.is_valid());
-  CHECK(diffusion_mesh.topology.P.rows() == static_cast<int>(diffusion_mesh.geometry.num_points()));
-  CHECK(diffusion_mesh.topology.P.nonZeros() > 0);
+  CHECK(diffusion_mesh.topology.markov_row_offsets.size() ==
+        diffusion_mesh.geometry.num_points() + 1);
+  CHECK(diffusion_mesh.topology.markov_values.size() > 0);
   CHECK(diffusion_mesh.topology.mu.sum() == doctest::Approx(1.0f).epsilon(1e-3f));
 }

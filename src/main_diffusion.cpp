@@ -1,5 +1,4 @@
 #include <Eigen/Dense>
-#include <Eigen/Sparse>
 #include <cstdlib>
 #include <filesystem>
 #include <format>
@@ -45,9 +44,9 @@ int main(int argc, char **argv) {
   mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
                        mesh.geometry.z_span(), 0.005f, 32});
 
-  const auto &P = mesh.topology.P;
-  std::cout << "Markov Chain P: " << P.rows() << "x" << P.cols() << " ("
-            << P.nonZeros() << " nnz)\n";
+  const int n = static_cast<int>(mesh.geometry.num_points());
+  std::cout << "Markov Chain P: " << n << "x" << n << " ("
+            << mesh.topology.markov_values.size() << " nnz)\n";
 
   auto density_field = to_std_vector(mesh.topology.mu);
   if (!bench_mode) {

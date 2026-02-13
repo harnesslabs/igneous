@@ -119,15 +119,24 @@ private:
 // Computes the first k eigenvectors of the Markov Chain P.
 template <typename MeshT>
 void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
-  const auto &P = mesh.topology.P;
-
   const bool verbose = std::getenv("IGNEOUS_BENCH_MODE") == nullptr;
   if (verbose) {
     std::cout << "[Spectral] Computing top " << n_eigenvectors
               << " eigenfunctions...\n";
   }
 
-  const int n = static_cast<int>(P.rows());
+  const int n = [&]() {
+    if constexpr (requires { mesh.topology.markov_row_offsets; }) {
+      if (mesh.topology.markov_row_offsets.empty()) {
+        return 0;
+      }
+      return static_cast<int>(mesh.topology.markov_row_offsets.size() - 1);
+    } else if constexpr (requires { mesh.topology.P; }) {
+      return static_cast<int>(mesh.topology.P.rows());
+    } else {
+      return 0;
+    }
+  }();
 
   const auto solve_with_op = [&](auto &op) {
     using OpType = std::decay_t<decltype(op)>;
@@ -241,9 +250,14 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
                                  mesh.topology.markov_col_indices,
                                  mesh.topology.markov_values, n);
     solve_with_op(fallback_op);
-  } else {
+  } else if constexpr (requires { mesh.topology.P; }) {
+    const auto &P = mesh.topology.P;
     Spectra::SparseGenMatProd<float> op(P);
     solve_with_op(op);
+  } else {
+    static_assert(
+        requires { mesh.topology.P; },
+        "compute_eigenbasis requires markov CSR arrays or sparse matrix P.");
   }
 }
 

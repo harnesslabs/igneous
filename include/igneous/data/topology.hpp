@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Eigen/Sparse>
+#include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
 #include <concepts>
@@ -322,10 +322,6 @@ struct DiffusionTopology {
     int k_neighbors = 32;
   };
 
-  using SparseMatrixT = Eigen::SparseMatrix<float>;
-  using RowSparseMatrixT = Eigen::SparseMatrix<float, Eigen::RowMajor>;
-
-  SparseMatrixT P;
   Eigen::VectorXf mu;
   Eigen::MatrixXf eigen_basis;
 
@@ -335,7 +331,10 @@ struct DiffusionTopology {
   std::vector<float> markov_values;
 
   [[nodiscard]] size_t num_primitives() const {
-    return static_cast<size_t>(P.rows());
+    if (markov_row_offsets.empty()) {
+      return 0;
+    }
+    return markov_row_offsets.size() - 1;
   }
   [[nodiscard]] std::span<const uint32_t> get_neighborhood(uint32_t) const {
     return {};
@@ -343,7 +342,6 @@ struct DiffusionTopology {
 
   void clear() {
     core::gpu::invalidate_markov_cache(this);
-    P.resize(0, 0);
     mu.resize(0);
     eigen_basis.resize(0, 0);
     markov_row_offsets.clear();
@@ -492,18 +490,6 @@ struct DiffusionTopology {
           }
         },
         64);
-
-    RowSparseMatrixT P_row(static_cast<int>(n_verts), static_cast<int>(n_verts));
-    P_row.resizeNonZeros(nnz);
-    std::copy(markov_row_offsets.begin(), markov_row_offsets.end(),
-              P_row.outerIndexPtr());
-    std::copy(markov_col_indices.begin(), markov_col_indices.end(),
-              P_row.innerIndexPtr());
-    std::copy(markov_values.begin(), markov_values.end(), P_row.valuePtr());
-    P_row.finalize();
-
-    P = P_row;
-    P.makeCompressed();
 
     const float mu_sum = mu.sum();
     if (mu_sum > 1e-12f) {
