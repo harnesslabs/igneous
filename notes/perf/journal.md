@@ -556,3 +556,79 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Large real-pipeline throughput gain with neutral deep-kernel impact.
+
+## 2026-02-13 Circular-Coordinate Workspace Cache (Rejected)
+- Timestamp: 2026-02-13T18:34:44Z
+- Commit: 594341d (working tree with uncommitted changes)
+- Hypothesis: Add workspace-cached circular-coordinate overload and reuse `gamma_x_phi` precompute across repeated calls in `main_hodge`.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+  - `src/main_hodge.cpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (3-run before/after)
+  - `./scripts/perf/run_deep_bench.sh`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' --benchmark_min_time=0.3s --benchmark_repetitions=20 --benchmark_report_aggregates_only=true`
+- Smoke pipeline results (`igneous-hodge`, 3 runs):
+  - baseline (post-`594341d`): `0.33 s`, `0.32 s`, `0.32 s`
+  - candidate: `0.32 s`, `0.31 s`, `0.31 s`
+  - mean delta: `-3.09%`
+- Deep results (vs `bench_dod_20260213-113152.json`):
+  - `bench_weak_derivative/2000/16`: `+2.69%`
+  - `bench_curl_energy/2000/16`: `+3.78%`
+  - `bench_hodge_solve/2000/16`: `+2.65%`
+  - `bench_1form_gram/2000/16`: `+2.47%`
+- Focused confirmation (20 reps):
+  - `bench_weak_derivative/2000/16`: `1.511 ms`
+  - `bench_curl_energy/2000/16`: `6.233 ms`
+  - `bench_hodge_solve/2000/16`: `74.84 us`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Small pipeline gain did not justify repeatable regressions across primary Hodge kernels.
+
+## 2026-02-13 Coordinate Copy Fast Path (Rejected)
+- Timestamp: 2026-02-13T18:37:07Z
+- Commit: 594341d (working tree with uncommitted changes)
+- Hypothesis: Bypass per-vertex `get_vec3()` gathers in `fill_coordinate_vectors` by copying directly from SoA `geometry.x/y/z` buffers.
+- Files touched:
+  - `include/igneous/ops/geometry.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (3 runs)
+- Smoke results:
+  - `bench_1form_gram/2000/16`: `0.337 ms` mean (neutral)
+  - `bench_curl_energy/2000/16`: `6.01 ms` mean (noise-level)
+  - `igneous-hodge`: `0.35 s`, `0.33 s`, `0.33 s` (no improvement)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Direct copy path did not deliver a measurable throughput improvement.
+
+## 2026-02-13 Circular Reconstruction GEMV Path (Rejected)
+- Timestamp: 2026-02-13T18:38:21Z
+- Commit: 594341d (working tree with uncommitted changes)
+- Hypothesis: Replace scalar complex accumulation per vertex with two real GEMV passes (`U*Re`, `U*Im`) plus `atan2` in circular-coordinate reconstruction.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+- Benchmark command:
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (3 runs)
+- Smoke results (`igneous-hodge`):
+  - candidate: `0.33 s`, `0.32 s`, `0.33 s`
+  - baseline class (post-`594341d`): `0.33 s`, `0.32 s`, `0.32 s`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Runtime was effectively unchanged; no measurable throughput gain.
+
+## 2026-02-13 Markov Unroll-8 (Rejected)
+- Timestamp: 2026-02-13T18:40:09Z
+- Commit: 594341d (working tree with uncommitted changes)
+- Hypothesis: Increase `apply_markov_transition` CSR inner-loop unroll from `4` to `8` to improve diffusion Markov throughput via wider ILP/SIMD scheduling.
+- Files touched:
+  - `include/igneous/ops/geometry.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_markov_step/2000|bench_1form_gram/2000/16|bench_curl_energy/2000/16' --benchmark_min_time=0.3s --benchmark_repetitions=30 --benchmark_report_aggregates_only=true` (A/B)
+- A/B results (`30 reps`):
+  - with unroll-8: `markov 16.24 us`, `1form 347.32 us`, `curl 6.07 ms`
+  - baseline: `markov 17.87 us`, `1form 338.23 us`, `curl 5.99 ms`
+  - deltas: `markov -9.10%`, `1form +2.69%`, `curl +1.28%`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Strong isolated Markov win, but rejected due regressions on other primary diffusion-derived kernels.
