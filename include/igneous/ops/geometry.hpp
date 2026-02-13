@@ -218,9 +218,13 @@ void apply_markov_transition_steps(const MeshT &mesh,
     const auto &weights = mesh.topology.markov_values;
 
     assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
+    const long long row_step_work =
+        static_cast<long long>(expected_size) * static_cast<long long>(steps);
     const bool use_gpu =
         core::compute_backend_from_env() == core::ComputeBackend::Gpu &&
-        (core::gpu::gpu_force_enabled() || expected_size >= core::gpu::gpu_min_rows());
+        (core::gpu::gpu_force_enabled() ||
+         expected_size >= core::gpu::gpu_min_rows() ||
+         row_step_work >= core::gpu::gpu_min_row_steps());
     if (use_gpu) {
       if (core::gpu::apply_markov_transition_steps(
               static_cast<const void *>(&mesh.topology),

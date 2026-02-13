@@ -31,6 +31,17 @@ inline int gpu_min_rows() {
   return 8192;
 }
 
+inline long long gpu_min_row_steps() {
+  const char *raw = std::getenv("IGNEOUS_GPU_MIN_ROW_STEPS");
+  if (raw != nullptr) {
+    const long long parsed = std::atoll(raw);
+    if (parsed > 0) {
+      return parsed;
+    }
+  }
+  return 200000;
+}
+
 [[nodiscard]] bool available();
 
 void invalidate_markov_cache(const void *cache_key);
