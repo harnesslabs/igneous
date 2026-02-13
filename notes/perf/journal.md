@@ -904,3 +904,31 @@ Use one entry per optimization hypothesis.
 - Decision: `kept`
 - Notes:
   - Full pipeline check (`3 reps`) also showed `bench_pipeline_hodge_main` improvement (`-8.24%`) despite small drift in some downstream phase kernels.
+
+## 2026-02-13 Spectral Sort Rule `LargestReal`
+- Timestamp: 2026-02-13T20:02:22Z
+- Commit: ae7dbf9 (working tree with uncommitted changes)
+- Hypothesis: Use `Spectra::SortRule::LargestReal` (instead of `LargestMagn`) for Markov eigenbasis extraction to reduce convergence cost while preserving downstream correctness.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_hodge_phase_eigenbasis|bench_pipeline_hodge_main|bench_hodge_phase_topology' --benchmark_min_time=0.12s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_pipelines_20260213-largestreal-h1-10r.json --benchmark_out_format=json`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_eigenbasis/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_dod_20260213-largestreal-h1-10r.json --benchmark_out_format=json`
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-spectral assets/bunny.obj` (5 runs)
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (5 runs)
+- Results vs immediate prior (`spectral-csr-h2`, 10 reps):
+  - `bench_pipeline_spectral_main`: `23.198 ms -> 22.515 ms` (`-2.94%`)
+  - `bench_hodge_phase_eigenbasis`: `93.286 ms -> 88.812 ms` (`-4.80%`)
+  - `bench_pipeline_hodge_main`: `137.105 ms -> 132.643 ms` (`-3.25%`)
+  - `bench_eigenbasis/2000/16`: `12.920 ms -> 12.133 ms` (`-6.10%`)
+- Results vs earlier threaded baseline (`bench_pipelines_20260213-current.txt`, 3-rep full run):
+  - `bench_pipeline_spectral_main`: `33.395 ms -> 22.434 ms` (`-32.82%`)
+  - `bench_pipeline_hodge_main`: `154.395 ms -> 131.931 ms` (`-14.55%`)
+  - `bench_hodge_phase_eigenbasis`: `107.877 ms -> 88.791 ms` (`-17.69%`)
+- App-level throughput (`main_*`, 5 runs, bench mode):
+  - `igneous-spectral assets/bunny.obj`: `~0.03 s -> ~0.02 s`
+  - `igneous-hodge`: `~0.14 s -> ~0.13 s`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - Follow-up NCV tightening (`k+12`) was tested and rejected due `bench_pipeline_hodge_main` regression (`+3.82%` in 5-rep check).

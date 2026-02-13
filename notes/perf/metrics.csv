@@ -285,3 +285,8 @@ timestamp,commit,build_mode,benchmark_id,dataset_id,mean_ns,median_ns,stddev_ns,
 "2026-02-13T19:57:54Z","c136055","Release","bench_pipelines_spectral_csr_h2_bench_pipeline_hodge_main","synthetic","137104599.69006482","137024624.73884225","1412260.4818015208","","google-benchmark aggregate"
 "2026-02-13T19:57:54Z","c136055","Release","bench_pipelines_spectral_csr_h2_bench_pipeline_spectral_main","synthetic","23197594.624278802","23123446.452830520","480191.10333596903","","google-benchmark aggregate"
 "2026-02-13T19:57:54Z","c136055","Release","bench_dod_spectral_csr_h2_bench_eigenbasis/2000/16","synthetic","12920341.314747930","12908804.351868834","682968.83298473083","","google-benchmark aggregate"
+"2026-02-13T20:02:18Z","ae7dbf9","Release","bench_dod_largestreal_h1_bench_eigenbasis/2000/16","synthetic","12132565.901530061","12018322.912891481","260043.32422781916","","google-benchmark aggregate"
+"2026-02-13T20:02:18Z","ae7dbf9","Release","bench_pipelines_largestreal_h1_bench_hodge_phase_eigenbasis","synthetic","88811587.612144649","88754698.052071035","220149.79853106532","","google-benchmark aggregate"
+"2026-02-13T20:02:18Z","ae7dbf9","Release","bench_pipelines_largestreal_h1_bench_hodge_phase_topology","synthetic","1389562.9068622284","1386156.7136394768","11843.435436952041","","google-benchmark aggregate"
+"2026-02-13T20:02:18Z","ae7dbf9","Release","bench_pipelines_largestreal_h1_bench_pipeline_hodge_main","synthetic","132642583.31619203","132868604.03604805","918305.99745809718","","google-benchmark aggregate"
+"2026-02-13T20:02:18Z","ae7dbf9","Release","bench_pipelines_largestreal_h1_bench_pipeline_spectral_main","synthetic","22514563.093760185","22501235.195834722","73369.543683712123","","google-benchmark aggregate"

@@ -79,7 +79,7 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
 
     Spectra::GenEigsSolver<OpType> eigs(op, n_eigenvectors, compact_ncv);
     eigs.init();
-    int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
+    int nconv = eigs.compute(Spectra::SortRule::LargestReal);
 
     if (try_compact &&
         (eigs.info() != Spectra::CompInfo::Successful ||
@@ -87,7 +87,7 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
         full_ncv > compact_ncv) {
       Spectra::GenEigsSolver<OpType> fallback(op, n_eigenvectors, full_ncv);
       fallback.init();
-      nconv = fallback.compute(Spectra::SortRule::LargestMagn);
+      nconv = fallback.compute(Spectra::SortRule::LargestReal);
 
       if (fallback.info() == Spectra::CompInfo::Successful) {
         mesh.topology.eigen_basis = fallback.eigenvectors(nconv).real();
