@@ -6,6 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(-Wall -Wextra -Wpedantic)
 
+if(APPLE)
+  enable_language(OBJCXX)
+  set(CMAKE_OBJCXX_STANDARD 23)
+  set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+endif()
+
 find_package(fmt CONFIG REQUIRED)
 find_package(range-v3 CONFIG REQUIRED)
 find_package(doctest CONFIG REQUIRED)
@@ -14,6 +20,16 @@ find_package(Eigen3 CONFIG REQUIRED)
 find_package(nanoflann CONFIG REQUIRED)
 find_package(Spectra CONFIG REQUIRED)
 find_package(benchmark CONFIG REQUIRED)
+
+if(APPLE)
+  add_library(igneous_runtime STATIC src/core/metal_diffusion.mm)
+  target_include_directories(igneous_runtime PUBLIC include)
+  target_link_libraries(igneous_runtime PRIVATE "-framework Foundation"
+                                                "-framework Metal")
+else()
+  add_library(igneous_runtime STATIC src/core/gpu_stub.cpp)
+  target_include_directories(igneous_runtime PUBLIC include)
+endif()
 
 add_library(igneous INTERFACE)
 target_include_directories(igneous INTERFACE include)
@@ -24,7 +40,8 @@ target_link_libraries(
             xsimd
             Eigen3::Eigen
             nanoflann::nanoflann
-            Spectra::Spectra)
+            Spectra::Spectra
+            igneous_runtime)
 
 enable_testing()
 

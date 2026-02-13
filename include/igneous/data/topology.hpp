@@ -11,6 +11,7 @@
 #include <span>
 #include <vector>
 
+#include <igneous/core/gpu.hpp>
 #include <igneous/core/parallel.hpp>
 
 namespace igneous::data {
@@ -341,6 +342,7 @@ struct DiffusionTopology {
   }
 
   void clear() {
+    core::gpu::invalidate_markov_cache(this);
     P.resize(0, 0);
     mu.resize(0);
     eigen_basis.resize(0, 0);
@@ -374,6 +376,7 @@ struct DiffusionTopology {
       3>;
 
   void build(Input input) {
+    core::gpu::invalidate_markov_cache(this);
     const size_t n_verts = input.x.size();
     if (n_verts == 0 || input.y.size() != n_verts || input.z.size() != n_verts) {
       clear();

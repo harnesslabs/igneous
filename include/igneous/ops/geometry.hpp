@@ -5,8 +5,10 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <span>
 #include <type_traits>
 
+#include <igneous/core/gpu.hpp>
 #include <igneous/core/parallel.hpp>
 #include <igneous/data/mesh.hpp>
 
@@ -56,6 +58,24 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
     const auto &weights = mesh.topology.markov_values;
 
     assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
+
+    const bool use_gpu =
+        core::compute_backend_from_env() == core::ComputeBackend::Gpu &&
+        (core::gpu::gpu_force_enabled() || expected_size >= core::gpu::gpu_min_rows());
+    if (use_gpu) {
+      if (core::gpu::carre_du_champ(
+              static_cast<const void *>(&mesh.topology),
+              std::span<const int>(row_offsets.data(), row_offsets.size()),
+              std::span<const int>(col_indices.data(), col_indices.size()),
+              std::span<const float>(weights.data(), weights.size()),
+              std::span<const float>(f.data(), static_cast<size_t>(expected_size)),
+              std::span<const float>(h.data(), static_cast<size_t>(expected_size)),
+              inv_2t,
+              std::span<float>(gamma_out.data(), static_cast<size_t>(expected_size)))) {
+        return;
+      }
+    }
+
     const float *f_data = f.data();
     const float *h_data = h.data();
 
@@ -122,6 +142,21 @@ void apply_markov_transition(const MeshT &mesh,
 
     assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
     assert(input.data() != output.data());
+
+    const bool use_gpu =
+        core::compute_backend_from_env() == core::ComputeBackend::Gpu &&
+        (core::gpu::gpu_force_enabled() || expected_size >= core::gpu::gpu_min_rows());
+    if (use_gpu) {
+      if (core::gpu::apply_markov_transition(
+              static_cast<const void *>(&mesh.topology),
+              std::span<const int>(row_offsets.data(), row_offsets.size()),
+              std::span<const int>(col_indices.data(), col_indices.size()),
+              std::span<const float>(weights.data(), weights.size()),
+              std::span<const float>(input.data(), static_cast<size_t>(expected_size)),
+              std::span<float>(output.data(), static_cast<size_t>(expected_size)))) {
+        return;
+      }
+    }
 
     const float *input_data = input.data();
     float *output_data = output.data();
