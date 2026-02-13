@@ -21,7 +21,9 @@ void integrate_mean_curvature_flow(data::Mesh<Sig, Topo> &mesh, float dt,
 
   const size_t num_verts = geometry.num_points();
 
-  workspace.displacements.assign(num_verts, {0.0f, 0.0f, 0.0f});
+  if (workspace.displacements.size() != num_verts) {
+    workspace.displacements.resize(num_verts);
+  }
 
   if constexpr (std::is_same_v<Topo, data::TriangleTopology>) {
     const auto &x = geometry.x;
@@ -34,6 +36,7 @@ void integrate_mean_curvature_flow(data::Mesh<Sig, Topo> &mesh, float dt,
       const uint32_t begin = neighbor_offsets[i];
       const uint32_t end = neighbor_offsets[i + 1];
       if (begin == end) {
+        workspace.displacements[i] = {0.0f, 0.0f, 0.0f};
         continue;
       }
 
@@ -64,6 +67,7 @@ void integrate_mean_curvature_flow(data::Mesh<Sig, Topo> &mesh, float dt,
   for (size_t i = 0; i < num_verts; ++i) {
     const auto neighbors = topology.get_vertex_neighbors(static_cast<uint32_t>(i));
     if (neighbors.empty()) {
+      workspace.displacements[i] = {0.0f, 0.0f, 0.0f};
       continue;
     }
 

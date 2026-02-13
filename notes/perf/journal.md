@@ -243,3 +243,40 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Significant diffusion build improvement with neutral downstream spectral/Hodge performance.
+
+## 2026-02-13 Hodge Nested Workspace Reuse (Rejected)
+- Timestamp: 2026-02-13T16:39:08Z
+- Commit: dbce9fb (working tree with uncommitted changes)
+- Hypothesis: Replace nested `assign` calls in Hodge workspace setup with in-place resize reuse to reduce per-call allocation churn.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16|bench_1form_gram/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_weak_derivative/2000/16`: `1.669 ms` mean
+  - `bench_curl_energy/2000/16`: `6.990 ms` mean
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Improvements stayed below threshold and were within noise.
+
+## 2026-02-13 Flow Workspace Zero-Fill Removal
+- Timestamp: 2026-02-13T16:40:59Z
+- Commit: dbce9fb (working tree with uncommitted changes)
+- Hypothesis: Eliminate full `workspace.displacements.assign(...)` zero-fill in flow and only write displacements per vertex, zeroing only isolated vertices.
+- Files touched:
+  - `include/igneous/ops/flow.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_flow_kernel/400|bench_curvature_kernel/400|bench_mesh_topology_build/400' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+- Smoke results:
+  - `bench_flow_kernel/400`: `0.524 ms` mean
+- Deep results (vs `bench_dod_20260213-093639.json`):
+  - `bench_flow_kernel/400`: `-9.90%`
+  - `bench_mesh_topology_build/400`: `+0.28%`
+  - `bench_curvature_kernel/400`: `+0.02%`
+- Profile traces:
+  - `notes/perf/profiles/20260213-094042/time-profiler.trace`
+  - `notes/perf/profiles/20260213-094052/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Material flow kernel gain from removing redundant per-call initialization work.
