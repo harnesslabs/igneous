@@ -2,6 +2,7 @@
 #include <Eigen/Sparse>
 #include <Spectra/GenEigsSolver.h>
 #include <Spectra/MatOp/SparseGenMatProd.h>
+#include <cstdlib>
 #include <igneous/data/mesh.hpp>
 #include <iostream>
 
@@ -21,8 +22,11 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
   int ncv = std::max(2 * n_eigenvectors + 1, 20);
   Spectra::GenEigsSolver<OpType> eigs(op, n_eigenvectors, ncv);
 
-  std::cout << "[Spectral] Computing top " << n_eigenvectors
-            << " eigenfunctions...\n";
+  const bool verbose = std::getenv("IGNEOUS_BENCH_MODE") == nullptr;
+  if (verbose) {
+    std::cout << "[Spectral] Computing top " << n_eigenvectors
+              << " eigenfunctions...\n";
+  }
 
   eigs.init();
 
@@ -35,12 +39,16 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
     // FIX: Use nconv to handle partial convergence
     mesh.topology.eigen_basis = eigs.eigenvectors(nconv).real();
 
-    std::cout << "[Spectral] Converged! Found " << nconv
-              << " eigenvectors. Basis shape: "
-              << mesh.topology.eigen_basis.rows() << "x"
-              << mesh.topology.eigen_basis.cols() << "\n";
+    if (verbose) {
+      std::cout << "[Spectral] Converged! Found " << nconv
+                << " eigenvectors. Basis shape: "
+                << mesh.topology.eigen_basis.rows() << "x"
+                << mesh.topology.eigen_basis.cols() << "\n";
+    }
   } else {
-    std::cerr << "[Spectral] Failed. Info: " << (int)eigs.info() << "\n";
+    if (verbose) {
+      std::cerr << "[Spectral] Failed. Info: " << (int)eigs.info() << "\n";
+    }
   }
 }
 

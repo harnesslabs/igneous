@@ -1,0 +1,4 @@
+profiles/*
+!profiles/.gitkeep
+results/*
+!results/.gitkeep

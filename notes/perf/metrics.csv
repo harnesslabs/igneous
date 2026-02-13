@@ -1,0 +1,15 @@
+timestamp,commit,build_mode,benchmark_id,dataset_id,mean_ns,median_ns,stddev_ns,speedup_vs_baseline,notes
+2026-02-13T15:57:04Z,e761562,Release,bench_geometry_frame,synthetic_100x100,527000,527000,0,,topology_ms=2.266;curvature_ms=0.481;flow_ms=0.046;fps=1896.664
+2026-02-13T15:57:04Z,e761562,Release,bench_geometry_frame,synthetic_250x250,2952000,2952000,0,,topology_ms=12.999;curvature_ms=2.702;flow_ms=0.250;fps=338.784
+2026-02-13T15:57:04Z,e761562,Release,bench_geometry_frame,synthetic_500x500,1.2816e+07,1.2816e+07,0,,topology_ms=55.466;curvature_ms=11.824;flow_ms=0.992;fps=78.028
+2026-02-13T15:57:04Z,e761562,Release,bench_geometry_frame,synthetic_1000x1000,5.0139e+07,5.0139e+07,0,,topology_ms=218.187;curvature_ms=46.147;flow_ms=3.992;fps=19.944
+"2026-02-13T15:57:05Z","e761562","Release","bench_dod_bench_1form_gram/2000/16","synthetic","467705.65747517010","467620.08684061246","2847.7106153122922","","google-benchmark aggregate"
+"2026-02-13T15:57:05Z","e761562","Release","bench_dod_bench_curl_energy/2000/16","synthetic","10115383.649934772","10097354.167589433","58634.274129588252","","google-benchmark aggregate"
+"2026-02-13T15:57:05Z","e761562","Release","bench_dod_bench_curvature_kernel/400","synthetic","7237315.9146175180","7244724.8818114009","20492.083361805900","","google-benchmark aggregate"
+"2026-02-13T15:57:05Z","e761562","Release","bench_dod_bench_diffusion_build/2000","synthetic","3381190.0195562178","3370130.9146658503","39698.712514015540","","google-benchmark aggregate"
+"2026-02-13T15:57:05Z","e761562","Release","bench_dod_bench_eigenbasis/2000/16","synthetic","15799686.799032822","15767380.776297715","66003.459657313928","","google-benchmark aggregate"
+"2026-02-13T15:57:05Z","e761562","Release","bench_dod_bench_flow_kernel/400","synthetic","600463.25600905041","599551.32554054388","3169.8043203599000","","google-benchmark aggregate"
+"2026-02-13T15:57:05Z","e761562","Release","bench_dod_bench_hodge_solve/2000/16","synthetic","74017.597850246399","73961.119240316068","468.23014846440856","","google-benchmark aggregate"
+"2026-02-13T15:57:05Z","e761562","Release","bench_dod_bench_markov_step/2000","synthetic","29671.417881944963","29612.536926817818","118.57615779533394","","google-benchmark aggregate"
+"2026-02-13T15:57:05Z","e761562","Release","bench_dod_bench_mesh_topology_build/400","synthetic","33978948.451112956","33719721.366651356","608954.41216984519","","google-benchmark aggregate"
+"2026-02-13T15:57:05Z","e761562","Release","bench_dod_bench_weak_derivative/2000/16","synthetic","2475672.0356710320","2470806.1235713530","9980.5386919779521","","google-benchmark aggregate"

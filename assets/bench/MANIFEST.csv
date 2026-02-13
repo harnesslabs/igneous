@@ -1,0 +1,2 @@
+dataset_id,source_url,license,checksum_sha256,vertex_count,face_count,notes
+bunny_local,file://assets/bunny.obj,LOCAL_ASSET,e4bfe098950c61c42190fefe8f23ad7b469da8d5d488c8f8e28a0e0b00c4c88c,2503,4968,Repository baseline fixture

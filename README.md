@@ -1,158 +1,135 @@
 # Igneous
 
-**A Data-Oriented Geometric Algebra Engine for Computational Topology and Geometry**
+Data-oriented C++23 geometry and topology engine with a throughput-first CPU pipeline.
 
-Igneous is a high-performance C++23 library designed to bridge the gap between **Geometric Algebra (GA)** and **Discrete Computational Geometry**. Unlike traditional object-oriented geometry libraries that rely on pointer chasing, Igneous employs strict **Data-Oriented Design (DOD)** principles.
+## Highlights
 
-It provides a unified buffer architecture for storing CGA/PGA primitives and an optimized Compressed Sparse Row (CSR) graph system for topological navigation. This architecture enables real-time geometric flows, curvature analysis, and physics simulations on meshes exceeding 1 million vertices entirely on the CPU.
+- SoA geometry storage (`x`, `y`, `z`) for cache-friendly traversal.
+- Triangle topology with explicit face arrays and CSR adjacency (faces + vertex neighbors).
+- Diffusion topology with k-NN graph construction (`nanoflann`) and sparse Markov chain (`Eigen`).
+- Spectral and Hodge operator stack (Gram, weak exterior derivative, curl energy, Hodge spectrum).
+- Doctest correctness suite and Google Benchmark performance suite.
 
-## Key Features
+## Dependencies
 
-* **Arbitrary Signature Algebra:** Supports `Euclidean3D`, `PGA3D`, `Minkowski`, and custom `Cl(p,q,r)` signatures.
-* **SIMD-First Architecture:** Built on top of `xsimd` to leverage AVX/NEON instruction sets for batched geometric products.
-* **Zero-Copy Topology:** Topological connectivity (Coboundaries) is constructed in milliseconds using a flat CSR memory layout.
-* **Math Kernels:**
-* Discrete Differential Geometry operators (Gaussian , Mean , Laplacian ).
-* Geometric Flows (Mean Curvature Flow, Heat Diffusion).
-* Robust geometric predicates using multivector logic.
+Managed through `vcpkg` manifest:
 
+- `fmt`
+- `range-v3`
+- `doctest`
+- `xsimd`
+- `eigen3`
+- `nanoflann`
+- `spectra`
+- `benchmark`
 
+## Build
 
-This is a great way to visualize progress. By calculating the delta between the two runs, we can explicitly show the **~9-14% performance gain** achieved by the packed buffer optimization.
-
-Here is the updated **Performance** section for your README.
-
----
-
-## Performance
-
-Benchmarks were conducted on procedurally generated "Wavy Grid" meshes to evaluate scalability. The engine maintains interactive framerates for physics simulations even at high vertex counts.
-
-**System Specifications:**
-
-* **Machine:** MacBook Pro (14-inch, Nov 2023)
-* **Chip:** Apple M3 Max
-* **Memory:** 36 GB Unified Memory
-
-### Current Benchmarks (v0.3 - Algebra Kernels + Reduced Memory Overhead)
-
-*Optimization: Use `AlgebraKernel`s to use specific multivector types. Use `Vec3` for spatial flow vectors instead of full `Multivector` to reduce computational overhead.*
-
-
-| Mesh Size | Vertices | Faces | Topology Build | Geometry Kernel (H, K) | Physics Kernel (Flow) | Sim FPS | Speedup* |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| **Grid 100x100** | 10,000 | 19,602 | 0.081 ms | 0.458 ms | 0.094 ms | **1813 Hz** | **+111.5%** |
-| **Grid 250x250** | 62,500 | 124,002 | 0.771 ms | 2.578 ms | 0.645 ms | **310 Hz** | **+116.8%** |
-| **Grid 500x500** | 250,000 | 498,002 | 2.06 ms | 10.310 ms | 2.445 ms | **78 Hz** | **+110.8%** |
-| **Grid 1k x 1k** | 1,000,000 | 1,996,002 | 8.098 ms | 41.371 ms | 9.540 ms | **19.6 Hz** | **+92.3%** |
-
-<small>*Speedup compared to initial baseline (commit `88bd073`).</small>
-
-*Optimization: Switched `GeometryBuffer` to packed SoA float storage to reduce memory bandwidth.*
-
-| Mesh Size | Vertices | Faces | Topology Build | Geometry Kernel (H, K) | Physics Kernel (Flow) | Sim FPS | Speedup* |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| **Grid 100x100** | 10,000 | 19,602 | 0.084 ms | 1.060 ms | 0.107 ms | **857 Hz** | **+6.9%** |
-| **Grid 250x250** | 62,500 | 124,002 | 0.502 ms | 6.354 ms | 0.636 ms | **143 Hz** | **+14.4%** |
-| **Grid 500x500** | 250,000 | 498,002 | 1.914 ms | 24.459 ms | 2.564 ms | **37 Hz** | **+8.8%** |
-| **Grid 1k x 1k** | 1,000,000 | 1,996,002 | 8.261 ms | 96.654 ms | 10.212 ms | **9.4 Hz** | **+9.3%** |
-
-<small>*Speedup compared to initial baseline (commit `028b9c7`).</small>
-
-### Baseline Benchmarks (v0.1 - Sparse Multivectors)
-
-*Initial implementation using full sparse Multivector storage.*
-
-| Mesh Size | Vertices | Faces | Topology Build | Geometry Kernel (H, K) | Physics Kernel (Flow) | Sim FPS |
-| --- | --- | --- | --- | --- | --- | --- |
-| **Grid 100x100** | 10,000 | 19,602 | 0.074 ms | 1.151 ms | 0.095 ms | **802 Hz** |
-| **Grid 250x250** | 62,500 | 124,002 | 0.445 ms | 7.113 ms | 0.830 ms | **125 Hz** |
-| **Grid 500x500** | 250,000 | 498,002 | 1.967 ms | 26.746 ms | 2.679 ms | **34 Hz** |
-| **Grid 1k x 1k** | 1,000,000 | 1,996,002 | 7.437 ms | 105.208 ms | 11.187 ms | **8.6 Hz** |
-
-* **Topology:** Time to build the Vertex  Face adjacency graph (CSR).
-* **Geometry:** Time to compute Angle Deficit (Gaussian) and Edge-Mean (Mean) curvature for the entire mesh.
-* **Physics:** Time to compute Laplacian flow vectors and integrate positions ().
-
-## Quick Start
-
-Igneous is a header-only library requiring a C++23 compliant compiler.
-
-**Dependencies:**
-
-* `xsimd` (SIMD intrinsics)
-* `fmt` (Formatting)
-* `range-v3` (Optional, for views)
-
-### Installation
-
-```cmake
-# CMakeLists.txt
-add_subdirectory(igneous)
-target_link_libraries(your_app PRIVATE igneous)
-
+```bash
+cmake --preset default-local -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j8
 ```
 
-### Example: Mean Curvature Flow
+## Run Examples
 
-This example loads a mesh, normalizes it to the unit cube, and runs a geometric smoothing simulation, exporting the curvature field as a heatmap for each frame.
+```bash
+./build/igneous-mesh assets/bunny.obj
+./build/igneous-point assets/bunny.obj
+./build/igneous-diffusion assets/bunny.obj
+./build/igneous-spectral assets/bunny.obj
+./build/igneous-hodge
+```
+
+Set `IGNEOUS_BENCH_MODE=1` to disable heavy export paths in runtime apps.
+
+## Tests
+
+```bash
+ctest --test-dir build --output-on-failure --verbose
+```
+
+Current suites:
+
+- `test_algebra`
+- `test_topology_triangle`
+- `test_topology_diffusion`
+- `test_ops_curvature_flow`
+- `test_ops_spectral_geometry`
+- `test_ops_hodge`
+- `test_io_meshes`
+
+## Benchmarks
+
+### Existing mesh benchmark
+
+```bash
+./build/bench_geometry
+```
+
+### Google Benchmark suite
+
+```bash
+./build/bench_dod --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
+```
+
+Benchmark groups:
+
+- `bench_mesh_topology_build`
+- `bench_curvature_kernel`
+- `bench_flow_kernel`
+- `bench_diffusion_build`
+- `bench_markov_step`
+- `bench_eigenbasis`
+- `bench_1form_gram`
+- `bench_weak_derivative`
+- `bench_curl_energy`
+- `bench_hodge_solve`
+
+## Performance Workflow Artifacts
+
+- Journal: `notes/perf/journal.md`
+- Metrics log: `notes/perf/metrics.csv`
+- Results: `notes/perf/results/`
+- Profiles: `notes/perf/profiles/`
+- Report: `notes/perf/final-report.md`
+- Migration notes: `notes/perf/migration.md`
+
+Helper scripts:
+
+- `scripts/perf/run_deep_bench.sh`
+- `scripts/perf/profile_time.sh`
+- `scripts/perf/profile_counters.sh`
+- `scripts/perf/download_datasets.sh`
+
+## API Example (Curvature + Flow)
 
 ```cpp
 #include <igneous/igneous.hpp>
-#include <format>
 
-using namespace igneous;
-using Sig = Euclidean3D; // Algebra Signature
+using Sig = igneous::core::Euclidean3D;
+using Mesh = igneous::data::Mesh<Sig, igneous::data::TriangleTopology>;
 
 int main() {
-    // 1. Initialize
-    Mesh<Sig> mesh;
-    io::load_obj(mesh, "assets/bunny.obj");
+  Mesh mesh;
+  igneous::io::load_obj(mesh, "assets/bunny.obj");
 
-    // 2. Pre-process
-    ops::normalize(mesh); // Center and scale to unit cube
+  std::vector<float> H;
+  std::vector<float> K;
 
-    // 3. Simulation Loop
-    double dt = 0.01;
-    for (int i = 0; i < 100; ++i) {
-        
-        // Compute Discrete Curvature Fields
-        auto [H, K] = ops::compute_curvature(mesh);
+  igneous::ops::CurvatureWorkspace<Sig, igneous::data::TriangleTopology> curvature_ws;
+  igneous::ops::FlowWorkspace<Sig, igneous::data::TriangleTopology> flow_ws;
 
-        // Export Visualization
-        // Saves a heatmap of Mean Curvature (H) with sigma-clipping
-        io::export_heatmap(mesh, H, std::format("out/frame_{:03}.obj", i), 2.0);
-
-        // Integrate Physics
-        ops::integrate_mean_curvature_flow(mesh, dt);
-    }
+  igneous::ops::compute_curvature_measures(mesh, H, K, curvature_ws);
+  igneous::ops::integrate_mean_curvature_flow(mesh, 0.01f, flow_ws);
 }
-
 ```
 
-### Example: Visualization
-We can run an example using the `assets/bunny.obj` mesh included in the repository. Run the following to generate output frames:
+## Makefile Shortcuts
 
 ```bash
-mkdir -p output
-cmake --preset default
-cmake --build build
-./build/igneous-app assets/bunny.obj
+make release
+make build
+make test
+make bench
+make bench-deep
 ```
-
-To render the exported frames as an animated GIF:
-```bash
-python visualize.py
-```
-
-## Architecture
-
-The engine architecture separates **Data** from **Operations** to maximize cache coherency.
-
-1. **Geometry Buffer (`GeometryBuffer<T>`)**: Utilizes a Structure-of-Arrays (SoA) layout where efficient. The base type `Multivector<Sig>` ensures mathematical operations respect the geometric algebra signature at compile time.
-2. **Topology Buffer (`TopologyBuffer`)**: Connectivity is stored in a Directed Acyclic Graph (DAG) logic but flattened into integer arrays. The vertex-to-face adjacency is computed on-demand using a linear counting sort, generating a CSR structure that allows  access to the 1-ring neighborhood without pointer chasing.
-3. **Kernels (`ops::`)**: All computation is performed by stateless kernels in `igneous::ops`. These functions accept raw buffers and perform parallel-friendly gather/scatter operations.
-
-## License
-
-MIT License
