@@ -24,8 +24,8 @@ find_package(benchmark CONFIG REQUIRED)
 if(APPLE)
   add_library(igneous_runtime STATIC src/core/metal_diffusion.mm)
   target_include_directories(igneous_runtime PUBLIC include)
-  target_link_libraries(igneous_runtime PRIVATE "-framework Foundation"
-                                                "-framework Metal")
+  target_link_libraries(igneous_runtime PUBLIC "-framework Foundation"
+                                               "-framework Metal")
 else()
   add_library(igneous_runtime STATIC src/core/gpu_stub.cpp)
   target_include_directories(igneous_runtime PUBLIC include)
