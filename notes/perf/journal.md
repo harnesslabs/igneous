@@ -131,3 +131,27 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: High-confidence Markov-step throughput gain with no API churn.
+
+## 2026-02-13 Triangle Neighbor CSR Rebuild
+- Timestamp: 2026-02-13T16:26:30Z
+- Commit: a7b5c3d (working tree with uncommitted changes)
+- Hypothesis: Replace sort/unique directed-edge neighbor construction with a two-pass stamped CSR build over vertex-incident faces to remove `O(E log E)` overhead in triangle topology assembly.
+- Files touched:
+  - `include/igneous/data/topology.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_mesh_topology_build/400|bench_curvature_kernel/400|bench_flow_kernel/400' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+- Smoke results:
+  - `bench_mesh_topology_build/400`: `4.70 ms` mean
+  - `bench_curvature_kernel/400`: `7.32 ms` mean
+  - `bench_flow_kernel/400`: `0.611 ms` mean
+- Deep results (vs `bench_dod_20260213-092022.json`):
+  - `bench_mesh_topology_build/400`: `-87.26%`
+  - `bench_curvature_kernel/400`: `-0.48%`
+  - `bench_flow_kernel/400`: `+0.19%`
+- Profile traces:
+  - `notes/perf/profiles/20260213-092552/time-profiler.trace`
+  - `notes/perf/profiles/20260213-092603/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Very large topology-build gain; this removes the dominant mesh pipeline bottleneck identified in previous runs.

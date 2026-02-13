@@ -151,49 +151,64 @@ struct TriangleTopology {
       return;
     }
 
-    std::vector<uint64_t> directed_edges;
-    directed_edges.reserve(n_faces * 6);
-
-    const auto push_edge = [&](uint32_t src, uint32_t dst) {
-      if (src < num_vertices && dst < num_vertices && src != dst) {
-        directed_edges.push_back((static_cast<uint64_t>(src) << 32) | dst);
-      }
-    };
-
-    for (size_t f = 0; f < n_faces; ++f) {
-      const uint32_t a = face_v0[f];
-      const uint32_t b = face_v1[f];
-      const uint32_t c = face_v2[f];
-      push_edge(a, b);
-      push_edge(a, c);
-      push_edge(b, a);
-      push_edge(b, c);
-      push_edge(c, a);
-      push_edge(c, b);
-    }
-
-    std::sort(directed_edges.begin(), directed_edges.end());
-    directed_edges.erase(std::unique(directed_edges.begin(), directed_edges.end()),
-                         directed_edges.end());
-
     vertex_neighbor_offsets.assign(num_vertices + 1, 0);
-    for (uint64_t edge : directed_edges) {
-      const uint32_t src = static_cast<uint32_t>(edge >> 32);
-      vertex_neighbor_offsets[src + 1]++;
+    std::vector<uint32_t> seen_neighbor_stamp(num_vertices, 0);
+    uint32_t stamp = 1;
+
+    for (uint32_t v = 0; v < num_vertices; ++v) {
+      if (stamp == 0) {
+        std::fill(seen_neighbor_stamp.begin(), seen_neighbor_stamp.end(), 0);
+        stamp = 1;
+      }
+
+      uint32_t count = 0;
+      const uint32_t face_begin = vertex_face_offsets[v];
+      const uint32_t face_end = vertex_face_offsets[v + 1];
+      for (uint32_t idx = face_begin; idx < face_end; ++idx) {
+        const uint32_t f = vertex_face_data[idx];
+        const uint32_t corners[3] = {face_v0[f], face_v1[f], face_v2[f]};
+        for (uint32_t u : corners) {
+          if (u >= num_vertices || u == v || seen_neighbor_stamp[u] == stamp) {
+            continue;
+          }
+          seen_neighbor_stamp[u] = stamp;
+          ++count;
+        }
+      }
+
+      vertex_neighbor_offsets[v + 1] = count;
+      ++stamp;
     }
 
     for (size_t i = 0; i < num_vertices; ++i) {
       vertex_neighbor_offsets[i + 1] += vertex_neighbor_offsets[i];
     }
 
-    vertex_neighbor_data.resize(directed_edges.size());
-    std::vector<uint32_t> neighbor_write_head = vertex_neighbor_offsets;
+    vertex_neighbor_data.resize(vertex_neighbor_offsets[num_vertices]);
 
-    for (uint64_t edge : directed_edges) {
-      const uint32_t src = static_cast<uint32_t>(edge >> 32);
-      const uint32_t dst = static_cast<uint32_t>(edge & 0xFFFFFFFFu);
-      const uint32_t pos = neighbor_write_head[src]++;
-      vertex_neighbor_data[pos] = dst;
+    std::fill(seen_neighbor_stamp.begin(), seen_neighbor_stamp.end(), 0);
+    stamp = 1;
+    for (uint32_t v = 0; v < num_vertices; ++v) {
+      if (stamp == 0) {
+        std::fill(seen_neighbor_stamp.begin(), seen_neighbor_stamp.end(), 0);
+        stamp = 1;
+      }
+
+      uint32_t write = vertex_neighbor_offsets[v];
+      const uint32_t face_begin = vertex_face_offsets[v];
+      const uint32_t face_end = vertex_face_offsets[v + 1];
+      for (uint32_t idx = face_begin; idx < face_end; ++idx) {
+        const uint32_t f = vertex_face_data[idx];
+        const uint32_t corners[3] = {face_v0[f], face_v1[f], face_v2[f]};
+        for (uint32_t u : corners) {
+          if (u >= num_vertices || u == v || seen_neighbor_stamp[u] == stamp) {
+            continue;
+          }
+          seen_neighbor_stamp[u] = stamp;
+          vertex_neighbor_data[write++] = u;
+        }
+      }
+      ++stamp;
     }
   }
 
