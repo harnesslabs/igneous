@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-package:
+    name: Build and Package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triplet: x64-linux
+            artifact_name: x64-linux
+          - os: macos-14
+            triplet: arm64-osx
+            artifact_name: arm64-macos
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: ./vcpkg/bootstrap-vcpkg.sh
+
+      - name: Configure (Release)
+        shell: bash
+        run: |
+          cmake -S . -B build-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}
+
+      - name: Build release binaries
+        shell: bash
+        run: |
+          cmake --build build-release --parallel --target \
+            igneous-mesh \
+            igneous-point \
+            igneous-diffusion \
+            igneous-spectral \
+            igneous-hodge \
+            bench_geometry \
+            bench_dod \
+            bench_pipelines
+
+      - name: Package tarball + checksums
+        shell: bash
+        run: |
+          mkdir -p dist
+          RAW_REF="${GITHUB_REF_NAME:-manual-${GITHUB_SHA::7}}"
+          SAFE_REF="${RAW_REF//\//-}"
+          ARCHIVE="igneous-${SAFE_REF}-${{ matrix.artifact_name }}"
+
+          tar -czf "dist/${ARCHIVE}.tar.gz" -C build-release \
+            igneous-mesh \
+            igneous-point \
+            igneous-diffusion \
+            igneous-spectral \
+            igneous-hodge \
+            bench_geometry \
+            bench_dod \
+            bench_pipelines
+
+          (
+            cd dist
+            shasum -a 256 "${ARCHIVE}.tar.gz" > "${ARCHIVE}.sha256"
+          )
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.artifact_name }}
+          path: dist/*
+
+  publish:
+    name: Publish GitHub Release
+    needs: build-package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true

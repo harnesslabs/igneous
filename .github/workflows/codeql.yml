@@ -1,0 +1,59 @@
+name: CodeQL
+
+on:
+  schedule:
+    - cron: '17 03 * * 0'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (C++)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-${{ runner.os }}-x64-linux-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: ./vcpkg/bootstrap-vcpkg.sh
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: cpp
+          build-mode: manual
+
+      - name: Configure (Debug)
+        shell: bash
+        run: |
+          cmake -S . -B build-codeql -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=x64-linux
+
+      - name: Build
+        shell: bash
+        run: cmake --build build-codeql --parallel
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3

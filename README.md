@@ -1,5 +1,11 @@
 # Igneous
 
+[![CI](https://github.com/harnesslabs/igneous/actions/workflows/ci.yml/badge.svg)](https://github.com/harnesslabs/igneous/actions/workflows/ci.yml)
+[![Perf Smoke](https://github.com/harnesslabs/igneous/actions/workflows/perf-smoke.yml/badge.svg)](https://github.com/harnesslabs/igneous/actions/workflows/perf-smoke.yml)
+[![Perf Deep](https://github.com/harnesslabs/igneous/actions/workflows/perf-deep.yml/badge.svg)](https://github.com/harnesslabs/igneous/actions/workflows/perf-deep.yml)
+[![CodeQL](https://github.com/harnesslabs/igneous/actions/workflows/codeql.yml/badge.svg)](https://github.com/harnesslabs/igneous/actions/workflows/codeql.yml)
+[![Release](https://github.com/harnesslabs/igneous/actions/workflows/release.yml/badge.svg)](https://github.com/harnesslabs/igneous/actions/workflows/release.yml)
+
 Data-oriented C++23 geometry and topology engine with a throughput-first CPU pipeline.
 
 ## Highlights
@@ -84,6 +90,23 @@ Current suites:
 ./build/bench_pipelines --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
 ```
 
+PR-smoke style local run:
+
+```bash
+IGNEOUS_BENCH_MODE=1 IGNEOUS_BACKEND=parallel IGNEOUS_NUM_THREADS=8 \
+./build/bench_dod --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
+IGNEOUS_BENCH_MODE=1 IGNEOUS_BACKEND=parallel IGNEOUS_NUM_THREADS=8 \
+./build/bench_pipelines --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true
+```
+
+Nightly-deep style local run:
+
+```bash
+./scripts/perf/run_deep_bench.sh
+IGNEOUS_BENCH_MODE=1 IGNEOUS_BACKEND=parallel IGNEOUS_NUM_THREADS=8 \
+./build/bench_pipelines --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
+```
+
 Benchmark groups:
 
 - `bench_mesh_topology_build`
@@ -111,10 +134,19 @@ Pipeline benchmark groups:
 - `bench_hodge_phase_solve`
 - `bench_hodge_phase_circular`
 
+## CI/CD Workflows
+
+- `.github/workflows/ci.yml`: Linux/macOS build + tests, sanitizer pass, compile commands artifact.
+- `.github/workflows/perf-smoke.yml`: PR smoke benchmark report against baseline (report-only).
+- `.github/workflows/perf-deep.yml`: nightly/manual deep benchmark capture and summary (report-only).
+- `.github/workflows/release.yml`: tag-triggered `v*` release packaging and GitHub Release asset publish.
+- `.github/workflows/codeql.yml`: weekly/manual C++ CodeQL scan.
+
 ## Performance Workflow Artifacts
 
 - Journal: `notes/perf/journal.md`
 - Metrics log: `notes/perf/metrics.csv`
+- Main-vs-branch summary: `notes/perf/main-vs-branch.md`
 - Results: `notes/perf/results/`
 - Profiles: `notes/perf/profiles/`
 - Report: `notes/perf/final-report.md`
@@ -123,9 +155,29 @@ Pipeline benchmark groups:
 Helper scripts:
 
 - `scripts/perf/run_deep_bench.sh`
+- `scripts/perf/compare_against_main.py`
 - `scripts/perf/profile_time.sh`
 - `scripts/perf/profile_counters.sh`
 - `scripts/perf/download_datasets.sh`
+
+Regenerate `main-vs-branch.md`:
+
+```bash
+python3 scripts/perf/compare_against_main.py \
+  --baseline notes/perf/results/bench_dod_20260213-085501.json \
+  --current notes/perf/results/bench_dod_20260213-current-latest.json \
+  --baseline-commit e7615627872a53010b006d69775174113cdbc467 \
+  --label "Main vs branch: bench_dod" \
+  --output-markdown notes/perf/main-vs-branch-bench_dod.md \
+  --output-json notes/perf/main-vs-branch-bench_dod.json
+```
+
+Release tagging convention:
+
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
 
 ## API Example (Curvature + Flow)
 

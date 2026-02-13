@@ -1,0 +1,195 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - perf/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build/Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            triplet: x64-linux
+          - os: macos-14
+            triplet: arm64-osx
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: ./vcpkg/bootstrap-vcpkg.sh
+
+      - name: Configure (Debug)
+        shell: bash
+        run: >-
+          cmake -S . -B build-debug -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}
+
+      - name: Build tests (Debug)
+        shell: bash
+        run: >-
+          cmake --build build-debug --parallel --target
+          test_algebra
+          test_topology_triangle
+          test_topology_diffusion
+          test_ops_curvature_flow
+          test_ops_spectral_geometry
+          test_ops_hodge
+          test_io_meshes
+
+      - name: Run tests
+        shell: bash
+        run: ctest --test-dir build-debug --output-on-failure
+
+      - name: Configure (Release)
+        shell: bash
+        run: >-
+          cmake -S . -B build-release -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}
+
+      - name: Build release binaries
+        shell: bash
+        run: >-
+          cmake --build build-release --parallel --target
+          igneous-mesh
+          igneous-point
+          igneous-diffusion
+          igneous-spectral
+          igneous-hodge
+          bench_geometry
+          bench_dod
+          bench_pipelines
+
+  sanitizers:
+    name: Sanitizers (ubuntu)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-${{ runner.os }}-x64-linux-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: ./vcpkg/bootstrap-vcpkg.sh
+
+      - name: Configure (ASan + UBSan)
+        shell: bash
+        run: >-
+          cmake -S . -B build-sanitize -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=x64-linux
+          -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'
+          -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'
+
+      - name: Build tests (Sanitizers)
+        shell: bash
+        run: >-
+          cmake --build build-sanitize --parallel --target
+          test_algebra
+          test_topology_triangle
+          test_topology_diffusion
+          test_ops_curvature_flow
+          test_ops_spectral_geometry
+          test_ops_hodge
+          test_io_meshes
+
+      - name: Run tests (Sanitizers)
+        shell: bash
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build-sanitize --output-on-failure
+
+  compile-commands-artifact:
+    name: Compile Commands Artifact
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-${{ runner.os }}-x64-linux-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: ./vcpkg/bootstrap-vcpkg.sh
+
+      - name: Configure (Debug + compile commands)
+        shell: bash
+        run: >-
+          cmake -S . -B build-debug -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=x64-linux
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Upload compile_commands.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: compile-commands
+          path: build-debug/compile_commands.json

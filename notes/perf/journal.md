@@ -1328,3 +1328,35 @@ Use one entry per optimization hypothesis.
 - Result:
   - Diffusion `/100` improved (`-22.80%`), but hodge phases regressed severely (`bench_hodge_phase_curl_energy` about `+1936%`, `bench_hodge_phase_circular` about `+1486%`).
 - Decision: keep existing conservative GPU gating for non-diffusion paths.
+
+## 2026-02-13 CI/CD + Final Baseline Reporting
+- Timestamp: 2026-02-13T22:30:00Z
+- Commit: fedc87b (working tree with uncommitted changes)
+- Hypothesis: Lock a reproducible CI/perf reporting loop and refresh strict `main` (`e761562`) vs current branch measurements to close out the optimization campaign.
+- Files touched:
+  - `.github/workflows/ci.yml`
+  - `.github/workflows/perf-smoke.yml`
+  - `.github/workflows/perf-deep.yml`
+  - `.github/workflows/release.yml`
+  - `.github/workflows/codeql.yml`
+  - `scripts/perf/compare_against_main.py`
+  - `scripts/perf/run_deep_bench.sh`
+  - `notes/perf/main-vs-branch.md`
+  - `notes/perf/final-report.md`
+  - `README.md`
+- Benchmark commands:
+  - `./build/bench_geometry`
+  - `./build/bench_dod --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `./build/bench_pipelines --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - strict baseline build/run on `e761562` for `bench_geometry` and `igneous-{diffusion,spectral,hodge}` app timings.
+- Deep results:
+  - `bench_geometry_frame_ms/1000x1000`: `59.567 ms -> 26.291 ms` (`-55.86%`) strict main comparison.
+  - `bench_mesh_topology_build/400`: `33.979 ms -> 3.092 ms` (`-90.90%`) branch-point DOD baseline comparison.
+  - `bench_pipeline_hodge_main` (branch-era harness baseline): `154.395 ms -> 108.460 ms` (`-29.75%`).
+  - `igneous-hodge` strict app wall time: `1.353 s -> 0.170 s` (`-87.44%`).
+- Profile traces: none captured for this documentation/automation pass.
+- Numeric checks: `ctest` passed (`7/7`).
+- Decision: `kept`
+- Notes:
+  - Added report-only PR smoke and nightly deep workflows with baseline-missing handling for older `main` snapshots.
+  - Added explicit `main-vs-branch.md` as canonical branch-point comparison log.

@@ -1,0 +1,202 @@
+name: Perf Smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: perf-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASELINE_FALLBACK_SHA: e7615627872a53010b006d69775174113cdbc467
+
+jobs:
+  smoke:
+    name: PR Smoke Benchmarks (report-only)
+    runs-on: ubuntu-latest
+    env:
+      IGNEOUS_BENCH_MODE: "1"
+      IGNEOUS_BACKEND: parallel
+      IGNEOUS_NUM_THREADS: "8"
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve baseline SHA
+        id: baseline
+        shell: bash
+        run: |
+          BASE_SHA="$(git merge-base HEAD origin/main || true)"
+          if [[ -z "$BASE_SHA" ]]; then
+            BASE_SHA="$BASELINE_FALLBACK_SHA"
+          fi
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "Using baseline SHA: $BASE_SHA"
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-${{ runner.os }}-x64-linux-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: ./vcpkg/bootstrap-vcpkg.sh
+
+      - name: Configure and build head benchmark binaries
+        shell: bash
+        run: |
+          cmake -S . -B build-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=x64-linux
+          cmake --build build-release --parallel --target bench_geometry bench_dod bench_pipelines
+
+      - name: Run head smoke benchmarks
+        shell: bash
+        run: |
+          mkdir -p artifacts/perf/head artifacts/perf/base artifacts/perf/reports
+
+          ./build-release/bench_geometry > artifacts/perf/head/bench_geometry_head.txt
+
+          ./build-release/bench_dod \
+            --benchmark_filter='bench_mesh_topology_build/400|bench_curvature_kernel/400|bench_flow_kernel/400|bench_diffusion_build/2000|bench_markov_step/2000|bench_markov_multi_step/2000/20|bench_markov_multi_step/20000/20|bench_eigenbasis/2000/16|bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' \
+            --benchmark_min_time=0.05s \
+            --benchmark_repetitions=5 \
+            --benchmark_report_aggregates_only=true \
+            --benchmark_out=artifacts/perf/head/bench_dod_head.json \
+            --benchmark_out_format=json > artifacts/perf/head/bench_dod_head.txt
+
+          ./build-release/bench_pipelines \
+            --benchmark_filter='bench_pipeline_diffusion_main/20|bench_pipeline_diffusion_main/100|bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_topology|bench_hodge_phase_eigenbasis|bench_hodge_phase_gram|bench_hodge_phase_weak_derivative|bench_hodge_phase_curl_energy|bench_hodge_phase_solve|bench_hodge_phase_circular' \
+            --benchmark_min_time=0.05s \
+            --benchmark_repetitions=5 \
+            --benchmark_report_aggregates_only=true \
+            --benchmark_out=artifacts/perf/head/bench_pipelines_head.json \
+            --benchmark_out_format=json > artifacts/perf/head/bench_pipelines_head.txt
+
+      - name: Build and run baseline smoke benchmarks
+        shell: bash
+        run: |
+          rm -rf baseline
+          git worktree add --detach baseline "${{ steps.baseline.outputs.base_sha }}"
+
+          cmake -S baseline -B baseline/build-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=x64-linux
+
+          cmake --build baseline/build-release --parallel --target bench_geometry
+          ./baseline/build-release/bench_geometry > artifacts/perf/base/bench_geometry_base.txt
+
+          if cmake --build baseline/build-release --parallel --target bench_dod; then
+            ./baseline/build-release/bench_dod \
+              --benchmark_filter='bench_mesh_topology_build/400|bench_curvature_kernel/400|bench_flow_kernel/400|bench_diffusion_build/2000|bench_markov_step/2000|bench_markov_multi_step/2000/20|bench_markov_multi_step/20000/20|bench_eigenbasis/2000/16|bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' \
+              --benchmark_min_time=0.05s \
+              --benchmark_repetitions=5 \
+              --benchmark_report_aggregates_only=true \
+              --benchmark_out=artifacts/perf/base/bench_dod_base.json \
+              --benchmark_out_format=json > artifacts/perf/base/bench_dod_base.txt
+          else
+            echo "bench_dod target not available on baseline ${{ steps.baseline.outputs.base_sha }}" > artifacts/perf/base/bench_dod_base.txt
+          fi
+
+          if cmake --build baseline/build-release --parallel --target bench_pipelines; then
+            ./baseline/build-release/bench_pipelines \
+              --benchmark_filter='bench_pipeline_diffusion_main/20|bench_pipeline_diffusion_main/100|bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_topology|bench_hodge_phase_eigenbasis|bench_hodge_phase_gram|bench_hodge_phase_weak_derivative|bench_hodge_phase_curl_energy|bench_hodge_phase_solve|bench_hodge_phase_circular' \
+              --benchmark_min_time=0.05s \
+              --benchmark_repetitions=5 \
+              --benchmark_report_aggregates_only=true \
+              --benchmark_out=artifacts/perf/base/bench_pipelines_base.json \
+              --benchmark_out_format=json > artifacts/perf/base/bench_pipelines_base.txt
+          else
+            echo "bench_pipelines target not available on baseline ${{ steps.baseline.outputs.base_sha }}" > artifacts/perf/base/bench_pipelines_base.txt
+          fi
+
+      - name: Compare benchmark deltas
+        shell: bash
+        run: |
+          python3 scripts/perf/compare_against_main.py \
+            --baseline artifacts/perf/base/bench_geometry_base.txt \
+            --current artifacts/perf/head/bench_geometry_head.txt \
+            --baseline-commit "${{ steps.baseline.outputs.base_sha }}" \
+            --label "PR smoke: bench_geometry (baseline ${{ steps.baseline.outputs.base_sha }})" \
+            --output-markdown artifacts/perf/reports/bench_geometry_smoke.md \
+            --output-json artifacts/perf/reports/bench_geometry_smoke.json
+
+          python3 scripts/perf/compare_against_main.py \
+            --baseline artifacts/perf/base/bench_dod_base.json \
+            --current artifacts/perf/head/bench_dod_head.json \
+            --baseline-commit "${{ steps.baseline.outputs.base_sha }}" \
+            --label "PR smoke: bench_dod (baseline ${{ steps.baseline.outputs.base_sha }})" \
+            --output-markdown artifacts/perf/reports/bench_dod_smoke.md \
+            --output-json artifacts/perf/reports/bench_dod_smoke.json
+
+          python3 scripts/perf/compare_against_main.py \
+            --baseline artifacts/perf/base/bench_pipelines_base.json \
+            --current artifacts/perf/head/bench_pipelines_head.json \
+            --baseline-commit "${{ steps.baseline.outputs.base_sha }}" \
+            --label "PR smoke: bench_pipelines (baseline ${{ steps.baseline.outputs.base_sha }})" \
+            --output-markdown artifacts/perf/reports/bench_pipelines_smoke.md \
+            --output-json artifacts/perf/reports/bench_pipelines_smoke.json
+
+          {
+            echo "# Perf Smoke Report"
+            echo
+            echo "Baseline: \`${{ steps.baseline.outputs.base_sha }}\`"
+            echo
+            cat artifacts/perf/reports/bench_geometry_smoke.md
+            echo
+            cat artifacts/perf/reports/bench_dod_smoke.md
+            echo
+            cat artifacts/perf/reports/bench_pipelines_smoke.md
+          } > artifacts/perf/reports/smoke-summary.md
+
+      - name: Publish job summary
+        shell: bash
+        run: cat artifacts/perf/reports/smoke-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Capture PR comment body
+        if: github.event_name == 'pull_request'
+        id: comment
+        shell: bash
+        run: |
+          {
+            echo "body<<'EOF'"
+            cat artifacts/perf/reports/smoke-summary.md
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post sticky PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: perf-smoke
+          message: ${{ steps.comment.outputs.body }}
+
+      - name: Upload smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-smoke-${{ github.run_id }}
+          path: artifacts/perf
+
+      - name: Cleanup baseline worktree
+        if: always()
+        shell: bash
+        run: git worktree remove baseline --force || true

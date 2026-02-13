@@ -1,0 +1,190 @@
+name: Perf Deep
+
+on:
+  schedule:
+    - cron: '23 07 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: perf-deep-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASELINE_SHA: e7615627872a53010b006d69775174113cdbc467
+
+jobs:
+  deep:
+    name: Nightly Deep Benchmarks (report-only)
+    runs-on: ubuntu-latest
+    env:
+      IGNEOUS_BENCH_MODE: "1"
+      IGNEOUS_BACKEND: parallel
+      IGNEOUS_NUM_THREADS: "8"
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-${{ runner.os }}-x64-linux-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: ./vcpkg/bootstrap-vcpkg.sh
+
+      - name: Configure and build head benchmark binaries
+        shell: bash
+        run: |
+          cmake -S . -B build-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=x64-linux
+          cmake --build build-release --parallel --target bench_geometry bench_dod bench_pipelines
+
+      - name: Run head deep benchmarks
+        shell: bash
+        run: |
+          mkdir -p artifacts/perf/head artifacts/perf/base artifacts/perf/reports
+
+          ./build-release/bench_geometry > artifacts/perf/head/bench_geometry_head.txt
+
+          ./build-release/bench_dod \
+            --benchmark_min_time=0.2s \
+            --benchmark_repetitions=10 \
+            --benchmark_report_aggregates_only=true \
+            --benchmark_out=artifacts/perf/head/bench_dod_head.json \
+            --benchmark_out_format=json > artifacts/perf/head/bench_dod_head.txt
+
+          ./build-release/bench_pipelines \
+            --benchmark_min_time=0.2s \
+            --benchmark_repetitions=10 \
+            --benchmark_report_aggregates_only=true \
+            --benchmark_out=artifacts/perf/head/bench_pipelines_head.json \
+            --benchmark_out_format=json > artifacts/perf/head/bench_pipelines_head.txt
+
+      - name: Build and run baseline deep benchmarks
+        shell: bash
+        run: |
+          rm -rf baseline
+          git worktree add --detach baseline "$BASELINE_SHA"
+
+          cmake -S baseline -B baseline/build-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=x64-linux
+
+          cmake --build baseline/build-release --parallel --target bench_geometry
+          ./baseline/build-release/bench_geometry > artifacts/perf/base/bench_geometry_base.txt
+
+          if cmake --build baseline/build-release --parallel --target bench_dod; then
+            ./baseline/build-release/bench_dod \
+              --benchmark_min_time=0.2s \
+              --benchmark_repetitions=10 \
+              --benchmark_report_aggregates_only=true \
+              --benchmark_out=artifacts/perf/base/bench_dod_base.json \
+              --benchmark_out_format=json > artifacts/perf/base/bench_dod_base.txt
+          else
+            echo "bench_dod target not available on baseline $BASELINE_SHA" > artifacts/perf/base/bench_dod_base.txt
+          fi
+
+          if cmake --build baseline/build-release --parallel --target bench_pipelines; then
+            ./baseline/build-release/bench_pipelines \
+              --benchmark_min_time=0.2s \
+              --benchmark_repetitions=10 \
+              --benchmark_report_aggregates_only=true \
+              --benchmark_out=artifacts/perf/base/bench_pipelines_base.json \
+              --benchmark_out_format=json > artifacts/perf/base/bench_pipelines_base.txt
+          else
+            echo "bench_pipelines target not available on baseline $BASELINE_SHA" > artifacts/perf/base/bench_pipelines_base.txt
+          fi
+
+      - name: Compare benchmark deltas
+        shell: bash
+        run: |
+          python3 scripts/perf/compare_against_main.py \
+            --baseline artifacts/perf/base/bench_geometry_base.txt \
+            --current artifacts/perf/head/bench_geometry_head.txt \
+            --baseline-commit "$BASELINE_SHA" \
+            --label "Deep run: bench_geometry (baseline $BASELINE_SHA)" \
+            --output-markdown artifacts/perf/reports/bench_geometry_deep.md \
+            --output-json artifacts/perf/reports/bench_geometry_deep.json
+
+          python3 scripts/perf/compare_against_main.py \
+            --baseline artifacts/perf/base/bench_dod_base.json \
+            --current artifacts/perf/head/bench_dod_head.json \
+            --baseline-commit "$BASELINE_SHA" \
+            --label "Deep run: bench_dod (baseline $BASELINE_SHA)" \
+            --output-markdown artifacts/perf/reports/bench_dod_deep.md \
+            --output-json artifacts/perf/reports/bench_dod_deep.json
+
+          python3 scripts/perf/compare_against_main.py \
+            --baseline artifacts/perf/base/bench_pipelines_base.json \
+            --current artifacts/perf/head/bench_pipelines_head.json \
+            --baseline-commit "$BASELINE_SHA" \
+            --label "Deep run: bench_pipelines (baseline $BASELINE_SHA)" \
+            --output-markdown artifacts/perf/reports/bench_pipelines_deep.md \
+            --output-json artifacts/perf/reports/bench_pipelines_deep.json
+
+          {
+            echo "# Perf Deep Report"
+            echo
+            echo "Baseline: \`$BASELINE_SHA\`"
+            echo
+            cat artifacts/perf/reports/bench_geometry_deep.md
+            echo
+            cat artifacts/perf/reports/bench_dod_deep.md
+            echo
+            cat artifacts/perf/reports/bench_pipelines_deep.md
+          } > artifacts/perf/reports/deep-summary.md
+
+      - name: Build compact CSV summary
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          out = Path("artifacts/perf/reports/deep-summary.csv")
+          rows = ["suite,benchmark,baseline_ns,current_ns,delta_pct,status"]
+          for suite in ("bench_geometry_deep", "bench_dod_deep", "bench_pipelines_deep"):
+            path = Path(f"artifacts/perf/reports/{suite}.json")
+            if not path.exists():
+              continue
+            data = json.loads(path.read_text())
+            for row in data.get("rows", []):
+              rows.append(
+                f"{suite},{row.get('benchmark_id','')},{row.get('baseline_ns','')},{row.get('current_ns','')},{row.get('delta_pct','')},{row.get('status','')}"
+              )
+          out.write_text("\n".join(rows) + "\n")
+          PY
+
+      - name: Publish job summary
+        shell: bash
+        run: cat artifacts/perf/reports/deep-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload deep artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-deep-${{ github.run_id }}
+          path: artifacts/perf
+
+      - name: Cleanup baseline worktree
+        if: always()
+        shell: bash
+        run: git worktree remove baseline --force || true
