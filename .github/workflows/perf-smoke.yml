@@ -177,10 +177,11 @@ jobs:
         id: comment
         shell: bash
         run: |
+          DELIM="SMOKE_SUMMARY_$(date +%s%N)"
           {
-            echo "body<<'EOF'"
+            echo "body<<$DELIM"
             cat artifacts/perf/reports/smoke-summary.md
-            echo "EOF"
+            echo "$DELIM"
           } >> "$GITHUB_OUTPUT"
 
       - name: Post sticky PR comment
