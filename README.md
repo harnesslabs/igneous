@@ -49,6 +49,7 @@ Runtime backend controls:
 - `IGNEOUS_BACKEND=gpu` enables Metal diffusion kernels on Apple platforms.
 - `IGNEOUS_NUM_THREADS=<N>` to override worker count for threaded kernels.
 - `IGNEOUS_GPU_MIN_ROWS=<N>` sets minimum vertex count for GPU offload (default `8192`).
+- `IGNEOUS_GPU_MIN_ROW_STEPS=<N>` sets minimum `rows*steps` for multi-step GPU offload (default `200000`).
 - `IGNEOUS_GPU_FORCE=1` forces GPU offload for debugging/profiling.
 - Workload guidance for backend choice: `notes/perf/backend-guidance.md`.
 
@@ -90,6 +91,7 @@ Benchmark groups:
 - `bench_flow_kernel`
 - `bench_diffusion_build`
 - `bench_markov_step`
+- `bench_markov_multi_step`
 - `bench_eigenbasis`
 - `bench_1form_gram`
 - `bench_weak_derivative`

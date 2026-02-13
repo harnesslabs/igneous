@@ -1053,3 +1053,107 @@ Use one entry per optimization hypothesis.
 - Notes:
   - This is a capability/infrastructure commit; current real-world mesh sizes are below the default offload threshold, so throughput remains CPU-favored.
   - Forced offload is currently not competitive on 2k-4k point workloads.
+
+## 2026-02-13 Diffusion k-NN Scratch Reuse per Worker
+- Timestamp: 2026-02-13T20:53:40Z
+- Commit: a6d6ff0
+- Hypothesis: Reuse k-NN temporary buffers (`ret_index`, `out_dist_sqr`) per worker thread in `DiffusionTopology::build` to reduce allocation churn in graph construction.
+- Files touched:
+  - `include/igneous/data/topology.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_markov_step/2000' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - A/B reruns with candidate/baseline file toggles on `include/igneous/data/topology.hpp`
+- Results (A/B candidate vs baseline, 10 reps):
+  - `bench_diffusion_build/2000`: `653.948 us -> 610.566 us` (`-6.63%`) in `candidateB` run.
+  - `bench_markov_step/2000`: effectively unchanged.
+- Deep benchmark artifact:
+  - `notes/perf/results/bench_dod_20260213-diff-build-scratch-h1-candidateB.txt`
+  - `notes/perf/results/bench_dod_20260213-diff-build-scratch-h1-baselineB.txt`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - Signal was noisy across short runs; accepted on repeated A/B where candidate remained faster on diffusion build.
+
+## 2026-02-13 CSR Row-Level CPU Parallelization (Rejected)
+- Timestamp: 2026-02-13T20:55:12Z
+- Commit: not committed (reverted)
+- Hypothesis: Parallelize per-row CPU loops inside `apply_markov_transition` and `carre_du_champ` for diffusion kernels.
+- Files touched (reverted):
+  - `include/igneous/ops/geometry.hpp`
+  - `include/igneous/core/parallel.hpp`
+- Results:
+  - Severe regressions on 2k-4k workloads due scheduler overhead; examples before revert:
+  - `bench_pipeline_diffusion_main/100`: `+139.80%`
+  - `bench_markov_step/2000`: `+278.36%`
+  - `bench_1form_gram/2000/16`: `+73.50%`
+- Decision: `rejected`
+- Notes:
+  - Inner-loop parallelization is not viable at current row counts; keep kernels serial and pursue algorithmic batching/GPU paths instead.
+
+## 2026-02-13 Batched Multi-Step Markov GPU Path
+- Timestamp: 2026-02-13T20:58:44Z
+- Commit: 2cb7579
+- Hypothesis: Batch repeated Markov transitions into a single Metal command stream (ping-pong buffers on device) to amortize dispatch/copy overhead and unlock GPU wins on long-step or large-row workloads.
+- Files touched:
+  - `include/igneous/core/gpu.hpp`
+  - `src/core/gpu_stub.cpp`
+  - `src/core/metal_diffusion.mm`
+  - `include/igneous/ops/geometry.hpp`
+  - `src/main_diffusion.cpp`
+  - `benches/bench_dod.cpp`
+  - `benches/bench_pipelines.cpp`
+  - `tests/test_topology_diffusion.cpp`
+- Implementation notes:
+  - Added `core::gpu::apply_markov_transition_steps(...)`.
+  - Added `ops::apply_markov_transition_steps(...)` with CPU fallback workspace.
+  - Bench/main diffusion paths use multi-step API in bench mode.
+  - Added large-workload benchmark: `bench_markov_multi_step` at `2000/20` and `20000/20`.
+- Benchmark commands:
+  - CPU / GPU-gated / GPU-forced variants of:
+    - `./build/bench_dod --benchmark_filter='bench_markov_step/2000|bench_markov_multi_step/2000/20|bench_markov_multi_step/20000/20' ...`
+    - `./build/bench_pipelines --benchmark_filter='bench_pipeline_diffusion_main' ...`
+- Results (post-commit, before policy tuning):
+  - `bench_markov_multi_step/20000/20`:
+    - CPU: `4.718 ms`
+    - GPU-gated: `0.734 ms` (`-84.46%` vs CPU)
+  - `bench_pipeline_diffusion_main/100`:
+    - CPU: `2.900 ms`
+    - GPU-forced: `2.159 ms` (`-25.56%` vs CPU)
+  - Small workload remains CPU-favored unless forced (`2000/20` forced still slower than CPU).
+- Deep benchmark artifact:
+  - `notes/perf/results/bench_dod_20260213-gpu-steps-cpu.json`
+  - `notes/perf/results/bench_dod_20260213-gpu-steps-gated.json`
+  - `notes/perf/results/bench_dod_20260213-gpu-steps-force.json`
+  - `notes/perf/results/bench_pipelines_20260213-gpu-steps-cpu.json`
+  - `notes/perf/results/bench_pipelines_20260213-gpu-steps-gated.json`
+  - `notes/perf/results/bench_pipelines_20260213-gpu-steps-force.json`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - This is the first GPU path with clear throughput gains on large diffusion workloads.
+
+## 2026-02-13 GPU Offload Policy for Multi-Step Work
+- Timestamp: 2026-02-13T21:00:18Z
+- Commit: 76c48be
+- Hypothesis: Improve GPU default behavior by gating multi-step offload on total work (`rows * steps`) instead of rows only, to auto-offload long-step diffusion runs (e.g., `/100`) while keeping short-step small graphs on CPU.
+- Files touched:
+  - `include/igneous/core/gpu.hpp`
+  - `include/igneous/ops/geometry.hpp`
+- Implementation notes:
+  - Added `IGNEOUS_GPU_MIN_ROW_STEPS` (default `200000`).
+  - Multi-step offload condition now uses:
+    - `force` OR `rows >= IGNEOUS_GPU_MIN_ROWS` OR `rows*steps >= IGNEOUS_GPU_MIN_ROW_STEPS`.
+- Benchmark commands:
+  - `IGNEOUS_BACKEND=gpu ./build/bench_dod --benchmark_filter='bench_markov_step/2000|bench_markov_multi_step/2000/20|bench_markov_multi_step/20000/20' ...`
+  - `IGNEOUS_BACKEND=gpu ./build/bench_pipelines --benchmark_filter='bench_pipeline_diffusion_main' ...`
+- Results vs previous GPU-gated policy:
+  - `bench_pipeline_diffusion_main/100`: `2.881 ms -> 2.214 ms` (`-23.15%`)
+  - `bench_pipeline_diffusion_main/20`: `+1.02%` (noise-level drift)
+  - `bench_markov_multi_step/20000/20`: still GPU-accelerated (`~0.763 ms` wall, CPU ~`4.718 ms`).
+- Deep benchmark artifact:
+  - `notes/perf/results/bench_dod_20260213-gpu-policy-h1.json`
+  - `notes/perf/results/bench_pipelines_20260213-gpu-policy-h1.json`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - Default `IGNEOUS_BACKEND=gpu` now captures long-step diffusion wins without globally forcing GPU on short-step kernels.

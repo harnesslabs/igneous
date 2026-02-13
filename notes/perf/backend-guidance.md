@@ -7,14 +7,15 @@
 
 ## GPU controls
 - `IGNEOUS_GPU_MIN_ROWS=<int>`: minimum vertex count for GPU offload (default: `8192`).
+- `IGNEOUS_GPU_MIN_ROW_STEPS=<int>`: minimum `rows * steps` work for multi-step GPU offload (default: `200000`).
 - `IGNEOUS_GPU_FORCE=1`: force GPU offload (debug/experiments only).
 
 ## Measured guidance (Apple M3 Max, Release)
-From `notes/perf/results/bench_pipelines_20260213-workerpool-cpuparallel-v2.txt` and `notes/perf/results/bench_pipelines_20260213-gpu-*.txt` (5 reps):
-- `bench_pipeline_diffusion_main/100`: `cpuparallel 3.002 ms`, `gpu-gated 2.986 ms`, `gpu-forced 19.627 ms`.
-- `bench_pipeline_spectral_main`: `cpuparallel 23.120 ms`, `gpu-gated 22.217 ms`.
-- `bench_pipeline_hodge_main`: `cpuparallel 115.609 ms`, `gpu-gated 116.474 ms`.
-- `bench_markov_step/2000` (`bench_dod`): `cpuparallel 17.24 us`, `gpu-forced 178.75 us`.
+From `notes/perf/results/bench_dod_20260213-gpu-steps-*.txt` and `notes/perf/results/bench_pipelines_20260213-gpu-policy-h1.txt` (5 reps):
+- `bench_pipeline_diffusion_main/100`: `cpuparallel 2.900 ms`, `gpu-gated(policy) 2.214 ms` (`-23.15%`).
+- `bench_pipeline_diffusion_main/20`: `cpuparallel 1.136 ms`, `gpu-gated(policy) 1.158 ms` (`+1.02%`, noise-level drift).
+- `bench_markov_multi_step/20000/20`: `cpuparallel 4.718 ms`, `gpu-gated(policy) 0.763 ms` (`-83.83%` wall time).
+- `bench_markov_step/2000`: `cpuparallel 17.38 us`, `gpu-forced 181.23 us` (single-step small workload still CPU-favored).
 
 App-level (`notes/perf/results/main_timings_20260213-gpu-gating-h1.txt`, 3 runs):
 - `igneous-diffusion assets/bunny.obj`: cpuparallel/gpu-gated `~0.03-0.04 s`; gpu-forced `~0.04-0.05 s`.
@@ -23,8 +24,8 @@ App-level (`notes/perf/results/main_timings_20260213-gpu-gating-h1.txt`, 3 runs)
 
 ## Recommended usage
 - Use `parallel` for current real workloads and all tested 2k-4k point pipelines.
-- Use `gpu` only when working on large diffusion graphs (default gate prevents small-workload regressions).
-- Keep `IGNEOUS_GPU_FORCE=1` for profiling/debug only; it regresses current real-world benchmarks.
+- Use `gpu` for diffusion workloads with larger graph/step products (e.g. long-step diffusion, larger point clouds).
+- Keep `IGNEOUS_GPU_FORCE=1` for profiling/debug only; it still regresses small single-step kernels.
 - Use `cpu` for deterministic debugging or tiny kernels where threading overhead dominates.
 
 ## GPU roadmap candidates
