@@ -406,9 +406,14 @@ struct DiffusionTopology {
         [&](int row_idx) {
           const size_t i = static_cast<size_t>(row_idx);
           const size_t base = i * row_stride;
-
-          std::vector<uint32_t> ret_index(static_cast<size_t>(k_neighbors));
-          std::vector<float> out_dist_sqr(static_cast<size_t>(k_neighbors));
+          thread_local std::vector<uint32_t> ret_index;
+          thread_local std::vector<float> out_dist_sqr;
+          if (ret_index.size() < static_cast<size_t>(k_neighbors)) {
+            ret_index.resize(static_cast<size_t>(k_neighbors));
+          }
+          if (out_dist_sqr.size() < static_cast<size_t>(k_neighbors)) {
+            out_dist_sqr.resize(static_cast<size_t>(k_neighbors));
+          }
 
           const float query_pt[3] = {input.x[i], input.y[i], input.z[i]};
           const size_t num_results = tree.knnSearch(
