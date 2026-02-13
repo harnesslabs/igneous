@@ -1256,3 +1256,75 @@ Use one entry per optimization hypothesis.
 - Decision: `kept`
 - Notes:
   - This removed redundant diffusion storage and improved all topology-rebuild-dominated real pipeline phases beyond the 3% threshold.
+
+## 2026-02-13 Hodge Gamma Cache Reuse (Rejected)
+- Timestamp: 2026-02-13T21:51:53Z
+- Commit: not committed (reverted)
+- Hypothesis: Reuse cached `gamma_x_phi` across weak-derivative and circular-coordinate stages to reduce repeated `carre_du_champ(x_a, phi_t)` work.
+- Files touched (reverted):
+  - `include/igneous/ops/hodge.hpp`
+  - `include/igneous/data/topology.hpp`
+  - `include/igneous/ops/spectral.hpp`
+  - `benches/bench_pipelines.cpp`
+  - `src/main_hodge.cpp`
+- A/B result (candidate vs `78d0d61` base):
+  - `bench_pipeline_hodge_main`: `102.270 ms -> 101.221 ms` (`-1.03%`)
+  - Large wins in isolated repeated-call phases (`bench_hodge_phase_weak_derivative`, `bench_hodge_phase_circular`) were not enough on primary deep pipeline target.
+- Decision: `rejected` (below 3% deep benchmark gate)
+
+## 2026-02-13 Curl Matrix-Layout Rewrite (Rejected)
+- Timestamp: 2026-02-13T21:51:53Z
+- Commit: not committed (reverted)
+- Hypothesis: Replace nested `gamma_phi_x[k][d]` vectors with contiguous per-dimension matrices for better locality/SIMD in curl-energy assembly.
+- Files touched (reverted):
+  - `include/igneous/ops/hodge.hpp`
+- A/B result (candidate vs `78d0d61` base):
+  - `bench_pipeline_hodge_main`: `102.270 ms -> 106.478 ms` (`+4.11%`)
+  - `bench_hodge_phase_curl_energy`: `+3.85%` regression.
+- Decision: `rejected`
+
+## 2026-02-13 Hybrid Brute-Force kNN Build (Rejected)
+- Timestamp: 2026-02-13T21:51:53Z
+- Commit: not committed (reverted)
+- Hypothesis: For smaller diffusion clouds, use exact brute-force kNN (`O(n^2)`) instead of KD-tree to improve locality and remove tree overhead.
+- Files touched (reverted):
+  - `include/igneous/data/topology.hpp`
+- A/B result (candidate vs `78d0d61` base):
+  - `bench_diffusion_build/2000`: `484.376 us -> 1.465 ms` (regression)
+  - `bench_pipeline_diffusion_main/20`: `1.070 ms -> 2.369 ms` (regression)
+  - `bench_hodge_phase_topology`: `0.881 ms -> 2.982 ms` (regression)
+- Decision: `rejected`
+
+## 2026-02-13 Spectral MatVec Parallel Threshold Lowering (Rejected)
+- Timestamp: 2026-02-13T21:51:53Z
+- Commit: not committed (reverted)
+- Hypothesis: Lower spectral CSR matvec `min_parallel_range` (`8192 -> 1024`) to thread 2k-4k graph eigensolve workloads.
+- Files touched (reverted):
+  - `include/igneous/ops/spectral.hpp`
+- A/B result (candidate vs `78d0d61` base):
+  - `bench_pipeline_spectral_main`: `+68.40%`
+  - `bench_pipeline_hodge_main`: `+11.62%`
+  - `bench_hodge_phase_eigenbasis`: `+15.16%`
+- Decision: `rejected`
+
+## 2026-02-13 Spectral Compact NCV `k+8` (Rejected)
+- Timestamp: 2026-02-13T21:51:53Z
+- Commit: not committed (reverted)
+- Hypothesis: Reduce compact subspace size from `k+16` to `k+8` for faster symmetric eigensolver iterations.
+- Files touched (reverted):
+  - `include/igneous/ops/spectral.hpp`
+- A/B result (candidate vs `78d0d61` base):
+  - `bench_pipeline_spectral_main`: `-1.01%` (small win)
+  - `bench_pipeline_hodge_main`: `+87.55%` (major regression)
+  - `bench_hodge_phase_eigenbasis`: `+118.68%` (major regression)
+- Decision: `rejected`
+
+## 2026-02-13 GPU Low-Threshold Probe for Hodge (Config Experiment)
+- Timestamp: 2026-02-13T21:51:53Z
+- Commit: no code change
+- Hypothesis: Force lower GPU threshold (`IGNEOUS_BACKEND=gpu`, `IGNEOUS_GPU_MIN_ROWS=2000`) might accelerate repeated Hodge diffusion kernels.
+- Experiment:
+  - Compared CPU-parallel vs GPU-low-threshold on full pipeline/hodge phase set.
+- Result:
+  - Diffusion `/100` improved (`-22.80%`), but hodge phases regressed severely (`bench_hodge_phase_curl_energy` about `+1936%`, `bench_hodge_phase_circular` about `+1486%`).
+- Decision: keep existing conservative GPU gating for non-diffusion paths.

@@ -17,6 +17,10 @@ From `notes/perf/results/bench_dod_20260213-gpu-steps-*.txt` and `notes/perf/res
 - `bench_markov_multi_step/20000/20`: `cpuparallel 4.718 ms`, `gpu-gated(policy) 0.763 ms` (`-83.83%` wall time).
 - `bench_markov_step/2000`: `cpuparallel 17.38 us`, `gpu-forced 181.23 us` (single-step small workload still CPU-favored).
 
+Probe (`notes/perf/results/bench_pipelines_20260213-gpugate-probe-*.txt`, `IGNEOUS_GPU_MIN_ROWS=2000`):
+- Diffusion long-step can improve (`bench_pipeline_diffusion_main/100`: about `-22.8%` vs cpuparallel).
+- Hodge diffusion-kernel phases regress heavily when low-threshold GPU offload is forced (`bench_hodge_phase_curl_energy` and `bench_hodge_phase_circular` both massive regressions).
+
 App-level (`notes/perf/results/main_timings_20260213-gpu-gating-h1.txt`, 3 runs):
 - `igneous-diffusion assets/bunny.obj`: cpuparallel/gpu-gated `~0.03-0.04 s`; gpu-forced `~0.04-0.05 s`.
 - `igneous-hodge`: cpuparallel/gpu-gated `~0.14-0.15 s`; gpu-forced `~0.21-0.22 s`.
@@ -25,6 +29,7 @@ App-level (`notes/perf/results/main_timings_20260213-gpu-gating-h1.txt`, 3 runs)
 ## Recommended usage
 - Use `parallel` for current real workloads and all tested 2k-4k point pipelines.
 - Use `gpu` for diffusion workloads with larger graph/step products (e.g. long-step diffusion, larger point clouds).
+- Do not lower global `IGNEOUS_GPU_MIN_ROWS` to force Hodge offload on 2k-4k meshes; keep conservative gating.
 - Keep `IGNEOUS_GPU_FORCE=1` for profiling/debug only; it still regresses small single-step kernels.
 - Use `cpu` for deterministic debugging or tiny kernels where threading overhead dominates.
 
