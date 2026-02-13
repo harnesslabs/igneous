@@ -1215,3 +1215,44 @@ Use one entry per optimization hypothesis.
 - Decision: `kept`
 - Notes:
   - This is the largest Hodge pipeline win in the current optimization wave.
+
+## 2026-02-13 Diffusion CSR-Only Topology Storage
+- Timestamp: 2026-02-13T21:19:39Z
+- Commit: 266e4b6
+- Hypothesis: Remove eager `Eigen::SparseMatrix` materialization from `DiffusionTopology::build()` and keep CSR arrays as the single Markov representation to cut topology-build time and improve diffusion/hodge pipeline phases that rebuild topology.
+- Files touched:
+  - `include/igneous/data/topology.hpp`
+  - `include/igneous/ops/spectral.hpp`
+  - `src/main_diffusion.cpp`
+  - `benches/bench_dod.cpp`
+  - `benches/bench_pipelines.cpp`
+  - `tests/test_topology_diffusion.cpp`
+  - `tests/test_io_meshes.cpp`
+- Implementation notes:
+  - Removed `DiffusionTopology::P` storage and row-major sparse assembly from build path.
+  - Kept canonical diffusion operators on CSR (`markov_row_offsets`, `markov_col_indices`, `markov_values`).
+  - Updated spectral solver entry to only require `P` on non-CSR topologies.
+  - Updated tests/benches/main diffusion diagnostics to validate/report CSR directly.
+- Benchmark commands:
+  - `./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_markov_step/2000|bench_markov_multi_step/2000/20|bench_markov_multi_step/20000/20' --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_dod_20260213-csr-only-h1-seq.json --benchmark_out_format=json`
+  - `./build/bench_pipelines --benchmark_filter='bench_pipeline_diffusion_main|bench_hodge_phase_topology' --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_pipelines_20260213-csr-only-h1-seq.json --benchmark_out_format=json`
+- Results vs `current-latest` snapshot (`notes/perf/results/*_20260213-current-latest.json`):
+  - `bench_diffusion_build/2000`: `655.632 us -> 589.063 us` (`-10.15%`)
+  - `bench_pipeline_diffusion_main/20`: `1.190 ms -> 1.046 ms` (`-12.13%`)
+  - `bench_pipeline_diffusion_main/100`: `2.907 ms -> 2.791 ms` (`-3.98%`)
+  - `bench_hodge_phase_topology`: `1.193 ms -> 0.871 ms` (`-27.00%`)
+  - `bench_markov_step/2000`: `-1.00%` (minor)
+  - `bench_markov_multi_step/2000/20`: `+0.59%` (noise-level)
+  - `bench_markov_multi_step/20000/20`: `-0.69%` (minor)
+- Deep benchmark artifact:
+  - `notes/perf/results/bench_dod_20260213-csr-only-h1-seq.json`
+  - `notes/perf/results/bench_dod_20260213-csr-only-h1-seq.txt`
+  - `notes/perf/results/bench_pipelines_20260213-csr-only-h1-seq.json`
+  - `notes/perf/results/bench_pipelines_20260213-csr-only-h1-seq.txt`
+- Profile traces: not captured for this incremental pass.
+- Numeric checks:
+  - `cmake --build build -j8`
+  - `cd build && ctest --output-on-failure` (`7/7` passed)
+- Decision: `kept`
+- Notes:
+  - This removed redundant diffusion storage and improved all topology-rebuild-dominated real pipeline phases beyond the 3% threshold.
