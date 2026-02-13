@@ -280,3 +280,55 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Material flow kernel gain from removing redundant per-call initialization work.
+
+## 2026-02-13 Spectral Largest-Real Sort (Rejected)
+- Timestamp: 2026-02-13T16:42:34Z
+- Commit: e1c3135 (working tree with uncommitted changes)
+- Hypothesis: Switch spectral solve sort rule from largest-magnitude to largest-real to reduce eigensolver time on stochastic operators.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_eigenbasis/2000/16|bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_eigenbasis/2000/16`: `14.89 ms` mean (near-noise change)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Did not reach threshold and introduced behavior drift risk in eigenmode ordering.
+
+## 2026-02-13 Curvature Face-Accumulation Rewrite (Rejected)
+- Timestamp: 2026-02-13T16:44:01Z
+- Commit: e1c3135 (working tree with uncommitted changes)
+- Hypothesis: Recompute curvature contributions in a face-streaming accumulation pass to improve locality and remove vertex-face indirection.
+- Files touched:
+  - `include/igneous/ops/curvature.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_curvature_kernel/400|bench_flow_kernel/400|bench_mesh_topology_build/400' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_curvature_kernel/400`: `19.6 ms` mean (major regression)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Additional accumulation arrays and corner recomputation overwhelmed locality gains.
+
+## 2026-02-13 Carre-Du-Champ CSR Unroll
+- Timestamp: 2026-02-13T16:46:22Z
+- Commit: e1c3135 (working tree with uncommitted changes)
+- Hypothesis: Unroll and pointer-specialize CSR traversal inside `carre_du_champ` to cut per-edge arithmetic/index overhead in diffusion-derived operators.
+- Files touched:
+  - `include/igneous/ops/geometry.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16|bench_markov_step/2000' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+- Smoke results:
+  - `bench_1form_gram/2000/16`: `0.343 ms` mean
+  - `bench_weak_derivative/2000/16`: `1.520 ms` mean
+  - `bench_curl_energy/2000/16`: `6.266 ms` mean
+- Deep results (vs `bench_dod_20260213-093951.json`):
+  - `bench_1form_gram/2000/16`: `-6.73%`
+  - `bench_weak_derivative/2000/16`: `-8.71%`
+  - `bench_curl_energy/2000/16`: `-10.39%`
+- Profile traces:
+  - `notes/perf/profiles/20260213-094555/time-profiler.trace`
+  - `notes/perf/profiles/20260213-094609/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: High-confidence gain across all primary diffusion-derived geometry/Hodge kernels.

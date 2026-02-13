@@ -55,19 +55,33 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
     const auto &weights = mesh.topology.markov_values;
 
     assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
+    const float *f_data = f.data();
+    const float *h_data = h.data();
 
     for (int i = 0; i < expected_size; ++i) {
-      const float fi = f[i];
-      const float hi = h[i];
-      float acc = 0.0f;
-
       const int begin = row_offsets[static_cast<size_t>(i)];
       const int end = row_offsets[static_cast<size_t>(i) + 1];
+      const int count = end - begin;
+      const int *cols = col_indices.data() + begin;
+      const float *w = weights.data() + begin;
+      const float fi = f_data[i];
+      const float hi = h_data[i];
 
-      for (int idx = begin; idx < end; ++idx) {
-        const int j = col_indices[idx];
-        const float w = weights[idx];
-        acc += w * (f[j] - fi) * (h[j] - hi);
+      float acc = 0.0f;
+      int idx = 0;
+      for (; idx + 3 < count; idx += 4) {
+        const int j0 = cols[idx + 0];
+        const int j1 = cols[idx + 1];
+        const int j2 = cols[idx + 2];
+        const int j3 = cols[idx + 3];
+        acc += w[idx + 0] * (f_data[j0] - fi) * (h_data[j0] - hi);
+        acc += w[idx + 1] * (f_data[j1] - fi) * (h_data[j1] - hi);
+        acc += w[idx + 2] * (f_data[j2] - fi) * (h_data[j2] - hi);
+        acc += w[idx + 3] * (f_data[j3] - fi) * (h_data[j3] - hi);
+      }
+      for (; idx < count; ++idx) {
+        const int j = cols[idx];
+        acc += w[idx] * (f_data[j] - fi) * (h_data[j] - hi);
       }
 
       gamma_out[i] = acc;
