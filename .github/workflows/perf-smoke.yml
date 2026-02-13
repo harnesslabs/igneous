@@ -22,7 +22,6 @@ jobs:
     env:
       IGNEOUS_BENCH_MODE: "1"
       IGNEOUS_BACKEND: parallel
-      IGNEOUS_NUM_THREADS: "8"
 
     steps:
       - name: Checkout source
@@ -40,6 +39,24 @@ jobs:
           fi
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
           echo "Using baseline SHA: $BASE_SHA"
+
+      - name: Select smoke thread count
+        id: threads
+        shell: bash
+        run: |
+          CORES="$(nproc --all)"
+          if [[ -z "$CORES" || "$CORES" -lt 1 ]]; then
+            CORES=1
+          fi
+
+          THREADS="$CORES"
+          if [[ "$THREADS" -gt 4 ]]; then
+            THREADS=4
+          fi
+
+          echo "threads=$THREADS" >> "$GITHUB_OUTPUT"
+          echo "IGNEOUS_NUM_THREADS=$THREADS" >> "$GITHUB_ENV"
+          echo "Using IGNEOUS_NUM_THREADS=$THREADS on $CORES detected cores"
 
       - name: Checkout vcpkg
         uses: actions/checkout@v4
@@ -140,26 +157,62 @@ jobs:
             --output-markdown artifacts/perf/reports/bench_geometry_smoke.md \
             --output-json artifacts/perf/reports/bench_geometry_smoke.json
 
-          python3 scripts/perf/compare_against_main.py \
-            --baseline artifacts/perf/base/bench_dod_base.json \
-            --current artifacts/perf/head/bench_dod_head.json \
-            --baseline-commit "${{ steps.baseline.outputs.base_sha }}" \
-            --label "PR smoke: bench_dod (baseline ${{ steps.baseline.outputs.base_sha }})" \
-            --output-markdown artifacts/perf/reports/bench_dod_smoke.md \
-            --output-json artifacts/perf/reports/bench_dod_smoke.json
+          if [[ -s artifacts/perf/base/bench_dod_base.json ]]; then
+            python3 scripts/perf/compare_against_main.py \
+              --baseline artifacts/perf/base/bench_dod_base.json \
+              --current artifacts/perf/head/bench_dod_head.json \
+              --baseline-commit "${{ steps.baseline.outputs.base_sha }}" \
+              --label "PR smoke: bench_dod (baseline ${{ steps.baseline.outputs.base_sha }})" \
+              --output-markdown artifacts/perf/reports/bench_dod_smoke.md \
+              --output-json artifacts/perf/reports/bench_dod_smoke.json
+          else
+            {
+              echo "## PR smoke: bench_dod (baseline ${{ steps.baseline.outputs.base_sha }})"
+              echo
+              echo "- Baseline source: \`artifacts/perf/base/bench_dod_base.json\`"
+              echo "- Current source: \`artifacts/perf/head/bench_dod_head.json\`"
+              echo "- Baseline commit: \`${{ steps.baseline.outputs.base_sha }}\`"
+              echo "- Comparable benchmarks: \`0/0\`"
+              echo "- Status: \`not comparable\`"
+              echo "- Notes:"
+              echo "  - baseline commit \`${{ steps.baseline.outputs.base_sha }}\` does not define target \`bench_dod\`."
+            } > artifacts/perf/reports/bench_dod_smoke.md
+            printf '{\n  "label": "PR smoke: bench_dod (baseline %s)",\n  "baseline_commit": "%s",\n  "status": "not comparable",\n  "reason": "baseline target missing: bench_dod"\n}\n' \
+              "${{ steps.baseline.outputs.base_sha }}" "${{ steps.baseline.outputs.base_sha }}" \
+              > artifacts/perf/reports/bench_dod_smoke.json
+          fi
 
-          python3 scripts/perf/compare_against_main.py \
-            --baseline artifacts/perf/base/bench_pipelines_base.json \
-            --current artifacts/perf/head/bench_pipelines_head.json \
-            --baseline-commit "${{ steps.baseline.outputs.base_sha }}" \
-            --label "PR smoke: bench_pipelines (baseline ${{ steps.baseline.outputs.base_sha }})" \
-            --output-markdown artifacts/perf/reports/bench_pipelines_smoke.md \
-            --output-json artifacts/perf/reports/bench_pipelines_smoke.json
+          if [[ -s artifacts/perf/base/bench_pipelines_base.json ]]; then
+            python3 scripts/perf/compare_against_main.py \
+              --baseline artifacts/perf/base/bench_pipelines_base.json \
+              --current artifacts/perf/head/bench_pipelines_head.json \
+              --baseline-commit "${{ steps.baseline.outputs.base_sha }}" \
+              --label "PR smoke: bench_pipelines (baseline ${{ steps.baseline.outputs.base_sha }})" \
+              --output-markdown artifacts/perf/reports/bench_pipelines_smoke.md \
+              --output-json artifacts/perf/reports/bench_pipelines_smoke.json
+          else
+            {
+              echo "## PR smoke: bench_pipelines (baseline ${{ steps.baseline.outputs.base_sha }})"
+              echo
+              echo "- Baseline source: \`artifacts/perf/base/bench_pipelines_base.json\`"
+              echo "- Current source: \`artifacts/perf/head/bench_pipelines_head.json\`"
+              echo "- Baseline commit: \`${{ steps.baseline.outputs.base_sha }}\`"
+              echo "- Comparable benchmarks: \`0/0\`"
+              echo "- Status: \`not comparable\`"
+              echo "- Notes:"
+              echo "  - baseline commit \`${{ steps.baseline.outputs.base_sha }}\` does not define target \`bench_pipelines\`."
+            } > artifacts/perf/reports/bench_pipelines_smoke.md
+            printf '{\n  "label": "PR smoke: bench_pipelines (baseline %s)",\n  "baseline_commit": "%s",\n  "status": "not comparable",\n  "reason": "baseline target missing: bench_pipelines"\n}\n' \
+              "${{ steps.baseline.outputs.base_sha }}" "${{ steps.baseline.outputs.base_sha }}" \
+              > artifacts/perf/reports/bench_pipelines_smoke.json
+          fi
 
           {
             echo "# Perf Smoke Report"
             echo
             echo "Baseline: \`${{ steps.baseline.outputs.base_sha }}\`"
+            echo "Backend: \`${IGNEOUS_BACKEND}\`"
+            echo "Threads: \`${IGNEOUS_NUM_THREADS}\`"
             echo
             cat artifacts/perf/reports/bench_geometry_smoke.md
             echo
