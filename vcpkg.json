@@ -8,6 +8,7 @@
     "doctest",
     "xsimd",
     "eigen3",
-    "nanoflann"
+    "nanoflann",
+    "spectra"
   ]
 }
