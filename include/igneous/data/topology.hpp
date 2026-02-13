@@ -312,7 +312,7 @@ struct DiffusionTopology {
     const float t_sq = std::max(input.bandwidth, 1e-8f);
 
     PointCloudAdaptor adaptor{input.x, input.y, input.z};
-    KDTree tree(3, adaptor, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+    KDTree tree(3, adaptor, nanoflann::KDTreeSingleIndexAdaptorParams(32));
     tree.buildIndex();
 
     const size_t row_capacity = n_verts * static_cast<size_t>(k_neighbors);

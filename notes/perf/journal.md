@@ -332,3 +332,26 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: High-confidence gain across all primary diffusion-derived geometry/Hodge kernels.
+
+## 2026-02-13 KD-Tree Leaf Size Tuning
+- Timestamp: 2026-02-13T16:48:46Z
+- Commit: b9f4ce0 (working tree with uncommitted changes)
+- Hypothesis: Increase nanoflann KD-tree leaf size from `10` to `32` to reduce total diffusion topology build cost for repeated KNN assembly workloads.
+- Files touched:
+  - `include/igneous/data/topology.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_markov_step/2000|bench_eigenbasis/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+- Smoke results:
+  - `bench_diffusion_build/2000`: `2.94 ms` mean
+  - `bench_eigenbasis/2000/16`: `14.95 ms` mean
+- Deep results (vs `bench_dod_20260213-094503.json`):
+  - `bench_diffusion_build/2000`: `-7.27%`
+  - `bench_eigenbasis/2000/16`: `-0.80%`
+  - `bench_markov_step/2000`: `+1.89%`
+- Profile traces:
+  - `notes/perf/profiles/20260213-094817/time-profiler.trace`
+  - `notes/perf/profiles/20260213-094827/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Strong diffusion topology build gain with neutral downstream impact.
