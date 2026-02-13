@@ -932,3 +932,24 @@ Use one entry per optimization hypothesis.
 - Decision: `kept`
 - Notes:
   - Follow-up NCV tightening (`k+12`) was tested and rejected due `bench_pipeline_hodge_main` regression (`+3.82%` in 5-rep check).
+
+## 2026-02-13 Weak Exterior Derivative Precompute Parallelization
+- Timestamp: 2026-02-13T20:05:12Z
+- Commit: a538e16 (working tree with uncommitted changes)
+- Hypothesis: Parallelize the `gamma_x_phi` column precompute in `compute_weak_exterior_derivative` to reduce Hodge assembly cost and improve end-to-end Hodge throughput.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_topology|bench_hodge_phase_eigenbasis|bench_hodge_phase_gram|bench_hodge_phase_weak_derivative|bench_hodge_phase_curl_energy|bench_hodge_phase_solve|bench_hodge_phase_circular' --benchmark_min_time=0.12s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true --benchmark_out=notes/perf/results/bench_pipelines_20260213-weakderiv-par-h1-10r.json --benchmark_out_format=json`
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (5 runs)
+- Results vs prior `largestreal` state:
+  - `bench_pipeline_hodge_main`: `131.931 ms -> 123.377 ms` (`-6.48%`)
+  - `bench_hodge_phase_weak_derivative`: `12.195 ms -> 2.754 ms` (`-77.42%`)
+  - `bench_hodge_phase_gram`: `6.760 ms -> 6.404 ms` (`-5.26%`)
+  - `bench_hodge_phase_curl_energy`: `15.200 ms -> 14.945 ms` (`-1.68%`)
+- App-level throughput (`igneous-hodge`, 5 runs, bench mode):
+  - observed run set: `0.13, 0.15, 0.12, 0.12, 0.12`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes:
+  - Phase-level topology drift was small in absolute terms (~0.13 ms) and did not change the end-to-end Hodge improvement decision.

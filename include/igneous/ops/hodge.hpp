@@ -43,10 +43,13 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
         workspace.gamma_x_phi_mat[a].cols() != n0) {
       workspace.gamma_x_phi_mat[a].resize(n_verts, n0);
     }
-    for (int i = 0; i < n0; ++i) {
-      carre_du_champ(mesh, workspace.coords[a], U.col(i), bandwidth,
-                     workspace.gamma_x_phi_mat[a].col(i));
-    }
+    core::parallel_for_index(
+        0, n0,
+        [&](int i) {
+          carre_du_champ(mesh, workspace.coords[a], U.col(i), bandwidth,
+                         workspace.gamma_x_phi_mat[a].col(i));
+        },
+        8);
   }
 
   if (workspace.weighted_u.rows() != n_verts ||
