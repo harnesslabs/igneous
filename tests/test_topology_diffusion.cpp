@@ -26,7 +26,9 @@ TEST_CASE("DiffusionTopology produces stochastic Markov matrix and valid measure
 
   Eigen::VectorXf row_sums = Eigen::VectorXf::Zero(topo.P.rows());
   for (int outer = 0; outer < topo.P.outerSize(); ++outer) {
-    for (Eigen::SparseMatrix<float>::InnerIterator it(topo.P, outer); it; ++it) {
+    for (igneous::data::DiffusionTopology::SparseMatrixT::InnerIterator it(topo.P,
+                                                                            outer);
+         it; ++it) {
       CHECK(it.value() >= 0.0f);
       row_sums[it.row()] += it.value();
     }

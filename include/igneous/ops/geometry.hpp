@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <type_traits>
 
 #include <igneous/data/mesh.hpp>
 
@@ -42,16 +43,45 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
   assert(gamma_out.size() == expected_size);
   gamma_out.setZero();
 
-  const auto &P = mesh.topology.P;
   const float inv_2t = 1.0f / std::max(2.0f * bandwidth, 1e-8f);
 
-  for (int outer = 0; outer < P.outerSize(); ++outer) {
-    for (typename Eigen::SparseMatrix<float>::InnerIterator it(P, outer); it;
-         ++it) {
-      const int i = it.row();
-      const int j = it.col();
-      const float w = it.value();
-      gamma_out[i] += w * (f[j] - f[i]) * (h[j] - h[i]);
+  if constexpr (requires {
+                  mesh.topology.markov_row_offsets;
+                  mesh.topology.markov_col_indices;
+                  mesh.topology.markov_values;
+                }) {
+    const auto &row_offsets = mesh.topology.markov_row_offsets;
+    const auto &col_indices = mesh.topology.markov_col_indices;
+    const auto &weights = mesh.topology.markov_values;
+
+    assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
+
+    for (int i = 0; i < expected_size; ++i) {
+      const float fi = f[i];
+      const float hi = h[i];
+      float acc = 0.0f;
+
+      const uint32_t begin = row_offsets[static_cast<size_t>(i)];
+      const uint32_t end = row_offsets[static_cast<size_t>(i) + 1];
+
+      for (uint32_t idx = begin; idx < end; ++idx) {
+        const int j = static_cast<int>(col_indices[idx]);
+        const float w = weights[idx];
+        acc += w * (f[j] - fi) * (h[j] - hi);
+      }
+
+      gamma_out[i] = acc;
+    }
+  } else {
+    const auto &P = mesh.topology.P;
+    for (int outer = 0; outer < P.outerSize(); ++outer) {
+      for (typename std::remove_cvref_t<decltype(P)>::InnerIterator it(P, outer);
+           it; ++it) {
+        const int i = it.row();
+        const int j = it.col();
+        const float w = it.value();
+        gamma_out[i] += w * (f[j] - f[i]) * (h[j] - h[i]);
+      }
     }
   }
 

@@ -37,3 +37,34 @@ Use one entry per optimization hypothesis.
 - Profiling script validation traces:
   - `notes/perf/profiles/20260213-085833/time-profiler.trace`
   - `notes/perf/profiles/20260213-085849/cpu-counters.trace`
+
+## 2026-02-13 Diffusion CSR Hot-Path Refactor
+- Timestamp: 2026-02-13T16:12:58Z
+- Commit: 1c1caf1 (working tree with uncommitted changes)
+- Hypothesis: Build diffusion CSR row slices directly in `DiffusionTopology::build` and route `carre_du_champ` through CSR row traversal to reduce sparse-iterator overhead in diffusion-derived operators.
+- Files touched:
+  - `include/igneous/data/topology.hpp`
+  - `include/igneous/ops/geometry.hpp`
+  - `tests/test_topology_diffusion.cpp`
+- Benchmark commands:
+  - `./scripts/perf/run_deep_bench.sh`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_markov_step/2000|bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_diffusion_build/2000`: `3.47 ms` mean
+  - `bench_markov_step/2000`: `30.7 us` mean
+  - `bench_1form_gram/2000/16`: `0.361 ms` mean
+  - `bench_weak_derivative/2000/16`: `1.67 ms` mean
+  - `bench_curl_energy/2000/16`: `6.95 ms` mean
+- Deep results (vs `bench_dod_20260213-085501.json`):
+  - `bench_1form_gram/2000/16`: `-23.23%`
+  - `bench_weak_derivative/2000/16`: `-32.13%`
+  - `bench_curl_energy/2000/16`: `-30.99%`
+  - `bench_eigenbasis/2000/16`: `-4.75%`
+  - `bench_diffusion_build/2000`: `+6.26%` on deep run, `+2.70%` on targeted rerun
+  - `bench_markov_step/2000`: `+4.38%` on deep run, `+3.53%` on targeted rerun
+- Profile traces:
+  - `notes/perf/profiles/20260213-091206/time-profiler.trace`
+  - `notes/perf/profiles/20260213-091246/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Large gains across diffusion-derived Hodge kernels justify the retained CSR build cost.

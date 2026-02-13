@@ -36,19 +36,15 @@ concept SurfaceTopology =
 struct TriangleTopology {
   static constexpr int DIMENSION = 2;
 
-  // Ingest representation
   std::vector<uint32_t> faces_to_vertices;
 
-  // Hot-path face storage
   std::vector<uint32_t> face_v0;
   std::vector<uint32_t> face_v1;
   std::vector<uint32_t> face_v2;
 
-  // Vertex -> incident faces CSR
   std::vector<uint32_t> vertex_face_offsets;
   std::vector<uint32_t> vertex_face_data;
 
-  // Vertex -> unique neighboring vertices CSR
   std::vector<uint32_t> vertex_neighbor_offsets;
   std::vector<uint32_t> vertex_neighbor_data;
 
@@ -177,7 +173,8 @@ struct TriangleTopology {
     }
 
     std::sort(directed_edges.begin(), directed_edges.end());
-    directed_edges.erase(std::unique(directed_edges.begin(), directed_edges.end()), directed_edges.end());
+    directed_edges.erase(std::unique(directed_edges.begin(), directed_edges.end()),
+                         directed_edges.end());
 
     vertex_neighbor_offsets.assign(num_vertices + 1, 0);
     for (uint64_t edge : directed_edges) {
@@ -217,7 +214,9 @@ struct PointTopology {
 
   struct Input {};
 
-  [[nodiscard]] std::span<const uint32_t> get_neighborhood(uint32_t) const { return {}; }
+  [[nodiscard]] std::span<const uint32_t> get_neighborhood(uint32_t) const {
+    return {};
+  }
 
   void build(Input) {}
   void clear() {}
@@ -234,17 +233,31 @@ struct DiffusionTopology {
     int k_neighbors = 32;
   };
 
-  Eigen::SparseMatrix<float> P;
+  using SparseMatrixT = Eigen::SparseMatrix<float>;
+
+  SparseMatrixT P;
   Eigen::VectorXf mu;
   Eigen::MatrixXf eigen_basis;
 
-  [[nodiscard]] size_t num_primitives() const { return static_cast<size_t>(P.rows()); }
-  [[nodiscard]] std::span<const uint32_t> get_neighborhood(uint32_t) const { return {}; }
+  // Direct CSR view for hot diffusion operators.
+  std::vector<uint32_t> markov_row_offsets;
+  std::vector<uint32_t> markov_col_indices;
+  std::vector<float> markov_values;
+
+  [[nodiscard]] size_t num_primitives() const {
+    return static_cast<size_t>(P.rows());
+  }
+  [[nodiscard]] std::span<const uint32_t> get_neighborhood(uint32_t) const {
+    return {};
+  }
 
   void clear() {
     P.resize(0, 0);
     mu.resize(0);
     eigen_basis.resize(0, 0);
+    markov_row_offsets.clear();
+    markov_col_indices.clear();
+    markov_values.clear();
   }
 
   struct PointCloudAdaptor {
@@ -255,10 +268,12 @@ struct DiffusionTopology {
     [[nodiscard]] size_t kdtree_get_point_count() const { return x.size(); }
 
     [[nodiscard]] float kdtree_get_pt(size_t idx, size_t dim) const {
-      if (dim == 0)
+      if (dim == 0) {
         return x[idx];
-      if (dim == 1)
+      }
+      if (dim == 1) {
         return y[idx];
+      }
       return z[idx];
     }
 
@@ -266,7 +281,8 @@ struct DiffusionTopology {
   };
 
   using KDTree = nanoflann::KDTreeSingleIndexAdaptor<
-      nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>, PointCloudAdaptor, 3>;
+      nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>, PointCloudAdaptor,
+      3>;
 
   void build(Input input) {
     const size_t n_verts = input.x.size();
@@ -275,54 +291,93 @@ struct DiffusionTopology {
       return;
     }
 
-    const int k_neighbors = std::max(1, std::min(input.k_neighbors, static_cast<int>(n_verts)));
+    const int k_neighbors =
+        std::max(1, std::min(input.k_neighbors, static_cast<int>(n_verts)));
     const float t_sq = std::max(input.bandwidth, 1e-8f);
 
     PointCloudAdaptor adaptor{input.x, input.y, input.z};
     KDTree tree(3, adaptor, nanoflann::KDTreeSingleIndexAdaptorParams(10));
     tree.buildIndex();
 
+    const size_t row_capacity = n_verts * static_cast<size_t>(k_neighbors);
+
+    markov_row_offsets.assign(n_verts + 1, 0);
+    markov_col_indices.clear();
+    markov_values.clear();
+    markov_col_indices.reserve(row_capacity);
+    markov_values.reserve(row_capacity);
+
     std::vector<Eigen::Triplet<float>> triplets;
-    triplets.reserve(n_verts * static_cast<size_t>(k_neighbors));
+    triplets.reserve(row_capacity);
 
     std::vector<uint32_t> ret_index(static_cast<size_t>(k_neighbors));
     std::vector<float> out_dist_sqr(static_cast<size_t>(k_neighbors));
-    Eigen::VectorXf D = Eigen::VectorXf::Zero(static_cast<int>(n_verts));
+    mu.resize(static_cast<int>(n_verts));
+    mu.setZero();
 
     for (size_t i = 0; i < n_verts; ++i) {
+      markov_row_offsets[i] = static_cast<uint32_t>(markov_col_indices.size());
       const float query_pt[3] = {input.x[i], input.y[i], input.z[i]};
-      const size_t num_results = tree.knnSearch(query_pt, static_cast<size_t>(k_neighbors), ret_index.data(), out_dist_sqr.data());
+      const size_t num_results = tree.knnSearch(
+          query_pt, static_cast<size_t>(k_neighbors), ret_index.data(),
+          out_dist_sqr.data());
 
+      float row_mass = 0.0f;
       for (size_t k = 0; k < num_results; ++k) {
-        const uint32_t j = ret_index[k];
         const float dist_sq = out_dist_sqr[k];
 
         const float k_val = std::exp(-dist_sq / t_sq);
         if (k_val < 1e-8f) {
+          out_dist_sqr[k] = 0.0f;
           continue;
         }
 
-        triplets.emplace_back(static_cast<int>(i), static_cast<int>(j), k_val);
-        D[static_cast<int>(i)] += k_val;
+        out_dist_sqr[k] = k_val;
+        row_mass += k_val;
       }
+
+      if (row_mass <= 1e-12f) {
+        markov_col_indices.push_back(static_cast<uint32_t>(i));
+        markov_values.push_back(1.0f);
+        triplets.emplace_back(static_cast<int>(i), static_cast<int>(i), 1.0f);
+        mu[static_cast<int>(i)] = 1.0f;
+        markov_row_offsets[i + 1] = static_cast<uint32_t>(markov_col_indices.size());
+        continue;
+      }
+
+      const float inv_row_mass = 1.0f / row_mass;
+      for (size_t k = 0; k < num_results; ++k) {
+        const float k_val = out_dist_sqr[k];
+        if (k_val <= 0.0f) {
+          continue;
+        }
+
+        const uint32_t j = ret_index[k];
+        const float normalized = k_val * inv_row_mass;
+
+        markov_col_indices.push_back(j);
+        markov_values.push_back(normalized);
+        triplets.emplace_back(static_cast<int>(i), static_cast<int>(j), normalized);
+      }
+
+      mu[static_cast<int>(i)] = row_mass;
+      markov_row_offsets[i + 1] = static_cast<uint32_t>(markov_col_indices.size());
     }
+
+    markov_row_offsets[n_verts] = static_cast<uint32_t>(markov_col_indices.size());
 
     P.resize(static_cast<int>(n_verts), static_cast<int>(n_verts));
-    P.setFromTriplets(triplets.begin(), triplets.end());
+    P.setFromTriplets(
+        triplets.begin(), triplets.end(),
+        [](const float a, const float b) { return a + b; });
+    P.makeCompressed();
 
-    for (int outer = 0; outer < P.outerSize(); ++outer) {
-      for (Eigen::SparseMatrix<float>::InnerIterator it(P, outer); it; ++it) {
-        const float denom = std::max(D[it.row()], 1e-12f);
-        it.valueRef() /= denom;
-      }
-    }
-
-    mu = D;
     const float mu_sum = mu.sum();
     if (mu_sum > 1e-12f) {
       mu /= mu_sum;
     } else {
-      mu = Eigen::VectorXf::Constant(static_cast<int>(n_verts), 1.0f / static_cast<float>(n_verts));
+      mu = Eigen::VectorXf::Constant(static_cast<int>(n_verts),
+                                     1.0f / static_cast<float>(n_verts));
     }
 
     if (std::getenv("IGNEOUS_BENCH_MODE") == nullptr) {
