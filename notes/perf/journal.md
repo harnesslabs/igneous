@@ -355,3 +355,68 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Strong diffusion topology build gain with neutral downstream impact.
+
+## 2026-02-13 KD-Tree Leaf Size 64 Sweep (Rejected)
+- Timestamp: 2026-02-13T16:49:58Z
+- Commit: 867417c (working tree with uncommitted changes)
+- Hypothesis: Increase KD-tree leaf size from `32` to `64` for further diffusion build reduction.
+- Files touched:
+  - `include/igneous/data/topology.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_markov_step/2000|bench_eigenbasis/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_diffusion_build/2000`: `3.12 ms` mean (`+6%` vs leaf-size-32 baseline)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Larger leaf size regressed diffusion build throughput.
+
+## 2026-02-13 Unsorted KNN Retrieval (Rejected)
+- Timestamp: 2026-02-13T16:51:41Z
+- Commit: 867417c (working tree with uncommitted changes)
+- Hypothesis: Use `findNeighbors(..., SearchParameters(sorted=false))` to skip per-query sort overhead during diffusion build.
+- Files touched:
+  - `include/igneous/data/topology.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_markov_step/2000|bench_eigenbasis/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_diffusion_build/2000`: `2.94 ms` mean (neutral to leaf-32 baseline)
+  - `bench_eigenbasis/2000/16`: `15.42 ms` mean (`+3%` regression)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Eigenbasis path regressed despite build-time similarity.
+
+## 2026-02-13 Face-Unpack Skip On Rebuild (Rejected)
+- Timestamp: 2026-02-13T16:52:28Z
+- Commit: 867417c (working tree with uncommitted changes)
+- Hypothesis: Skip `faces_to_vertices` unpack when face-array sizes already match to reduce repeated triangle topology build work.
+- Files touched:
+  - `include/igneous/data/topology.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_mesh_topology_build/400|bench_curvature_kernel/400|bench_flow_kernel/400' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_mesh_topology_build/400`: `4.60 ms` mean (`~1%` gain)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Improvement was below threshold and relied on stale-face assumptions.
+
+## 2026-02-13 Weak-Derivative Matrix Coupling
+- Timestamp: 2026-02-13T16:55:39Z
+- Commit: 867417c (working tree with uncommitted changes)
+- Hypothesis: Replace per-row dot-product assembly in weak derivative with dense coupling matrices (`weighted_u^T * gamma_x_phi`) to better exploit Eigen kernels.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16|bench_1form_gram/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+- Smoke results:
+  - `bench_weak_derivative/2000/16`: `1.47 ms` mean
+- Deep results (vs `bench_dod_20260213-094728.json`):
+  - `bench_weak_derivative/2000/16`: `-3.25%`
+  - `bench_1form_gram/2000/16`: `-1.12%`
+  - `bench_curl_energy/2000/16`: `-0.90%`
+- Profile traces:
+  - `notes/perf/profiles/20260213-095516/time-profiler.trace`
+  - `notes/perf/profiles/20260213-095528/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Cleared threshold on the primary target (`weak_derivative`) with no material regressions elsewhere.

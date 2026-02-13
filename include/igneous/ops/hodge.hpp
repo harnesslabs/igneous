@@ -15,6 +15,8 @@ namespace igneous::ops {
 
 template <typename MeshT> struct HodgeWorkspace {
   std::array<Eigen::VectorXf, 3> coords;
+  std::array<Eigen::MatrixXf, 3> gamma_x_phi_mat; // [3] each [n_verts x n0]
+  Eigen::MatrixXf weighted_u;                     // [n_verts x n0]
   std::vector<std::vector<Eigen::VectorXf>> gamma_x_phi; // [3][n0]
   std::vector<std::vector<Eigen::VectorXf>> gamma_phi_x; // [n0][3]
   std::array<std::array<Eigen::VectorXf, 3>, 3> gamma_xx;
@@ -35,25 +37,28 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
 
   fill_coordinate_vectors(mesh, workspace.coords);
 
-  workspace.gamma_x_phi.assign(3, std::vector<Eigen::VectorXf>(n0));
   for (int a = 0; a < 3; ++a) {
+    if (workspace.gamma_x_phi_mat[a].rows() != n_verts ||
+        workspace.gamma_x_phi_mat[a].cols() != n0) {
+      workspace.gamma_x_phi_mat[a].resize(n_verts, n0);
+    }
     for (int i = 0; i < n0; ++i) {
-      workspace.gamma_x_phi[a][i].resize(n_verts);
       carre_du_champ(mesh, workspace.coords[a], U.col(i), bandwidth,
-                     workspace.gamma_x_phi[a][i]);
+                     workspace.gamma_x_phi_mat[a].col(i));
     }
   }
 
-  workspace.weight.resize(n_verts);
+  if (workspace.weighted_u.rows() != n_verts ||
+      workspace.weighted_u.cols() != n0) {
+    workspace.weighted_u.resize(n_verts, n0);
+  }
+  workspace.weighted_u = U.array().colwise() * mu.array();
 
-  for (int k = 0; k < n0; ++k) {
-    workspace.weight = U.col(k).cwiseProduct(mu);
-
-    for (int a = 0; a < 3; ++a) {
-      const int row_idx = k * 3 + a;
-      for (int i = 0; i < n0; ++i) {
-        D(row_idx, i) = workspace.weight.dot(workspace.gamma_x_phi[a][i]);
-      }
+  for (int a = 0; a < 3; ++a) {
+    const Eigen::MatrixXf coupling =
+        workspace.weighted_u.transpose() * workspace.gamma_x_phi_mat[a];
+    for (int k = 0; k < n0; ++k) {
+      D.row(k * 3 + a) = coupling.row(k);
     }
   }
 
