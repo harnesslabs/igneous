@@ -14,11 +14,12 @@ find_package(doctest CONFIG REQUIRED)
 find_package(xsimd CONFIG REQUIRED)
 find_package(Eigen3 CONFIG REQUIRED)
 find_package(nanoflann CONFIG REQUIRED)
+find_package(Spectra CONFIG REQUIRED)
 
 # --- 1. The Library Target ---
 add_library(igneous INTERFACE)
 target_include_directories(igneous INTERFACE include)
-target_link_libraries(igneous INTERFACE fmt::fmt range-v3::range-v3 xsimd Eigen3::Eigen nanoflann::nanoflann)
+target_link_libraries(igneous INTERFACE fmt::fmt range-v3::range-v3 xsimd Eigen3::Eigen nanoflann::nanoflann Spectra::Spectra)
 
 # --- 2. Testing Setup ---
 enable_testing()
@@ -57,6 +58,20 @@ target_link_libraries(igneous-point
 
 add_executable(igneous-diffusion src/main_diffusion.cpp)
 target_link_libraries(igneous-diffusion 
+    PRIVATE 
+    igneous 
+    fmt::fmt
+)
+
+add_executable(igneous-spectral src/main_spectral.cpp)
+target_link_libraries(igneous-spectral 
+    PRIVATE 
+    igneous 
+    fmt::fmt
+)
+
+add_executable(igneous-hodge src/main_hodge.cpp)
+target_link_libraries(igneous-hodge 
     PRIVATE 
     igneous 
     fmt::fmt
