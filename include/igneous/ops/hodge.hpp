@@ -164,37 +164,39 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
 
   const int n0 = U.cols();
   const size_t n_verts = mesh.geometry.num_points();
+  const int n_verts_i = static_cast<int>(n_verts);
 
   HodgeWorkspace<MeshT> workspace;
   fill_coordinate_vectors(mesh, workspace.coords);
 
-  workspace.gamma_x_phi.assign(3, std::vector<Eigen::VectorXf>(n0));
   for (int a = 0; a < 3; ++a) {
+    workspace.gamma_x_phi_mat[a].resize(n_verts_i, n0);
     for (int t = 0; t < n0; ++t) {
-      workspace.gamma_x_phi[a][t].resize(static_cast<int>(n_verts));
       carre_du_champ(mesh, workspace.coords[a], U.col(t), bandwidth,
-                     workspace.gamma_x_phi[a][t]);
+                     workspace.gamma_x_phi_mat[a].col(t));
     }
   }
 
-  Eigen::MatrixXf X_op = Eigen::MatrixXf::Zero(n0, n0);
+  Eigen::MatrixXf alpha_mat(n0, 3);
+  for (int k = 0; k < n0; ++k) {
+    alpha_mat(k, 0) = alpha_coeffs(k * 3 + 0);
+    alpha_mat(k, 1) = alpha_coeffs(k * 3 + 1);
+    alpha_mat(k, 2) = alpha_coeffs(k * 3 + 2);
+  }
 
-  for (int s = 0; s < n0; ++s) {
-    for (int t = 0; t < n0; ++t) {
-      float val = 0.0f;
-      for (int k = 0; k < n0; ++k) {
-        for (int a = 0; a < 3; ++a) {
-          const float coeff = alpha_coeffs(k * 3 + a);
-          if (std::abs(coeff) < 1e-7f) {
-            continue;
-          }
+  const Eigen::MatrixXf q = U * alpha_mat;
+  const Eigen::MatrixXf U_t = U.transpose();
 
-          const Eigen::VectorXf weight = U.col(s).cwiseProduct(U.col(k)).cwiseProduct(mu);
-          val += coeff * weight.dot(workspace.gamma_x_phi[a][t]);
-        }
-      }
-      X_op(s, t) = val;
-    }
+  Eigen::MatrixXf X_op(n0, n0);
+  workspace.weight.resize(n_verts_i);
+
+  for (int t = 0; t < n0; ++t) {
+    workspace.weight =
+        mu.array() *
+        ((workspace.gamma_x_phi_mat[0].col(t).array() * q.col(0).array()) +
+         (workspace.gamma_x_phi_mat[1].col(t).array() * q.col(1).array()) +
+         (workspace.gamma_x_phi_mat[2].col(t).array() * q.col(2).array()));
+    X_op.col(t).noalias() = U_t * workspace.weight;
   }
 
   Eigen::MatrixXf L_eps = X_op - epsilon * Eigen::MatrixXf::Identity(n0, n0);

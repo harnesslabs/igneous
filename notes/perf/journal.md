@@ -444,3 +444,115 @@ Use one entry per optimization hypothesis.
 - Numeric checks: all doctest suites pass (`7/7`).
 - Decision: `kept`
 - Notes: Cleared keep threshold on primary target (`curl_energy`) with no material regressions on downstream kernels.
+
+## 2026-02-13 Curl-Energy Preweighted Dot Path (Rejected)
+- Timestamp: 2026-02-13T18:21:45Z
+- Commit: 7be6233 (working tree with uncommitted changes)
+- Hypothesis: Precompute `mu`-weighted gamma vectors (`gamma_xx_mu`, `gamma_phi_x_mu`) and replace fused elementwise expression with two dot products to increase SIMD throughput.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+- Smoke results:
+  - `bench_curl_energy/2000/16`: `5.93 ms` mean
+- Deep results (vs `bench_dod_20260213-111843.json`):
+  - `bench_curl_energy/2000/16`: `-1.23%`
+  - `bench_weak_derivative/2000/16`: `-0.13%`
+  - `bench_1form_gram/2000/16`: `+0.28%`
+  - `bench_hodge_solve/2000/16`: `-1.90%`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Primary gain was below `3%` keep threshold; retained the simpler fused expression.
+
+## 2026-02-13 Diffusion Eigen-Array Exp Path (Rejected)
+- Timestamp: 2026-02-13T18:23:25Z
+- Commit: 7be6233 (working tree with uncommitted changes)
+- Hypothesis: Replace per-neighbor scalar kernel accumulation with Eigen array `exp`/mask/sum to increase SIMD utilization in `DiffusionTopology::build`.
+- Files touched:
+  - `include/igneous/data/topology.hpp` (reverted)
+- Benchmark command:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_markov_step/2000|bench_eigenbasis/2000/16|bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_diffusion_build/2000`: `3.02 ms` mean (regression vs current baseline class ~`2.90 ms`)
+  - `bench_markov_step/2000`: `17.76 us` mean
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Vectorized array expression introduced overhead and worsened diffusion build throughput.
+
+## 2026-02-13 1-Form Gram Block GEMM Path (Rejected)
+- Timestamp: 2026-02-13T18:25:09Z
+- Commit: 7be6233 (working tree with uncommitted changes)
+- Hypothesis: Replace pairwise Gram assembly with block matrix products (`U^T * diag(mu*gamma_ab) * U`) and compute only unique `(a,b)` blocks to exploit SIMD/BLAS kernels.
+- Files touched:
+  - `include/igneous/ops/geometry.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_1form_gram/2000/16|bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+  - `./scripts/perf/run_deep_bench.sh`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_1form_gram/2000/16' --benchmark_min_time=0.3s --benchmark_repetitions=30 --benchmark_report_aggregates_only=true` (A/B check)
+- Smoke results:
+  - `bench_1form_gram/2000/16`: `0.290 ms` mean
+- Deep results (vs `bench_dod_20260213-111843.json`):
+  - `bench_1form_gram/2000/16`: `-13.31%`
+  - `bench_diffusion_build/2000`: `+3.96%`
+  - `bench_eigenbasis/2000/16`: `+1.50%`
+  - `bench_curl_energy/2000/16`: `+0.07%`
+- A/B confirmation:
+  - baseline (`no patch`) `bench_diffusion_build/2000`: `2.888 ms` mean (`30 reps`)
+  - with patch `bench_diffusion_build/2000`: `2.980 ms` mean (`30 reps`)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Strong local gain for `1form_gram`, but rejected due repeatable diffusion-build regression on a primary benchmark.
+
+## 2026-02-13 Flow Displacement SoA Workspace (Rejected)
+- Timestamp: 2026-02-13T18:28:47Z
+- Commit: 7be6233 (working tree with uncommitted changes)
+- Hypothesis: Switch flow displacement workspace from `Vec3` AoS to `dx/dy/dz` SoA to improve contiguous access and vectorization in update loops.
+- Files touched:
+  - `include/igneous/ops/flow.hpp` (reverted)
+- Benchmark command:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_flow_kernel/400|bench_curvature_kernel/400|bench_mesh_topology_build/400' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_flow_kernel/400`: `0.587 ms` mean (major regression)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Extra scalar-array traffic and fallback conversion overhead outweighed any SoA benefits.
+
+## 2026-02-13 Curl-Energy Coupling-Matrix Precompute (Rejected)
+- Timestamp: 2026-02-13T18:30:12Z
+- Commit: 7be6233 (working tree with uncommitted changes)
+- Hypothesis: Precompute dense `gamma_phi_x` coupling matrices to remove per-(k,l,a,b) inner-loop dot products in curl-energy assembly.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+- Benchmark command:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_curl_energy/2000/16|bench_weak_derivative/2000/16|bench_hodge_solve/2000/16|bench_1form_gram/2000/16' --benchmark_min_time=0.2s --benchmark_repetitions=10 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_curl_energy/2000/16`: `5.905 ms` mean (`<3%` improvement)
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `rejected`
+- Notes: Gain did not meet keep threshold and added substantial workspace complexity.
+
+## 2026-02-13 Circular-Coordinate Matrix Rewrite
+- Timestamp: 2026-02-13T18:31:53Z
+- Commit: 7be6233 (working tree with uncommitted changes)
+- Hypothesis: Rewrite circular-coordinate assembly from nested `(s,t,k,a)` scalar loops to matrix form (`q = U * alpha`, then `X_op.col(t) = U^T * (mu .* sum_a(gamma_x_phi[a,t] .* q_a))`) to unlock SIMD/BLAS kernels and remove temporary-vector churn.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge` (3-run before/after)
+  - `./scripts/perf/run_deep_bench.sh`
+- Smoke pipeline results (`igneous-hodge`, 3 runs):
+  - baseline: `1.25 s`, `1.24 s`, `1.25 s`
+  - candidate: `0.33 s`, `0.32 s`, `0.32 s`
+  - mean delta: `-74.07%`
+- Deep results (vs `bench_dod_20260213-111843.json`):
+  - `bench_1form_gram/2000/16`: `+0.05%`
+  - `bench_weak_derivative/2000/16`: `+0.20%`
+  - `bench_curl_energy/2000/16`: `-0.13%`
+  - `bench_hodge_solve/2000/16`: `-1.21%`
+- Profile traces:
+  - `notes/perf/profiles/20260213-113237/time-profiler.trace`
+  - `notes/perf/profiles/20260213-113245/cpu-counters.trace`
+- Numeric checks: all doctest suites pass (`7/7`).
+- Decision: `kept`
+- Notes: Large real-pipeline throughput gain with neutral deep-kernel impact.
