@@ -154,6 +154,84 @@ public:
     return true;
   }
 
+  [[nodiscard]] bool apply_markov_transition_steps(
+      const void *cache_key, std::span<const int> row_offsets,
+      std::span<const int> col_indices, std::span<const float> weights,
+      std::span<const float> input, int steps, std::span<float> output) {
+    if (!ready_ || row_offsets.size() < 2 || steps <= 0) {
+      return false;
+    }
+
+    const size_t row_count = row_offsets.size() - 1;
+    if (input.size() != row_count || output.size() != row_count ||
+        col_indices.size() != weights.size()) {
+      return false;
+    }
+
+    if (steps == 1) {
+      return apply_markov_transition(cache_key, row_offsets, col_indices, weights,
+                                     input, output);
+    }
+
+    id<MTLBuffer> rows_buffer = nil;
+    id<MTLBuffer> cols_buffer = nil;
+    id<MTLBuffer> weights_buffer = nil;
+    if (!prepare_csr_buffers(cache_key, row_offsets, col_indices, weights,
+                             rows_buffer, cols_buffer, weights_buffer)) {
+      return false;
+    }
+
+    const size_t vector_bytes = row_count * sizeof(float);
+    id<MTLBuffer> buffer_a =
+        [device_ newBufferWithLength:vector_bytes
+                             options:MTLResourceStorageModeShared];
+    id<MTLBuffer> buffer_b =
+        [device_ newBufferWithLength:vector_bytes
+                             options:MTLResourceStorageModeShared];
+    if (buffer_a == nil || buffer_b == nil) {
+      return false;
+    }
+
+    std::memcpy([buffer_a contents], input.data(), vector_bytes);
+
+    id<MTLCommandBuffer> command_buffer = [queue_ commandBuffer];
+    if (command_buffer == nil) {
+      return false;
+    }
+
+    id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoder];
+    if (encoder == nil) {
+      return false;
+    }
+
+    const uint32_t row_count_u32 = static_cast<uint32_t>(row_count);
+    [encoder setComputePipelineState:matvec_pipeline_];
+    [encoder setBuffer:rows_buffer offset:0 atIndex:0];
+    [encoder setBuffer:cols_buffer offset:0 atIndex:1];
+    [encoder setBuffer:weights_buffer offset:0 atIndex:2];
+    [encoder setBytes:&row_count_u32 length:sizeof(row_count_u32) atIndex:5];
+
+    for (int step = 0; step < steps; ++step) {
+      const bool even_step = (step % 2) == 0;
+      id<MTLBuffer> src = even_step ? buffer_a : buffer_b;
+      id<MTLBuffer> dst = even_step ? buffer_b : buffer_a;
+      [encoder setBuffer:src offset:0 atIndex:3];
+      [encoder setBuffer:dst offset:0 atIndex:4];
+      dispatch_rows(encoder, matvec_pipeline_, row_count);
+    }
+    [encoder endEncoding];
+
+    [command_buffer commit];
+    [command_buffer waitUntilCompleted];
+    if ([command_buffer status] != MTLCommandBufferStatusCompleted) {
+      return false;
+    }
+
+    id<MTLBuffer> final_buffer = (steps % 2 == 0) ? buffer_a : buffer_b;
+    std::memcpy(output.data(), [final_buffer contents], vector_bytes);
+    return true;
+  }
+
   [[nodiscard]] bool carre_du_champ(const void *cache_key,
                                     std::span<const int> row_offsets,
                                     std::span<const int> col_indices,
@@ -368,6 +446,16 @@ bool apply_markov_transition(const void *cache_key,
                              std::span<float> output) {
   return MetalDiffusionRuntime::instance().apply_markov_transition(
       cache_key, row_offsets, col_indices, weights, input, output);
+}
+
+bool apply_markov_transition_steps(const void *cache_key,
+                                   std::span<const int> row_offsets,
+                                   std::span<const int> col_indices,
+                                   std::span<const float> weights,
+                                   std::span<const float> input, int steps,
+                                   std::span<float> output) {
+  return MetalDiffusionRuntime::instance().apply_markov_transition_steps(
+      cache_key, row_offsets, col_indices, weights, input, steps, output);
 }
 
 bool carre_du_champ(const void *cache_key, std::span<const int> row_offsets,

@@ -42,6 +42,11 @@ void invalidate_markov_cache(const void *cache_key);
                                            std::span<const float> input,
                                            std::span<float> output);
 
+[[nodiscard]] bool apply_markov_transition_steps(
+    const void *cache_key, std::span<const int> row_offsets,
+    std::span<const int> col_indices, std::span<const float> weights,
+    std::span<const float> input, int steps, std::span<float> output);
+
 [[nodiscard]] bool carre_du_champ(const void *cache_key,
                                   std::span<const int> row_offsets,
                                   std::span<const int> col_indices,

@@ -21,6 +21,11 @@ template <typename MeshT> struct GeometryWorkspace {
   Eigen::VectorXf gamma_tmp;
 };
 
+template <typename MeshT> struct DiffusionWorkspace {
+  Eigen::VectorXf ping;
+  Eigen::VectorXf pong;
+};
+
 template <typename MeshT>
 void fill_coordinate_vectors(const MeshT &mesh,
                              std::array<Eigen::VectorXf, 3> &coords) {
@@ -186,6 +191,75 @@ void apply_markov_transition(const MeshT &mesh,
   } else {
     output.noalias() = mesh.topology.P * input;
   }
+}
+
+template <typename MeshT>
+void apply_markov_transition_steps(const MeshT &mesh,
+                                   Eigen::Ref<const Eigen::VectorXf> input,
+                                   int steps,
+                                   Eigen::Ref<Eigen::VectorXf> output,
+                                   DiffusionWorkspace<MeshT> &workspace) {
+  const int expected_size = static_cast<int>(mesh.geometry.num_points());
+  assert(input.size() == expected_size);
+  assert(output.size() == expected_size);
+
+  if (steps <= 0) {
+    output = input;
+    return;
+  }
+
+  if constexpr (requires {
+                  mesh.topology.markov_row_offsets;
+                  mesh.topology.markov_col_indices;
+                  mesh.topology.markov_values;
+                }) {
+    const auto &row_offsets = mesh.topology.markov_row_offsets;
+    const auto &col_indices = mesh.topology.markov_col_indices;
+    const auto &weights = mesh.topology.markov_values;
+
+    assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
+    const bool use_gpu =
+        core::compute_backend_from_env() == core::ComputeBackend::Gpu &&
+        (core::gpu::gpu_force_enabled() || expected_size >= core::gpu::gpu_min_rows());
+    if (use_gpu) {
+      if (core::gpu::apply_markov_transition_steps(
+              static_cast<const void *>(&mesh.topology),
+              std::span<const int>(row_offsets.data(), row_offsets.size()),
+              std::span<const int>(col_indices.data(), col_indices.size()),
+              std::span<const float>(weights.data(), weights.size()),
+              std::span<const float>(input.data(), static_cast<size_t>(expected_size)),
+              steps,
+              std::span<float>(output.data(), static_cast<size_t>(expected_size)))) {
+        return;
+      }
+    }
+  }
+
+  if (steps == 1) {
+    apply_markov_transition(mesh, input, output);
+    return;
+  }
+
+  workspace.ping = input;
+  workspace.pong.resize(expected_size);
+
+  Eigen::VectorXf *src = &workspace.ping;
+  Eigen::VectorXf *dst = &workspace.pong;
+  for (int step = 0; step < steps; ++step) {
+    apply_markov_transition(mesh, *src, *dst);
+    std::swap(src, dst);
+  }
+
+  output = *src;
+}
+
+template <typename MeshT>
+void apply_markov_transition_steps(const MeshT &mesh,
+                                   Eigen::Ref<const Eigen::VectorXf> input,
+                                   int steps,
+                                   Eigen::Ref<Eigen::VectorXf> output) {
+  DiffusionWorkspace<MeshT> workspace;
+  apply_markov_transition_steps(mesh, input, steps, output, workspace);
 }
 
 template <typename MeshT>

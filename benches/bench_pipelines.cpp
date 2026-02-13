@@ -103,16 +103,14 @@ void bench_pipeline_diffusion_main(benchmark::State &state) {
   const int steps = static_cast<int>(state.range(0));
   Eigen::VectorXf u = Eigen::VectorXf::Zero(static_cast<int>(mesh.geometry.num_points()));
   Eigen::VectorXf u_next = Eigen::VectorXf::Zero(static_cast<int>(mesh.geometry.num_points()));
+  igneous::ops::DiffusionWorkspace<DiffusionMesh> diffusion_ws;
 
   for (auto _ : state) {
     build_diffusion_topology(mesh, kBandwidth, kNeighbors);
     u.setZero();
     u[max_y_idx] = 1000.0f;
-
-    for (int t = 0; t < steps; ++t) {
-      igneous::ops::apply_markov_transition(mesh, u, u_next);
-      u.swap(u_next);
-    }
+    igneous::ops::apply_markov_transition_steps(mesh, u, steps, u_next, diffusion_ws);
+    u.swap(u_next);
 
     benchmark::DoNotOptimize(u.data());
   }

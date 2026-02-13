@@ -73,3 +73,39 @@ TEST_CASE("Diffusion CSR markov step matches sparse matrix product") {
     CHECK(actual[i] == doctest::Approx(expected[i]).epsilon(1e-5f));
   }
 }
+
+TEST_CASE("Diffusion multi-step markov matches repeated single steps") {
+  using Sig = igneous::core::Euclidean3D;
+  using DiffusionMesh =
+      igneous::data::Mesh<Sig, igneous::data::DiffusionTopology>;
+
+  DiffusionMesh mesh;
+  mesh.geometry.reserve(24);
+  for (int i = 0; i < 24; ++i) {
+    const float t = static_cast<float>(i) / 24.0f;
+    mesh.geometry.push_point(
+        {std::cos(t * 6.283185f), std::sin(t * 6.283185f), 0.5f * t});
+  }
+
+  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
+                       mesh.geometry.z_span(), 0.05f, 8});
+
+  const int n = static_cast<int>(mesh.geometry.num_points());
+  Eigen::VectorXf u0 = Eigen::VectorXf::LinSpaced(n, -1.0f, 1.0f);
+
+  constexpr int kSteps = 7;
+  Eigen::VectorXf expected = u0;
+  Eigen::VectorXf tmp = Eigen::VectorXf::Zero(n);
+  for (int step = 0; step < kSteps; ++step) {
+    igneous::ops::apply_markov_transition(mesh, expected, tmp);
+    expected.swap(tmp);
+  }
+
+  Eigen::VectorXf actual = Eigen::VectorXf::Zero(n);
+  igneous::ops::DiffusionWorkspace<DiffusionMesh> ws;
+  igneous::ops::apply_markov_transition_steps(mesh, u0, kSteps, actual, ws);
+
+  for (int i = 0; i < n; ++i) {
+    CHECK(actual[i] == doctest::Approx(expected[i]).epsilon(1e-5f));
+  }
+}

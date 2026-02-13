@@ -145,6 +145,22 @@ static void bench_markov_step(benchmark::State &state) {
   }
 }
 
+static void bench_markov_multi_step(benchmark::State &state) {
+  const size_t n_points = static_cast<size_t>(state.range(0));
+  const int steps = static_cast<int>(state.range(1));
+  DiffusionMesh mesh = make_diffusion_cloud(n_points);
+  Eigen::VectorXf u = Eigen::VectorXf::Ones(static_cast<int>(mesh.geometry.num_points()));
+  Eigen::VectorXf u_next =
+      Eigen::VectorXf::Zero(static_cast<int>(mesh.geometry.num_points()));
+  igneous::ops::DiffusionWorkspace<DiffusionMesh> ws;
+
+  for (auto _ : state) {
+    igneous::ops::apply_markov_transition_steps(mesh, u, steps, u_next, ws);
+    u.swap(u_next);
+    benchmark::DoNotOptimize(u.data());
+  }
+}
+
 static void bench_eigenbasis(benchmark::State &state) {
   DiffusionMesh mesh = make_diffusion_cloud(static_cast<size_t>(state.range(0)));
   const int basis = static_cast<int>(state.range(1));
@@ -212,6 +228,7 @@ BENCHMARK(bench_curvature_kernel)->Arg(400);
 BENCHMARK(bench_flow_kernel)->Arg(400);
 BENCHMARK(bench_diffusion_build)->Arg(2000);
 BENCHMARK(bench_markov_step)->Arg(2000);
+BENCHMARK(bench_markov_multi_step)->Args({2000, 20})->Args({20000, 20});
 BENCHMARK(bench_eigenbasis)->Args({2000, 16});
 BENCHMARK(bench_1form_gram)->Args({2000, 16});
 BENCHMARK(bench_weak_derivative)->Args({2000, 16});
