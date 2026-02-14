@@ -389,43 +389,6 @@ static void write_circular_modes_csv(const std::string &filename,
        << "," << eval_1.imag() << "\n";
 }
 
-static void write_matrix_csv(const std::string &filename,
-                             const Eigen::MatrixXf &matrix) {
-  std::ofstream file(filename);
-  file << "row";
-  for (int j = 0; j < matrix.cols(); ++j) {
-    file << ",c" << j;
-  }
-  file << "\n";
-
-  for (int i = 0; i < matrix.rows(); ++i) {
-    file << i;
-    for (int j = 0; j < matrix.cols(); ++j) {
-      file << "," << matrix(i, j);
-    }
-    file << "\n";
-  }
-}
-
-static void write_complex_evals_csv(
-    const std::string &filename, const Eigen::VectorXcf &evals,
-    const std::vector<int> &positive_imag_indices) {
-  std::vector<int> is_positive(static_cast<size_t>(evals.size()), 0);
-  for (int idx : positive_imag_indices) {
-    if (idx >= 0 && idx < evals.size()) {
-      is_positive[static_cast<size_t>(idx)] = 1;
-    }
-  }
-
-  std::ofstream file(filename);
-  file << "index,real,imag,abs,positive_imag\n";
-  for (int i = 0; i < evals.size(); ++i) {
-    const auto v = evals[i];
-    file << i << "," << v.real() << "," << v.imag() << "," << std::abs(v) << ","
-         << is_positive[static_cast<size_t>(i)] << "\n";
-  }
-}
-
 int main(int argc, char **argv) {
   Config cfg;
   if (!parse_args(argc, argv, cfg)) {
@@ -482,14 +445,12 @@ int main(int argc, char **argv) {
 
   std::complex<float> selected_eval_0(0.0f, 0.0f);
   std::complex<float> selected_eval_1(0.0f, 0.0f);
-  ops::CircularOperatorDiagnostics<DiffusionMesh> circular_diag_0;
-  ops::CircularOperatorDiagnostics<DiffusionMesh> circular_diag_1;
   const auto theta_0 = ops::compute_circular_coordinates(
       mesh, evecs.col(0), 0.0f, cfg.circular_lambda, cfg.circular_mode_0,
-      &selected_eval_0, &circular_diag_0);
+      &selected_eval_0);
   const auto theta_1 = ops::compute_circular_coordinates(
       mesh, evecs.col(1), 0.0f, cfg.circular_lambda, cfg.circular_mode_1,
-      &selected_eval_1, &circular_diag_1);
+      &selected_eval_1);
 
   std::cout << "HODGE SPECTRUM (first 12 modes)\n";
   for (int i = 0; i < 12 && i < evals.size(); ++i) {
@@ -509,28 +470,6 @@ int main(int argc, char **argv) {
   write_circular_modes_csv(cfg.output_dir + "/circular_modes.csv", selected_eval_0,
                            selected_eval_1, cfg.circular_mode_0,
                            cfg.circular_mode_1, cfg.circular_lambda);
-  write_matrix_csv(cfg.output_dir + "/function_gram.csv",
-                   circular_diag_0.function_gram);
-  write_matrix_csv(cfg.output_dir + "/laplacian0_weak.csv",
-                   circular_diag_0.laplacian0_weak);
-  write_matrix_csv(cfg.output_dir + "/circular_operator_form0_x_weak.csv",
-                   circular_diag_0.x_weak);
-  write_matrix_csv(cfg.output_dir + "/circular_operator_form1_x_weak.csv",
-                   circular_diag_1.x_weak);
-  write_matrix_csv(cfg.output_dir + "/circular_operator_form0_operator_weak.csv",
-                   circular_diag_0.x_weak -
-                       (cfg.circular_lambda * circular_diag_0.laplacian0_weak));
-  write_matrix_csv(cfg.output_dir + "/circular_operator_form1_operator_weak.csv",
-                   circular_diag_1.x_weak -
-                       (cfg.circular_lambda * circular_diag_1.laplacian0_weak));
-  write_complex_evals_csv(cfg.output_dir + "/circular_operator_form0_evals.csv",
-                          circular_diag_0.sorted_evals,
-                          circular_diag_0.positive_imag_indices);
-  write_complex_evals_csv(cfg.output_dir + "/circular_operator_form1_evals.csv",
-                          circular_diag_1.sorted_evals,
-                          circular_diag_1.positive_imag_indices);
-  write_matrix_csv(cfg.output_dir + "/function_basis.csv",
-                   mesh.topology.eigen_basis);
 
   if (export_ply) {
     std::vector<float> field_0(static_cast<size_t>(theta_0.size()));

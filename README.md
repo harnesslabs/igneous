@@ -46,6 +46,30 @@ cmake --build build -j8
 ./build/igneous-hodge
 ```
 
+## Reference Implementation
+
+The diffusion/Hodge parity work in this repository is aligned against the Python
+reference implementation:
+
+- [DiffusionGeometry](https://github.com/Iolo-Jones/DiffusionGeometry)
+
+## Hodge Parity Workflow
+
+Standard parity round:
+
+```bash
+./scripts/hodge/run_parity_round.sh
+```
+
+Optional diagnostic plots for a parity round:
+
+```bash
+ROUND_DIR="$(ls -1dt notes/hodge/results/round_* | head -n1)"
+notes/hodge/.venv_ref/bin/python \
+  ./scripts/hodge/diagnostics/plot_hodge_outputs.py \
+  --round-dir "${ROUND_DIR}"
+```
+
 Set `IGNEOUS_BENCH_MODE=1` to disable heavy export paths in runtime apps.
 
 Runtime backend controls:
@@ -74,6 +98,8 @@ Current suites:
 - `test_ops_spectral_geometry`
 - `test_ops_hodge`
 - `test_io_meshes`
+- `test_hodge_cli_outputs`
+- `test_hodge_parity_optional` (skips unless `DiffusionGeometry/` is available, unless forced)
 
 ## Benchmarks
 

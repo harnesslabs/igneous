@@ -120,6 +120,11 @@ def main() -> None:
     parser.add_argument("--circular-lambda", type=float, default=1.0)
     parser.add_argument("--form-indices", default="0,1")
     parser.add_argument("--mode-indices", default="0,1")
+    parser.add_argument(
+        "--emit-operator-debug",
+        action="store_true",
+        help="Emit operator-level debug artifacts for diagnostics",
+    )
     args = parser.parse_args()
 
     out_dir = pathlib.Path(args.output_dir)
@@ -165,10 +170,12 @@ def main() -> None:
     harmonic_ambient = []
     circular_thetas = []
     circular_meta = []
-    laplacian0_weak = np.asarray(dg.laplacian(0).weak)
-    function_gram = np.asarray(dg.function_space.gram)
-    write_matrix_csv(out_dir / "reference_function_gram.csv", function_gram)
-    write_matrix_csv(out_dir / "reference_laplacian0_weak.csv", laplacian0_weak)
+    laplacian0_weak = None
+    if args.emit_operator_debug:
+        laplacian0_weak = np.asarray(dg.laplacian(0).weak)
+        function_gram = np.asarray(dg.function_space.gram)
+        write_matrix_csv(out_dir / "reference_function_gram.csv", function_gram)
+        write_matrix_csv(out_dir / "reference_laplacian0_weak.csv", laplacian0_weak)
 
     for idx, form_idx in enumerate(form_indices):
         form = forms_1[form_idx]
@@ -192,23 +199,27 @@ def main() -> None:
             }
         )
 
-        x_weak = np.asarray(form.sharp().operator.weak)
-        operator_weak = x_weak - args.circular_lambda * laplacian0_weak
-        write_matrix_csv(out_dir / f"reference_circular_operator_form{idx}_x_weak.csv", x_weak)
-        write_matrix_csv(
-            out_dir / f"reference_circular_operator_form{idx}_operator_weak.csv",
-            operator_weak,
-        )
-        write_complex_evals_csv(
-            out_dir / f"reference_circular_operator_form{idx}_evals.csv", evals
-        )
+        if args.emit_operator_debug:
+            x_weak = np.asarray(form.sharp().operator.weak)
+            operator_weak = x_weak - args.circular_lambda * laplacian0_weak
+            write_matrix_csv(
+                out_dir / f"reference_circular_operator_form{idx}_x_weak.csv", x_weak
+            )
+            write_matrix_csv(
+                out_dir / f"reference_circular_operator_form{idx}_operator_weak.csv",
+                operator_weak,
+            )
+            write_complex_evals_csv(
+                out_dir / f"reference_circular_operator_form{idx}_evals.csv", evals
+            )
 
     write_table(
         out_dir / "reference_points.csv",
         ["x", "y", "z"],
         points,
     )
-    write_matrix_csv(out_dir / "reference_function_basis.csv", function_basis)
+    if args.emit_operator_debug:
+        write_matrix_csv(out_dir / "reference_function_basis.csv", function_basis)
 
     spectrum_rows = np.column_stack([np.arange(vals_1.shape[0]), np.asarray(vals_1, dtype=float)])
     write_table(
