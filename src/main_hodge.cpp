@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <random>
 #include <tuple>
@@ -112,6 +113,58 @@ compute_scalar_stats(const Eigen::VectorXf &values) {
   return {min_v, max_v, stddev};
 }
 
+static void write_metrics_json(
+    const std::string &filename, const Eigen::VectorXf &evals,
+    const std::tuple<float, float, float> &theta0_stats,
+    const std::tuple<float, float, float> &theta1_stats,
+    const data::SpectralSolveDiagnostics &diag) {
+  std::ofstream file(filename);
+  if (!file.is_open()) {
+    return;
+  }
+
+  file << std::fixed << std::setprecision(8);
+  file << "{\n";
+  file << "  \"spectral\": {\n";
+  file << "    \"requested_mode\": \"" << ops::to_string(diag.requested_mode)
+       << "\",\n";
+  file << "    \"used_mode\": \"" << ops::to_string(diag.used_mode) << "\",\n";
+  file << "    \"reversibility_pass\": "
+       << (diag.reversibility_pass ? "true" : "false") << ",\n";
+  file << "    \"detailed_balance_mean\": " << diag.detailed_balance_mean
+       << ",\n";
+  file << "    \"detailed_balance_max\": " << diag.detailed_balance_max << ",\n";
+  file << "    \"transformed_asymmetry_mean\": "
+       << diag.transformed_asymmetry_mean << ",\n";
+  file << "    \"transformed_asymmetry_max\": "
+       << diag.transformed_asymmetry_max << ",\n";
+  file << "    \"nconv\": " << diag.nconv << "\n";
+  file << "  },\n";
+
+  file << "  \"hodge_spectrum_first12\": [";
+  for (int i = 0; i < 12 && i < evals.size(); ++i) {
+    if (i > 0) {
+      file << ", ";
+    }
+    file << evals[i];
+  }
+  file << "],\n";
+
+  const auto [theta0_min, theta0_max, theta0_std] = theta0_stats;
+  const auto [theta1_min, theta1_max, theta1_std] = theta1_stats;
+  file << "  \"theta_0\": {\n";
+  file << "    \"min\": " << theta0_min << ",\n";
+  file << "    \"max\": " << theta0_max << ",\n";
+  file << "    \"std\": " << theta0_std << "\n";
+  file << "  },\n";
+  file << "  \"theta_1\": {\n";
+  file << "    \"min\": " << theta1_min << ",\n";
+  file << "    \"max\": " << theta1_max << ",\n";
+  file << "    \"std\": " << theta1_std << "\n";
+  file << "  }\n";
+  file << "}\n";
+}
+
 int main() {
   const bool bench_mode = std::getenv("IGNEOUS_BENCH_MODE") != nullptr;
   if (!bench_mode) {
@@ -181,6 +234,11 @@ int main() {
             << theta1_max << "], std=" << theta1_std << "\n";
 
   if (!bench_mode) {
+    write_metrics_json(
+        "output_hodge/hodge_metrics.json", evals,
+        {theta0_min, theta0_max, theta0_std},
+        {theta1_min, theta1_max, theta1_std}, mesh.topology.spectral_diagnostics);
+
     for (int i = 0; i < 3; ++i) {
       const Eigen::VectorXf coeffs = evecs.col(i);
       const auto vector_field = reconstruct_vector_field(mesh, coeffs, bandwidth);
