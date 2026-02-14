@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include <array>
@@ -32,6 +33,20 @@ struct CircularCoordinateOptions {
   float min_eigen_magnitude = 1e-6f;
   float min_imaginary_norm = 1e-4f;
   bool allow_real_fallback = true;
+};
+
+struct HodgeDecomposition1Options {
+  float harmonic_eigenvalue_tol = 1e-4f;
+  float tikhonov = 1e-6f;
+  bool include_smallest_mode_when_empty = true;
+};
+
+struct HodgeDecomposition1Result {
+  Eigen::VectorXf exact_component;
+  Eigen::VectorXf harmonic_component;
+  Eigen::VectorXf coexact_component;
+  Eigen::VectorXf exact_potential;
+  Eigen::VectorXf hodge_eigenvalues;
 };
 
 template <typename MeshT>
@@ -303,6 +318,80 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
   CircularCoordinateOptions options;
   options.epsilon = epsilon;
   return compute_circular_coordinates(mesh, alpha_coeffs, bandwidth, options);
+}
+
+template <typename MeshT>
+HodgeDecomposition1Result compute_hodge_decomposition_1form(
+    const MeshT &mesh, const Eigen::VectorXf &alpha_coeffs, float bandwidth,
+    const HodgeDecomposition1Options &options = {}) {
+  HodgeDecomposition1Result result;
+
+  const int n0 = mesh.topology.eigen_basis.cols();
+  const int n_basis = n0 * 3;
+  if (n0 <= 0 || alpha_coeffs.size() != n_basis) {
+    result.exact_component = Eigen::VectorXf::Zero(n_basis);
+    result.harmonic_component = Eigen::VectorXf::Zero(n_basis);
+    result.coexact_component = Eigen::VectorXf::Zero(n_basis);
+    result.exact_potential = Eigen::VectorXf::Zero(n0);
+    result.hodge_eigenvalues.resize(0);
+    return result;
+  }
+
+  GeometryWorkspace<MeshT> geometry_workspace;
+  const Eigen::MatrixXf G =
+      compute_1form_gram_matrix(mesh, bandwidth, geometry_workspace);
+
+  HodgeWorkspace<MeshT> hodge_workspace;
+  const Eigen::MatrixXf D =
+      compute_weak_exterior_derivative(mesh, bandwidth, hodge_workspace);
+  const Eigen::MatrixXf E =
+      compute_curl_energy_matrix(mesh, bandwidth, hodge_workspace);
+  const Eigen::MatrixXf L = compute_hodge_laplacian_matrix(D, E);
+
+  const Eigen::MatrixXf GD = G * D;
+  Eigen::MatrixXf normal_matrix = D.transpose() * GD;
+  normal_matrix.diagonal().array() += std::max(options.tikhonov, 0.0f);
+
+  const Eigen::VectorXf rhs = D.transpose() * (G * alpha_coeffs);
+  const Eigen::LDLT<Eigen::MatrixXf> exact_solver(normal_matrix);
+
+  result.exact_potential = exact_solver.solve(rhs);
+  if (exact_solver.info() != Eigen::Success) {
+    result.exact_potential = Eigen::VectorXf::Zero(n0);
+  }
+  result.exact_component = D * result.exact_potential;
+
+  const Eigen::VectorXf residual = alpha_coeffs - result.exact_component;
+  auto [evals, evecs] = compute_hodge_spectrum(L, G);
+  result.hodge_eigenvalues = evals;
+
+  std::vector<int> harmonic_indices;
+  harmonic_indices.reserve(static_cast<size_t>(evals.size()));
+  for (int i = 0; i < evals.size(); ++i) {
+    if (evals[i] <= options.harmonic_eigenvalue_tol) {
+      harmonic_indices.push_back(i);
+    } else {
+      break;
+    }
+  }
+  if (harmonic_indices.empty() && options.include_smallest_mode_when_empty &&
+      evals.size() > 0) {
+    harmonic_indices.push_back(0);
+  }
+
+  result.harmonic_component = Eigen::VectorXf::Zero(n_basis);
+  if (!harmonic_indices.empty()) {
+    const Eigen::VectorXf G_residual = G * residual;
+    for (int idx : harmonic_indices) {
+      const Eigen::VectorXf basis = evecs.col(idx);
+      const float coeff = basis.dot(G_residual);
+      result.harmonic_component.noalias() += coeff * basis;
+    }
+  }
+
+  result.coexact_component =
+      alpha_coeffs - result.exact_component - result.harmonic_component;
+  return result;
 }
 
 } // namespace igneous::ops

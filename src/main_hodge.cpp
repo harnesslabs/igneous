@@ -187,6 +187,24 @@ int main() {
       const std::string fname = std::format("output_hodge/harmonic_form_{}.ply", i);
       export_vector_field(fname, mesh, vector_field);
     }
+
+    const auto decomposition =
+        ops::compute_hodge_decomposition_1form(mesh, evecs.col(0), bandwidth);
+    std::cout << "[Hodge] Decomposition norms: exact="
+              << decomposition.exact_component.norm()
+              << ", harmonic=" << decomposition.harmonic_component.norm()
+              << ", coexact=" << decomposition.coexact_component.norm() << "\n";
+
+    const auto exact_field =
+        reconstruct_vector_field(mesh, decomposition.exact_component, bandwidth);
+    const auto harmonic_field =
+        reconstruct_vector_field(mesh, decomposition.harmonic_component, bandwidth);
+    const auto coexact_field =
+        reconstruct_vector_field(mesh, decomposition.coexact_component, bandwidth);
+
+    export_vector_field("output_hodge/decomp_exact.ply", mesh, exact_field);
+    export_vector_field("output_hodge/decomp_harmonic.ply", mesh, harmonic_field);
+    export_vector_field("output_hodge/decomp_coexact.ply", mesh, coexact_field);
   }
 
   return 0;

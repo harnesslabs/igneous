@@ -99,3 +99,29 @@ Use one entry per hypothesis or implementation batch.
 - Decision: `kept`
 - Notes:
   - Raw unscaled `epsilon * Delta` over-regularized this discretization and collapsed angular spread; retained Laplacian regularization with explicit scale parameter to preserve paper-aligned structure and practical stability.
+
+## 2026-02-14 1-Form Hodge Decomposition API
+- Timestamp: 2026-02-14T00:00:00Z
+- Commit: working tree after circular-coordinate update
+- Hypothesis: Introduce an additive decomposition API for 1-forms (exact/harmonic/coexact) using Gram-aware projection and harmonic-mode extraction.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp`
+  - `src/main_hodge.cpp`
+- Commands:
+  - `cmake --build build -j8`
+  - `./build/igneous-hodge`
+  - `ctest --test-dir build --output-on-failure`
+- Baseline:
+  - No direct API existed for 1-form decomposition.
+- Results:
+  - Added `HodgeDecomposition1Options`, `HodgeDecomposition1Result`, and `compute_hodge_decomposition_1form(...)`.
+  - Added non-bench demo export path for decomposition-derived vector fields in `main_hodge`.
+  - Large torus demo now reports decomposition norms:
+    - `exact = 1.56617e-05`
+    - `harmonic = 172.495`
+    - `coexact = 0.000150313`
+- Numeric checks:
+  - `ctest`: pass (`7/7`)
+- Decision: `kept`
+- Notes:
+  - Decomposition currently uses a stable regularized normal equation for exact projection and low-eigenvalue projection for the harmonic component.
