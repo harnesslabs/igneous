@@ -183,3 +183,26 @@ Use one entry per hypothesis or implementation batch.
 - Decision: `kept`
 - Notes:
   - Runtime impact is minimal and within balanced CI budget.
+
+## 2026-02-14 Spectral + Hodge Regression Guards
+- Timestamp: 2026-02-14T00:00:00Z
+- Commit: working tree after foundational operator tests
+- Hypothesis: Add medium-size spectral/Hodge regression tests to prevent recurrence of large-graph harmonic-mode and circular-coordinate failures.
+- Files touched:
+  - `tests/test_ops_spectral_regression.cpp`
+  - `tests/test_ops_hodge_regression.cpp`
+  - `CMakeLists.txt`
+- Commands:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+- Baseline:
+  - No automated guard for the large-torus `lambda_0 ~ 1e-2` regression path.
+- Results:
+  - Added solver-path and eigen-residual checks in spectral regression test.
+  - Added canonical torus Hodge regression with near-zero low-mode envelope and circular dynamic-range checks.
+  - Test count increased from `9` to `11`.
+- Numeric checks:
+  - `ctest`: pass (`11/11`)
+- Decision: `kept`
+- Notes:
+  - This suite now fails on the previously observed spectral/Hodge regression and passes on the corrected implementation.
