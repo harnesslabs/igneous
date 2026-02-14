@@ -280,6 +280,9 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh, int k,
   return compute_weak_exterior_derivative(mesh, k, n_coefficients, workspace);
 }
 
+inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf &matrix,
+                                                float rcond);
+
 template <typename MeshT>
 Eigen::MatrixXf compute_codifferential_matrix(
     const MeshT &mesh, int k, int n_coefficients,
@@ -289,7 +292,11 @@ Eigen::MatrixXf compute_codifferential_matrix(
   }
   const Eigen::MatrixXf D_prev =
       compute_weak_exterior_derivative(mesh, k - 1, n_coefficients, workspace);
-  return D_prev.transpose();
+  const Eigen::MatrixXf G_prev =
+      compute_kform_gram_matrix(mesh, k - 1, n_coefficients, workspace);
+  const Eigen::MatrixXf G_prev_inv =
+      pseudo_inverse_symmetric(G_prev, 1e-5f);
+  return G_prev_inv * D_prev.transpose();
 }
 
 template <typename MeshT>
@@ -319,6 +326,32 @@ inline Eigen::Vector2f solve_stable_2x2(const Eigen::Matrix2f &A,
     }
   }
   return svd.matrixV() * inv_s.asDiagonal() * svd.matrixU().transpose() * b;
+}
+
+inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf &matrix,
+                                                float rcond = 1e-5f) {
+  if (matrix.rows() == 0 || matrix.cols() == 0) {
+    return Eigen::MatrixXf(matrix.cols(), matrix.rows());
+  }
+
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> solver(matrix);
+  if (solver.info() != Eigen::Success) {
+    return Eigen::MatrixXf::Zero(matrix.cols(), matrix.rows());
+  }
+
+  const auto &evals = solver.eigenvalues();
+  const auto &evecs = solver.eigenvectors();
+  Eigen::VectorXf inv = Eigen::VectorXf::Zero(evals.size());
+
+  const float max_eval = evals.size() > 0 ? evals.cwiseAbs().maxCoeff() : 0.0f;
+  const float tol = std::max(rcond * max_eval, rcond);
+  for (int i = 0; i < evals.size(); ++i) {
+    if (evals[i] > tol) {
+      inv[i] = 1.0f / evals[i];
+    }
+  }
+
+  return evecs * inv.asDiagonal() * evecs.transpose();
 }
 
 template <typename MeshT>
@@ -430,7 +463,11 @@ Eigen::MatrixXf compute_down_laplacian_matrix(
 
   const Eigen::MatrixXf D_prev =
       compute_weak_exterior_derivative(mesh, k - 1, n_coefficients, workspace);
-  return D_prev * D_prev.transpose();
+  const Eigen::MatrixXf G_prev =
+      compute_kform_gram_matrix(mesh, k - 1, n_coefficients, workspace);
+  const Eigen::MatrixXf G_prev_inv =
+      pseudo_inverse_symmetric(G_prev, 1e-5f);
+  return D_prev * G_prev_inv * D_prev.transpose();
 }
 
 template <typename MeshT>

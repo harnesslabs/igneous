@@ -361,6 +361,43 @@ static std::vector<core::Vec3> reconstruct_1form_ambient(
   return field;
 }
 
+static std::vector<core::Vec3> reconstruct_2form_dual_ambient(
+    const DiffusionMesh &mesh, const Eigen::VectorXf &coeffs, int n_coefficients,
+    const std::array<std::array<Eigen::VectorXf, 3>, 3> &gamma_data_immersion) {
+  const Eigen::MatrixXf pointwise =
+      ops::coefficients_to_pointwise(mesh, coeffs, 2, n_coefficients);
+  std::vector<core::Vec3> field(mesh.geometry.num_points(), {0.0f, 0.0f, 0.0f});
+  if (pointwise.rows() == 0 || pointwise.cols() < 3) {
+    return field;
+  }
+
+  for (size_t i = 0; i < mesh.geometry.num_points(); ++i) {
+    const int p = static_cast<int>(i);
+    const float w01 = pointwise(p, 0);
+    const float w02 = pointwise(p, 1);
+    const float w12 = pointwise(p, 2);
+
+    Eigen::Matrix3f W = Eigen::Matrix3f::Zero();
+    W(0, 1) = w01;
+    W(1, 0) = -w01;
+    W(0, 2) = w02;
+    W(2, 0) = -w02;
+    W(1, 2) = w12;
+    W(2, 1) = -w12;
+
+    Eigen::Matrix3f G = Eigen::Matrix3f::Zero();
+    for (int a = 0; a < 3; ++a) {
+      for (int b = 0; b < 3; ++b) {
+        G(a, b) = gamma_data_immersion[a][b][p];
+      }
+    }
+
+    const Eigen::Matrix3f ambient = G * W * G.transpose();
+    field[i] = {ambient(1, 2), -ambient(0, 2), ambient(0, 1)};
+  }
+  return field;
+}
+
 static Eigen::VectorXf pad_1form_coeffs(const Eigen::VectorXf &coeffs, int n_basis,
                                         int n_coefficients) {
   Eigen::VectorXf padded = Eigen::VectorXf::Zero(n_basis * 3);
@@ -410,8 +447,8 @@ int main(int argc, char **argv) {
 
   // 1-forms
   const Eigen::MatrixXf G1 = ops::compute_kform_gram_matrix(mesh, 1, n_coeff, forms_ws);
-  const Eigen::MatrixXf D0 = ops::compute_weak_exterior_derivative(mesh, 0, n_coeff, forms_ws);
-  const Eigen::MatrixXf down1 = D0 * D0.transpose();
+  const Eigen::MatrixXf down1 =
+      ops::compute_down_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
   const Eigen::MatrixXf up1 = ops::compute_up_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
   const Eigen::MatrixXf L1 = ops::assemble_hodge_laplacian_matrix(up1, down1);
   auto [evals1, evecs1] = ops::compute_form_spectrum(L1, G1);
@@ -453,8 +490,8 @@ int main(int argc, char **argv) {
 
   // 2-forms
   const Eigen::MatrixXf G2 = ops::compute_kform_gram_matrix(mesh, 2, n_coeff, forms_ws);
-  const Eigen::MatrixXf D1 = ops::compute_weak_exterior_derivative(mesh, 1, n_coeff, forms_ws);
-  const Eigen::MatrixXf down2 = D1 * D1.transpose();
+  const Eigen::MatrixXf down2 =
+      ops::compute_down_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
   const Eigen::MatrixXf up2 = ops::compute_up_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
   const Eigen::MatrixXf L2 = ops::assemble_hodge_laplacian_matrix(up2, down2);
   auto [evals2, evecs2] = ops::compute_form_spectrum(L2, G2);
@@ -475,25 +512,24 @@ int main(int argc, char **argv) {
   std::vector<std::vector<core::Vec3>> harmonic2_fields;
   std::vector<std::string> harmonic2_labels;
   for (int c = 0; c < harmonic2_coeffs.cols(); ++c) {
-    const Eigen::MatrixXf pw =
-        ops::coefficients_to_pointwise(mesh, harmonic2_coeffs.col(c), 2, n_coeff);
-    harmonic2_fields.push_back(ops::pointwise_2form_to_dual_vectors(pw));
+    harmonic2_fields.push_back(reconstruct_2form_dual_ambient(
+        mesh, harmonic2_coeffs.col(c), n_coeff, gamma_data_immersion));
     harmonic2_labels.push_back("form" + std::to_string(c));
   }
 
   // wedge(h1_0, h1_1)
   Eigen::VectorXf wedge_coeffs;
-  if (harmonic1_coeffs.cols() >= 2) {
+  if (harmonic1_coeffs.cols() >= 1) {
+    const int rhs_col = harmonic1_coeffs.cols() >= 2 ? 1 : 0;
     wedge_coeffs = ops::compute_wedge_product_coeffs(
-        mesh, harmonic1_coeffs.col(0), 1, harmonic1_coeffs.col(1), 1, n_coeff,
+        mesh, harmonic1_coeffs.col(0), 1, harmonic1_coeffs.col(rhs_col), 1, n_coeff,
         forms_ws);
   } else {
     wedge_coeffs = Eigen::VectorXf::Zero(n_coeff * 3);
   }
 
-  const Eigen::MatrixXf wedge_pw =
-      ops::coefficients_to_pointwise(mesh, wedge_coeffs, 2, n_coeff);
-  const auto wedge_field = ops::pointwise_2form_to_dual_vectors(wedge_pw);
+  const auto wedge_field = reconstruct_2form_dual_ambient(
+      mesh, wedge_coeffs, n_coeff, gamma_data_immersion);
 
   write_points_csv(cfg.output_dir + "/points.csv", mesh);
   write_spectrum_csv(cfg.output_dir + "/form1_spectrum.csv", evals1);
