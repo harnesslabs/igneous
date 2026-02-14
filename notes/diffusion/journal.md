@@ -206,3 +206,27 @@ Use one entry per hypothesis or implementation batch.
 - Decision: `kept`
 - Notes:
   - This suite now fails on the previously observed spectral/Hodge regression and passes on the corrected implementation.
+
+## 2026-02-14 Hodge Decomposition Regression Tests
+- Timestamp: 2026-02-14T00:00:00Z
+- Commit: working tree after spectral/hodge regression guards
+- Hypothesis: Add decomposition-specific regression checks to guarantee reconstruction and Gram-orthogonality properties.
+- Files touched:
+  - `tests/test_ops_hodge_decomposition.cpp`
+  - `CMakeLists.txt`
+- Commands:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+- Baseline:
+  - No decomposition-specific mathematical regression test coverage.
+- Results:
+  - Added decomposition test checking:
+    - reconstruction error
+    - pairwise near-orthogonality under Gram metric
+    - low harmonic energy for projected harmonic component
+  - Test count increased from `11` to `12`.
+- Numeric checks:
+  - `ctest`: pass (`12/12`)
+- Decision: `kept`
+- Notes:
+  - This closes the Wave 1 decomposition validation loop.

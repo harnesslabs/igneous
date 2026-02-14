@@ -61,6 +61,7 @@ add_igneous_test(test_ops_spectral_geometry tests/test_ops_spectral_geometry.cpp
 add_igneous_test(test_ops_spectral_regression tests/test_ops_spectral_regression.cpp)
 add_igneous_test(test_ops_hodge tests/test_ops_hodge.cpp)
 add_igneous_test(test_ops_hodge_regression tests/test_ops_hodge_regression.cpp)
+add_igneous_test(test_ops_hodge_decomposition tests/test_ops_hodge_decomposition.cpp)
 add_igneous_test(test_io_meshes tests/test_io_meshes.cpp)
 
 add_executable(bench_memory benches/bench_memory.cpp)
