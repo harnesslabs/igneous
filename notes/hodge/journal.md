@@ -184,3 +184,55 @@ Use one entry per parity hypothesis.
 - Notes:
   - Improvement is deterministic across repeated rounds with identical metrics.
   - Final gates are not yet fully met; remaining blocker is harmonic-form error above target thresholds.
+
+## 2026-02-14 Hypothesis A4: Down-Laplacian Composition via Function Gram Inverse
+- Timestamp: 2026-02-14T17:02:39Z
+- Commit: `53d53c0` + working tree (uncommitted)
+- Hypothesis: Replacing `L_down = D D^T` with `L_down = D G0^{+} D^T` (spectral pseudo-inverse of function Gram) should match reference operator composition and reduce harmonic mismatch.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp`
+  - `src/main_hodge.cpp`
+  - `tests/test_ops_hodge.cpp`
+  - `benches/bench_pipelines.cpp`
+  - `benches/bench_dod.cpp`
+- Commands:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+  - `PREVIOUS_REPORT_JSON=notes/hodge/results/round_20260214-165639/report/parity_report.json scripts/hodge/run_parity_round.sh`
+- Numeric parity deltas:
+  - Baseline report: `notes/hodge/results/round_20260214-165639/report/parity_report.json`
+  - Report: `notes/hodge/results/round_20260214-170227/report/parity_report.json`
+  - Composite: `0.135324` (`+215.03%` regression)
+  - Harmonic subspace max principal angle: `4.298795 deg` (no meaningful change)
+  - Harmonic Procrustes error: `0.066738` (no meaningful change)
+  - Circular correlation min: `0.711944` (major regression)
+  - Circular wrapped P95 max: `1.541583 rad` (major regression)
+- Decision: `rejected`
+- Notes:
+  - Change severely degraded circular parity while not improving harmonic parity.
+  - Patch discarded and reverted.
+
+## 2026-02-14 Hypothesis A5: Full-NCV Symmetric Eigensolve
+- Timestamp: 2026-02-14T17:06:35Z
+- Commit: `53d53c0` + working tree (uncommitted)
+- Hypothesis: Disabling the compact symmetric eigensolver path (`ncv = k + 16`) and always using full `ncv` parity settings should reduce harmonic mismatch.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp` (reverted)
+- Commands:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+  - `PREVIOUS_REPORT_JSON=notes/hodge/results/round_20260214-165639/report/parity_report.json scripts/hodge/run_parity_round.sh`
+  - Circular mode sweep over `(mode_0, mode_1) in [0..4]x[0..4]` using `scripts/hodge/run_cpp_hodge.sh` + `scripts/hodge/compare_hodge_outputs.py`
+- Numeric parity deltas:
+  - Baseline report: `notes/hodge/results/round_20260214-165639/report/parity_report.json`
+  - Report: `notes/hodge/results/round_20260214-170501/report/parity_report.json`
+  - Composite: `0.135310` (`+215.00%` regression)
+  - Harmonic subspace max principal angle: `4.297332 deg` (minor change)
+  - Harmonic Procrustes error: `0.066720` (minor change)
+  - Circular correlation min: `0.711942` (major regression)
+  - Circular wrapped P95 max: `1.541530 rad` (major regression)
+  - Best mode pair after sweep remained `(0,0)`; no mode remapping recovered baseline parity.
+- Decision: `rejected`
+- Notes:
+  - Regression is intrinsic to the full-`ncv` patch under this pipeline and not a mode-index artifact.
+  - Patch discarded and reverted.
