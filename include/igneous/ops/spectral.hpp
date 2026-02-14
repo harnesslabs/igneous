@@ -162,6 +162,61 @@ private:
   int n_ = 0;
 };
 
+class NormalizedSymmetricKernelCsrMatProd {
+public:
+  using Scalar = float;
+
+  NormalizedSymmetricKernelCsrMatProd(const std::vector<int> &row_offsets,
+                                      const std::vector<int> &col_indices,
+                                      const std::vector<float> &values,
+                                      const Eigen::VectorXf &inv_sqrt_rows,
+                                      int n)
+      : row_offsets_(row_offsets), col_indices_(col_indices), values_(values),
+        inv_sqrt_rows_(inv_sqrt_rows), n_(n) {}
+
+  [[nodiscard]] int rows() const { return n_; }
+  [[nodiscard]] int cols() const { return n_; }
+
+  void perform_op(const Scalar *x_in, Scalar *y_out) const {
+    const float *inv_sqrt_data = inv_sqrt_rows_.data();
+    core::parallel_for_index(
+        0, n_,
+        [&](int i) {
+          const int begin = row_offsets_[static_cast<size_t>(i)];
+          const int end = row_offsets_[static_cast<size_t>(i) + 1];
+          const int count = end - begin;
+          const int *cols = col_indices_.data() + begin;
+          const float *vals = values_.data() + begin;
+
+          float acc = 0.0f;
+          int k = 0;
+          for (; k + 3 < count; k += 4) {
+            const int j0 = cols[k + 0];
+            const int j1 = cols[k + 1];
+            const int j2 = cols[k + 2];
+            const int j3 = cols[k + 3];
+            acc += vals[k + 0] * (x_in[j0] * inv_sqrt_data[j0]);
+            acc += vals[k + 1] * (x_in[j1] * inv_sqrt_data[j1]);
+            acc += vals[k + 2] * (x_in[j2] * inv_sqrt_data[j2]);
+            acc += vals[k + 3] * (x_in[j3] * inv_sqrt_data[j3]);
+          }
+          for (; k < count; ++k) {
+            const int j = cols[k];
+            acc += vals[k] * (x_in[j] * inv_sqrt_data[j]);
+          }
+          y_out[i] = inv_sqrt_data[i] * acc;
+        },
+        8192);
+  }
+
+private:
+  const std::vector<int> &row_offsets_;
+  const std::vector<int> &col_indices_;
+  const std::vector<float> &values_;
+  const Eigen::VectorXf &inv_sqrt_rows_;
+  int n_ = 0;
+};
+
 // Computes the first k eigenvectors of the Markov Chain P.
 template <typename MeshT>
 void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
@@ -263,10 +318,17 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
         const int compact_ncv =
             try_compact ? std::min(n, std::max(k_eval + 16, 20)) : full_ncv;
 
-        SymmetricKernelCsrMatProd op(sym_row_offsets, sym_col_indices, sym_values,
-                                     n);
+        Eigen::VectorXf inv_sqrt_rows(n);
+        for (int i = 0; i < n; ++i) {
+          inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
+        }
+
+        NormalizedSymmetricKernelCsrMatProd op(sym_row_offsets, sym_col_indices,
+                                               sym_values, inv_sqrt_rows, n);
         const auto solve_symmetric = [&](int ncv) -> bool {
-          Spectra::SymEigsSolver<SymmetricKernelCsrMatProd> eigs(op, k_eval, ncv);
+          Spectra::SymEigsSolver<NormalizedSymmetricKernelCsrMatProd> eigs(op,
+                                                                            k_eval,
+                                                                            ncv);
           eigs.init();
           const int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
           if (eigs.info() != Spectra::CompInfo::Successful || nconv <= 0) {
@@ -274,10 +336,6 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
           }
 
           Eigen::MatrixXf basis = eigs.eigenvectors(nconv);
-          Eigen::VectorXf inv_sqrt_rows(n);
-          for (int i = 0; i < n; ++i) {
-            inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
-          }
           basis = basis.array().colwise() * inv_sqrt_rows.array();
           basis = basis.rowwise().reverse().eval();
           if (std::abs(basis(0, 0)) > 1e-12f) {

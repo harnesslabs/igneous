@@ -98,3 +98,65 @@ Use one entry per parity hypothesis.
 - Notes:
   - This is a structural parity fix in eigenmode selection policy, not a numerical micro-optimization.
   - Remaining gaps are now concentrated in harmonic-form thresholds and circular P95 tail.
+
+## 2026-02-14 Hypothesis H1: Deterministic Reference Basis in Harness
+- Timestamp: 2026-02-14T16:26:56Z
+- Commit: `388e076` + working tree (uncommitted)
+- Hypothesis: Reference parity runs are unstable because the reference eigensolver initialisation is random; precomputing a deterministic function basis from the same reference kernel path should stabilise comparisons.
+- Files touched:
+  - `scripts/hodge/run_reference_hodge.py`
+- Commands:
+  - `scripts/hodge/run_parity_round.sh` (repeated)
+  - Determinism check:
+    - repeated `scripts/hodge/run_reference_hodge.py` runs and checksum comparison on `reference_harmonic_coeffs.csv`
+- Numeric parity deltas:
+  - Deterministic baseline report: `notes/hodge/results/round_20260214-162656/report/parity_report.json`
+  - Composite score: `0.156485`
+  - Harmonic subspace max principal angle: `6.493845 deg`
+  - Harmonic Procrustes error: `0.098484`
+  - Circular correlation min: `0.714689`
+  - Circular wrapped P95 max: `1.572800 rad`
+- Decision: `kept`
+- Notes:
+  - Reference outputs are now repeatable across runs for identical inputs/parameters.
+  - This intentionally re-baselines parity metrics for reliable hypothesis gating.
+
+## 2026-02-14 Hypothesis A2: Normalized Symmetric-Kernel Eigensolve (Deterministic Baseline)
+- Timestamp: 2026-02-14T16:28:53Z
+- Commit: `388e076` + working tree (uncommitted)
+- Hypothesis: Under deterministic reference outputs, solving the normalized symmetric operator `D^{-1/2} K D^{-1/2}` should materially reduce harmonic mismatch.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp`
+- Commands:
+  - `cmake --build build -j8`
+  - `PREVIOUS_REPORT_JSON=notes/hodge/results/round_20260214-162656/report/parity_report.json scripts/hodge/run_parity_round.sh`
+  - Stability check: repeated `scripts/hodge/run_parity_round.sh` runs
+- Numeric parity deltas:
+  - Report: `notes/hodge/results/round_20260214-162853/report/parity_report.json`
+  - Composite: `0.066904` (`-57.25%` vs deterministic baseline)
+  - Harmonic subspace max principal angle: `6.376378 deg`
+  - Harmonic Procrustes error: `0.097143`
+  - Circular correlation min: `0.996571` (major improvement)
+  - Circular wrapped P95 max: `0.163400 rad` (major improvement)
+- Decision: `kept`
+- Notes:
+  - Cleared the 20% keep threshold with deterministic artifacts.
+  - Harmonic thresholds remain the dominant blocker.
+
+## 2026-02-14 Hypothesis H2: Double-Precision Hodge/Circular Solves
+- Timestamp: 2026-02-14T16:30:47Z
+- Commit: `388e076` + working tree (uncommitted)
+- Hypothesis: Promoting Hodge spectral and circular generalized eigensolves to double precision will reduce harmonic/circular error tails.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+- Commands:
+  - `cmake --build build -j8`
+  - `PREVIOUS_REPORT_JSON=notes/hodge/results/round_20260214-162853/report/parity_report.json scripts/hodge/run_parity_round.sh`
+- Numeric parity deltas:
+  - Report: `notes/hodge/results/round_20260214-163047/report/parity_report.json`
+  - Composite: `0.159232` (`+138.00%` regression)
+  - Circular correlation min dropped to `0.714585`
+  - Circular wrapped P95 max regressed to `1.566015 rad`
+- Decision: `rejected`
+- Notes:
+  - Severe regression; reverted immediately.

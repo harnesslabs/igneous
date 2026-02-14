@@ -6,8 +6,15 @@ import pathlib
 from typing import List
 
 import numpy as np
+from scipy.sparse import diags
+from scipy.sparse.linalg import eigsh
 
 from diffusion_geometry import DiffusionGeometry
+from diffusion_geometry.core import (
+    build_symmetric_kernel_matrix,
+    knn_graph,
+    markov_chain,
+)
 
 
 def load_points(path: pathlib.Path) -> np.ndarray:
@@ -22,6 +29,40 @@ def write_table(path: pathlib.Path, header: List[str], rows: np.ndarray) -> None
         writer.writerow(header)
         for row in rows:
             writer.writerow([float(v) for v in row])
+
+
+def compute_deterministic_basis(
+    kernel: np.ndarray, nbr_indices: np.ndarray, n_function_basis: int
+) -> tuple[np.ndarray, np.ndarray]:
+    K_sym, row_sums = build_symmetric_kernel_matrix(kernel, nbr_indices)
+    row_sums = np.asarray(row_sums, dtype=float)
+    inv_sqrt = np.power(np.maximum(row_sums, 1e-12), -0.5)
+    K_normalized = diags(inv_sqrt) @ K_sym @ diags(inv_sqrt)
+
+    n = K_normalized.shape[0]
+    n0 = int(min(max(1, n_function_basis), n))
+
+    if n0 < n:
+        _, eigenfunctions = eigsh(
+            K_normalized,
+            n0,
+            which="LM",
+            tol=1e-2,
+            v0=np.ones(n, dtype=float),
+        )
+    else:
+        dense = K_normalized.toarray()
+        evals, evecs = np.linalg.eigh(dense)
+        top_idx = np.argsort(np.abs(evals))[-n0:]
+        eigenfunctions = evecs[:, top_idx[::-1]]
+
+    basis = inv_sqrt[:, None] * eigenfunctions
+    basis = basis[:, ::-1]
+    if abs(basis[0, 0]) > 1e-12:
+        basis = basis / basis[0, 0]
+
+    measure = row_sums / np.maximum(row_sums.sum(), 1e-12)
+    return basis, measure
 
 
 def circular_coordinates(form, lam: float, mode: int):
@@ -63,16 +104,32 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     points = load_points(pathlib.Path(args.input_csv))
+    nbr_distances, nbr_indices = knn_graph(points, knn_kernel=args.k_neighbors)
+    kernel, bandwidths = markov_chain(
+        nbr_distances=nbr_distances,
+        nbr_indices=nbr_indices,
+        c=args.c,
+        bandwidth_variability=args.bandwidth_variability,
+        knn_bandwidth=args.knn_bandwidth,
+    )
+    function_basis, measure = compute_deterministic_basis(
+        kernel=kernel,
+        nbr_indices=nbr_indices,
+        n_function_basis=args.n_function_basis,
+    )
 
-    dg = DiffusionGeometry.from_point_cloud(
-        points,
+    dg = DiffusionGeometry.from_knn_kernel(
+        nbr_indices=nbr_indices,
+        kernel=kernel,
+        immersion_coords=points,
+        data_matrix=points,
+        bandwidths=bandwidths,
         n_function_basis=args.n_function_basis,
         n_coefficients=args.n_coefficients,
-        knn_kernel=args.k_neighbors,
-        knn_bandwidth=args.knn_bandwidth,
-        bandwidth_variability=args.bandwidth_variability,
-        c=args.c,
+        measure=measure,
+        function_basis=function_basis,
         use_mean_centres=True,
+        regularisation_method="diffusion",
     )
 
     vals_1, forms_1 = dg.laplacian(1).spectrum()
