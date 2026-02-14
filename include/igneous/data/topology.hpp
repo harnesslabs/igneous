@@ -311,6 +311,24 @@ struct PointTopology {
   void clear() {}
 };
 
+enum class SpectralSolveMode : uint8_t {
+  Auto = 0,
+  GenericArnoldi = 1,
+  SymmetricTransform = 2,
+};
+
+struct SpectralSolveDiagnostics {
+  SpectralSolveMode requested_mode = SpectralSolveMode::Auto;
+  SpectralSolveMode used_mode = SpectralSolveMode::GenericArnoldi;
+  bool used_fallback = false;
+  bool reversibility_pass = false;
+  float detailed_balance_mean = 0.0f;
+  float detailed_balance_max = 0.0f;
+  float transformed_asymmetry_mean = 0.0f;
+  float transformed_asymmetry_max = 0.0f;
+  int nconv = 0;
+};
+
 struct DiffusionTopology {
   static constexpr int DIMENSION = 0;
 
@@ -324,6 +342,8 @@ struct DiffusionTopology {
 
   Eigen::VectorXf mu;
   Eigen::MatrixXf eigen_basis;
+  Eigen::VectorXf eigen_values;
+  SpectralSolveDiagnostics spectral_diagnostics;
 
   // Direct CSR view for hot diffusion operators.
   std::vector<int> markov_row_offsets;
@@ -344,6 +364,8 @@ struct DiffusionTopology {
     core::gpu::invalidate_markov_cache(this);
     mu.resize(0);
     eigen_basis.resize(0, 0);
+    eigen_values.resize(0);
+    spectral_diagnostics = {};
     markov_row_offsets.clear();
     markov_col_indices.clear();
     markov_values.clear();
@@ -380,6 +402,9 @@ struct DiffusionTopology {
       clear();
       return;
     }
+    eigen_basis.resize(0, 0);
+    eigen_values.resize(0);
+    spectral_diagnostics = {};
 
     const int k_neighbors =
         std::max(1, std::min(input.k_neighbors, static_cast<int>(n_verts)));
