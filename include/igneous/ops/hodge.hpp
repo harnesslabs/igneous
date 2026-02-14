@@ -202,12 +202,22 @@ compute_hodge_spectrum(const Eigen::MatrixXf &laplacian,
 }
 
 template <typename MeshT>
+struct CircularOperatorDiagnostics {
+  Eigen::MatrixXf x_weak;
+  Eigen::MatrixXf laplacian0_weak;
+  Eigen::MatrixXf function_gram;
+  Eigen::VectorXcf sorted_evals;
+  std::vector<int> positive_imag_indices;
+};
+
+template <typename MeshT>
 Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
                                              const Eigen::VectorXf &alpha_coeffs,
                                              float bandwidth,
                                              float lambda = 1.0f,
                                              int positive_imag_mode = 0,
-                                             std::complex<float> *selected_eval = nullptr) {
+                                             std::complex<float> *selected_eval = nullptr,
+                                             CircularOperatorDiagnostics<MeshT> *diagnostics = nullptr) {
   const auto &U = mesh.topology.eigen_basis;
   const auto &mu = mesh.topology.mu;
 
@@ -266,6 +276,11 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
 
   Eigen::MatrixXf function_gram = U.transpose() * (U.array().colwise() * mu.array()).matrix();
   Eigen::MatrixXf operator_weak = X_op - (lambda * laplacian0_weak);
+  if (diagnostics != nullptr) {
+    diagnostics->x_weak = X_op;
+    diagnostics->laplacian0_weak = laplacian0_weak;
+    diagnostics->function_gram = function_gram;
+  }
 
   Eigen::GeneralizedEigenSolver<Eigen::MatrixXf> solver(operator_weak, function_gram);
   if (solver.info() != Eigen::Success) {
@@ -306,6 +321,10 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
     if (sorted_evals[i].imag() > 1e-6f) {
       positive_imag_indices.push_back(i);
     }
+  }
+  if (diagnostics != nullptr) {
+    diagnostics->sorted_evals = sorted_evals;
+    diagnostics->positive_imag_indices = positive_imag_indices;
   }
 
   if (positive_imag_indices.empty()) {

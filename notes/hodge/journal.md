@@ -389,3 +389,56 @@ Use one entry per parity hypothesis.
 - Notes:
   - This is a structural mode-selection alignment with the reference notebook workflow.
   - Circular tail error remains above final gate threshold; further operator-level alignment is still required.
+
+## 2026-02-14 Hypothesis D5: Basis-Aligned Circular-Operator Diagnostics
+- Timestamp: 2026-02-14T18:28:05Z
+- Commit: `0c67e54` + working tree (uncommitted)
+- Hypothesis: Circular matrix mismatches may be dominated by basis-coordinate gauge differences; compare operators after explicit function-basis alignment (`T^T W T`) to isolate true structural drift.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp`
+  - `src/main_hodge.cpp`
+  - `scripts/hodge/run_reference_hodge.py`
+  - `scripts/hodge/compare_circular_operator_debug.py`
+- Commands:
+  - `cmake --build build --target igneous-hodge -j8`
+  - `scripts/hodge/run_parity_round.sh`
+  - `python3 scripts/hodge/compare_circular_operator_debug.py --reference-dir notes/hodge/results/round_20260214-182805/reference --cpp-dir notes/hodge/results/round_20260214-182805/cpp --output-markdown notes/hodge/results/round_20260214-182805/report/circular_operator_debug.md --output-json notes/hodge/results/round_20260214-182805/report/circular_operator_debug.json`
+- Numeric parity deltas:
+  - Parity report: `notes/hodge/results/round_20260214-182805/report/parity_report.json`
+    - Composite: `0.044602` (unchanged)
+    - Circular correlation min: `0.966479`
+    - Circular wrapped P95 max: `0.471590 rad`
+  - Basis-aligned debug report: `notes/hodge/results/round_20260214-182805/report/circular_operator_debug.json`
+    - `form0_x_weak` aligned rel-Fro: `0.054460`
+    - `form1_x_weak` aligned rel-Fro: `1.995615`
+    - `form0_operator_weak` aligned rel-Fro: `0.036106`
+    - `form1_operator_weak` aligned rel-Fro: `0.469989`
+- Decision: `kept`
+- Notes:
+  - Diagnostic confirmed the remaining circular error is structural and form-specific, not a global basis-coordinate artifact.
+  - `form1_x_weak` being ~`2.0` after basis alignment indicates near sign-negation versus reference.
+
+## 2026-02-14 Hypothesis D6: Harmonic 1-Form Sign Canonicalization for Circular Coordinates
+- Timestamp: 2026-02-14T18:30:22Z
+- Commit: `0c67e54` + working tree (uncommitted)
+- Hypothesis: Circular mismatch for harmonic form 1 is driven by eigenvector sign gauge; canonicalizing harmonic form signs via deterministic ambient orientation score before circular solve should collapse the circular tail error.
+- Files touched:
+  - `src/main_hodge.cpp`
+- Commands:
+  - `cmake --build build --target igneous-hodge -j8`
+  - `scripts/hodge/run_parity_round.sh`
+  - `python3 scripts/hodge/compare_circular_operator_debug.py --reference-dir notes/hodge/results/round_20260214-183022/reference --cpp-dir notes/hodge/results/round_20260214-183022/cpp --output-markdown notes/hodge/results/round_20260214-183022/report/circular_operator_debug.md --output-json notes/hodge/results/round_20260214-183022/report/circular_operator_debug.json`
+  - `notes/hodge/.venv_ref/bin/python scripts/hodge/plot_hodge_outputs.py --round-dir notes/hodge/results/round_20260214-183022 --output-dir notes/hodge/results/round_20260214-183022/report/plots`
+- Numeric parity deltas:
+  - Baseline report: `notes/hodge/results/round_20260214-182805/report/parity_report.json`
+  - Report: `notes/hodge/results/round_20260214-183022/report/parity_report.json`
+  - Composite: `0.021085` (`-52.73%` improvement)
+  - Harmonic subspace max principal angle: `2.261020 deg` (unchanged, pass)
+  - Harmonic Procrustes error: `0.030792` (unchanged, pass)
+  - Circular correlation min: `0.999843` (improved from `0.966479`, pass)
+  - Circular wrapped P95 max: `0.031461 rad` (improved from `0.471590`, pass)
+  - Final pass gate: `true`
+- Decision: `kept`
+- Notes:
+  - Circular parity now passes all target thresholds on the canonical torus scenario.
+  - Basis-aligned operator debug also converged for form 1 (`form1_x_weak` aligned rel-Fro `0.062090`, `form1_operator_weak` `0.037623`).

@@ -31,6 +31,28 @@ def write_table(path: pathlib.Path, header: List[str], rows: np.ndarray) -> None
             writer.writerow([float(v) for v in row])
 
 
+def write_matrix_csv(path: pathlib.Path, matrix: np.ndarray) -> None:
+    matrix = np.asarray(matrix, dtype=float)
+    rows, cols = matrix.shape
+    header = ["row"] + [f"c{i}" for i in range(cols)]
+    payload = np.column_stack([np.arange(rows, dtype=float), matrix])
+    write_table(path, header, payload)
+
+
+def write_complex_evals_csv(path: pathlib.Path, evals: np.ndarray) -> None:
+    evals = np.asarray(evals, dtype=complex)
+    rows = np.column_stack(
+        [
+            np.arange(evals.shape[0], dtype=float),
+            np.real(evals),
+            np.imag(evals),
+            np.abs(evals),
+            (np.imag(evals) > 0).astype(float),
+        ]
+    )
+    write_table(path, ["index", "real", "imag", "abs", "positive_imag"], rows)
+
+
 def compute_deterministic_basis(
     kernel: np.ndarray, nbr_indices: np.ndarray, n_function_basis: int
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -73,7 +95,7 @@ def circular_coordinates(form, lam: float, mode: int):
     circular_indices = np.where(evals.imag > 0)[0]
     if circular_indices.size == 0:
         zeros = np.zeros(dg.n, dtype=float)
-        return zeros, complex(0.0, 0.0), -1
+        return zeros, complex(0.0, 0.0), -1, evals
 
     mode_idx = min(max(mode, 0), circular_indices.size - 1)
     chosen_global = int(circular_indices[mode_idx])
@@ -82,7 +104,7 @@ def circular_coordinates(form, lam: float, mode: int):
     circular_funcs = efunctions[circular_indices].to_ambient()
     chosen_func = circular_funcs[mode_idx]
     angles = np.mod(np.arctan2(chosen_func.imag, chosen_func.real), 2.0 * np.pi)
-    return angles, chosen_eval, chosen_global
+    return angles, chosen_eval, chosen_global, evals
 
 
 def main() -> None:
@@ -143,6 +165,10 @@ def main() -> None:
     harmonic_ambient = []
     circular_thetas = []
     circular_meta = []
+    laplacian0_weak = np.asarray(dg.laplacian(0).weak)
+    function_gram = np.asarray(dg.function_space.gram)
+    write_matrix_csv(out_dir / "reference_function_gram.csv", function_gram)
+    write_matrix_csv(out_dir / "reference_laplacian0_weak.csv", laplacian0_weak)
 
     for idx, form_idx in enumerate(form_indices):
         form = forms_1[form_idx]
@@ -150,7 +176,7 @@ def main() -> None:
         ambient = np.asarray(form.to_ambient(), dtype=float)
         harmonic_ambient.append(ambient)
 
-        theta, eigval, eig_idx = circular_coordinates(
+        theta, eigval, eig_idx, evals = circular_coordinates(
             form, args.circular_lambda, mode_indices[idx]
         )
         circular_thetas.append(theta)
@@ -166,11 +192,23 @@ def main() -> None:
             }
         )
 
+        x_weak = np.asarray(form.sharp().operator.weak)
+        operator_weak = x_weak - args.circular_lambda * laplacian0_weak
+        write_matrix_csv(out_dir / f"reference_circular_operator_form{idx}_x_weak.csv", x_weak)
+        write_matrix_csv(
+            out_dir / f"reference_circular_operator_form{idx}_operator_weak.csv",
+            operator_weak,
+        )
+        write_complex_evals_csv(
+            out_dir / f"reference_circular_operator_form{idx}_evals.csv", evals
+        )
+
     write_table(
         out_dir / "reference_points.csv",
         ["x", "y", "z"],
         points,
     )
+    write_matrix_csv(out_dir / "reference_function_basis.csv", function_basis)
 
     spectrum_rows = np.column_stack([np.arange(vals_1.shape[0]), np.asarray(vals_1, dtype=float)])
     write_table(
