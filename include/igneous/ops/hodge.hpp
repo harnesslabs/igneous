@@ -2,10 +2,12 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <complex>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include <igneous/core/parallel.hpp>
@@ -157,18 +159,55 @@ inline Eigen::MatrixXf compute_hodge_laplacian_matrix(
   return L_down + E_up;
 }
 
-inline auto compute_hodge_spectrum(const Eigen::MatrixXf &laplacian,
-                                   const Eigen::MatrixXf &mass_matrix) {
-  Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXf> solver(laplacian,
-                                                                   mass_matrix);
-  return std::make_pair(solver.eigenvalues(), solver.eigenvectors());
+inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
+compute_hodge_spectrum(const Eigen::MatrixXf &laplacian,
+                       const Eigen::MatrixXf &mass_matrix,
+                       float rcond = 1e-5f) {
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> mass_solver(mass_matrix);
+  if (mass_solver.info() != Eigen::Success) {
+    return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
+  }
+
+  const auto &mass_evals = mass_solver.eigenvalues();
+  const auto &mass_evecs = mass_solver.eigenvectors();
+  std::vector<int> keep_indices;
+  keep_indices.reserve(static_cast<size_t>(mass_evals.size()));
+  for (int i = 0; i < mass_evals.size(); ++i) {
+    if (mass_evals[i] > rcond) {
+      keep_indices.push_back(i);
+    }
+  }
+
+  if (keep_indices.empty()) {
+    return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf::Zero(laplacian.rows(), 0));
+  }
+
+  const int k = static_cast<int>(keep_indices.size());
+  Eigen::MatrixXf phi(laplacian.rows(), k);
+  for (int col = 0; col < k; ++col) {
+    const int idx = keep_indices[static_cast<size_t>(col)];
+    const float inv_sqrt = 1.0f / std::sqrt(std::max(mass_evals[idx], 1e-12f));
+    phi.col(col) = mass_evecs.col(idx) * inv_sqrt;
+  }
+
+  const Eigen::MatrixXf restricted = phi.transpose() * laplacian * phi;
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> solver(restricted);
+  if (solver.info() != Eigen::Success) {
+    return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf::Zero(laplacian.rows(), 0));
+  }
+
+  const Eigen::VectorXf evals = solver.eigenvalues();
+  const Eigen::MatrixXf evecs = phi * solver.eigenvectors();
+  return std::make_pair(evals, evecs);
 }
 
 template <typename MeshT>
 Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
                                              const Eigen::VectorXf &alpha_coeffs,
                                              float bandwidth,
-                                             float epsilon = 1e-3f) {
+                                             float lambda = 1.0f,
+                                             int positive_imag_mode = 0,
+                                             std::complex<float> *selected_eval = nullptr) {
   const auto &U = mesh.topology.eigen_basis;
   const auto &mu = mesh.topology.mu;
 
@@ -214,32 +253,85 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
       },
       8);
 
-  Eigen::MatrixXf L_eps = X_op - epsilon * Eigen::MatrixXf::Identity(n0, n0);
-
-  Eigen::EigenSolver<Eigen::MatrixXf> solver(L_eps);
-  const auto evals = solver.eigenvalues();
-  const auto evecs = solver.eigenvectors();
-
-  int best_idx = 0;
-  float min_mag = std::numeric_limits<float>::max();
+  Eigen::MatrixXf laplacian0_weak = Eigen::MatrixXf::Zero(n0, n0);
+  Eigen::VectorXf gamma_local(n_verts_i);
   for (int i = 0; i < n0; ++i) {
-    const float mag = std::abs(evals(i));
-    if (mag > 1e-6f && mag < min_mag) {
-      min_mag = mag;
-      best_idx = i;
+    for (int j = i; j < n0; ++j) {
+      carre_du_champ(mesh, U.col(i), U.col(j), bandwidth, gamma_local);
+      const float val = (gamma_local.array() * mu.array()).sum();
+      laplacian0_weak(i, j) = val;
+      laplacian0_weak(j, i) = val;
     }
   }
 
-  const Eigen::VectorXcf z_coeffs = evecs.col(best_idx);
+  Eigen::MatrixXf function_gram = U.transpose() * (U.array().colwise() * mu.array()).matrix();
+  Eigen::MatrixXf operator_weak = X_op - (lambda * laplacian0_weak);
+  Eigen::GeneralizedEigenSolver<Eigen::MatrixXf> solver(operator_weak, function_gram);
+  if (solver.info() != Eigen::Success) {
+    return Eigen::VectorXf::Zero(static_cast<int>(n_verts));
+  }
+
+  Eigen::VectorXcf evals = solver.eigenvalues().cast<std::complex<float>>();
+  Eigen::MatrixXcf evecs = solver.eigenvectors().cast<std::complex<float>>();
+
+  std::vector<int> order(static_cast<size_t>(n0));
+  for (int i = 0; i < n0; ++i) {
+    order[static_cast<size_t>(i)] = i;
+  }
+  std::sort(order.begin(), order.end(), [&](int lhs, int rhs) {
+    const std::complex<float> a = evals[lhs];
+    const std::complex<float> b = evals[rhs];
+    const float abs_a = std::abs(a);
+    const float abs_b = std::abs(b);
+    if (std::abs(abs_a - abs_b) > 1e-7f) {
+      return abs_a < abs_b;
+    }
+    if (std::abs(a.real() - b.real()) > 1e-7f) {
+      return a.real() < b.real();
+    }
+    return a.imag() < b.imag();
+  });
+
+  Eigen::VectorXcf sorted_evals(n0);
+  Eigen::MatrixXcf sorted_evecs(n0, n0);
+  for (int i = 0; i < n0; ++i) {
+    const int src = order[static_cast<size_t>(i)];
+    sorted_evals[i] = evals[src];
+    sorted_evecs.col(i) = evecs.col(src);
+  }
+
+  std::vector<int> positive_imag_indices;
+  for (int i = 0; i < n0; ++i) {
+    if (sorted_evals[i].imag() > 1e-6f) {
+      positive_imag_indices.push_back(i);
+    }
+  }
+  if (positive_imag_indices.empty()) {
+    return Eigen::VectorXf::Zero(static_cast<int>(n_verts));
+  }
+
+  const int mode =
+      std::clamp(positive_imag_mode, 0,
+                 static_cast<int>(positive_imag_indices.size()) - 1);
+  const int best_idx = positive_imag_indices[static_cast<size_t>(mode)];
+  if (selected_eval != nullptr) {
+    *selected_eval = sorted_evals[best_idx];
+  }
+
+  const Eigen::VectorXcf z_coeffs = sorted_evecs.col(best_idx);
   Eigen::VectorXf theta(static_cast<int>(n_verts));
-  constexpr float kPi = 3.14159265358979323846f;
+  constexpr float kTwoPi = 6.28318530717958647692f;
 
   for (size_t i = 0; i < n_verts; ++i) {
     std::complex<float> zi(0.0f, 0.0f);
     for (int k = 0; k < n0; ++k) {
       zi += U(static_cast<int>(i), k) * z_coeffs(k);
     }
-    theta[static_cast<int>(i)] = (std::arg(zi) + kPi) / (2.0f * kPi);
+    float angle = std::atan2(zi.imag(), zi.real());
+    if (angle < 0.0f) {
+      angle += static_cast<float>(kTwoPi);
+    }
+    theta[static_cast<int>(i)] = angle;
   }
 
   return theta;

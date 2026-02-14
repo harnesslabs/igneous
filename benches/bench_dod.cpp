@@ -83,7 +83,7 @@ static DiffusionMesh make_diffusion_cloud(size_t n_points) {
   }
 
   mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
-                       mesh.geometry.z_span(), 0.05f, 32});
+                       mesh.geometry.z_span(), 32});
   return mesh;
 }
 
@@ -127,7 +127,7 @@ static void bench_diffusion_build(benchmark::State &state) {
 
   for (auto _ : state) {
     mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
-                         mesh.geometry.z_span(), 0.05f, 32});
+                         mesh.geometry.z_span(), 32});
     benchmark::DoNotOptimize(mesh.topology.markov_values.size());
   }
 }

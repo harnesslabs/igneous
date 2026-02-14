@@ -41,7 +41,7 @@ TEST_CASE("DiffusionTopology produces stochastic Markov matrix and valid measure
   }
 
   igneous::data::DiffusionTopology topo;
-  topo.build({geometry.x_span(), geometry.y_span(), geometry.z_span(), 0.05f, 8});
+  topo.build({geometry.x_span(), geometry.y_span(), geometry.z_span(), 8});
 
   CHECK(topo.markov_row_offsets.size() == 17);
   CHECK(topo.markov_col_indices.size() == topo.markov_values.size());
@@ -85,7 +85,7 @@ TEST_CASE("Diffusion CSR markov step matches sparse matrix product") {
   }
 
   mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
-                       mesh.geometry.z_span(), 0.05f, 8});
+                       mesh.geometry.z_span(), 8});
 
   const int n = static_cast<int>(mesh.geometry.num_points());
   Eigen::VectorXf u = Eigen::VectorXf::LinSpaced(n, -1.0f, 1.0f);
@@ -113,7 +113,7 @@ TEST_CASE("Diffusion multi-step markov matches repeated single steps") {
   }
 
   mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
-                       mesh.geometry.z_span(), 0.05f, 8});
+                       mesh.geometry.z_span(), 8});
 
   const int n = static_cast<int>(mesh.geometry.num_points());
   Eigen::VectorXf u0 = Eigen::VectorXf::LinSpaced(n, -1.0f, 1.0f);

@@ -85,3 +85,14 @@ target_link_libraries(igneous-spectral PRIVATE igneous fmt::fmt)
 
 add_executable(igneous-hodge src/main_hodge.cpp)
 target_link_libraries(igneous-hodge PRIVATE igneous fmt::fmt)
+
+add_test(
+  NAME test_hodge_cli_outputs
+  COMMAND bash ${CMAKE_SOURCE_DIR}/tests/test_hodge_cli_outputs.sh
+          $<TARGET_FILE:igneous-hodge>)
+set_tests_properties(test_hodge_cli_outputs PROPERTIES LABELS "hodge;cli")
+
+add_test(
+  NAME test_hodge_parity_optional
+  COMMAND bash ${CMAKE_SOURCE_DIR}/tests/test_hodge_parity_optional.sh)
+set_tests_properties(test_hodge_parity_optional PROPERTIES LABELS "hodge;parity")

@@ -18,7 +18,8 @@ make_diffusion_cloud(size_t n_points) {
     mesh.geometry.push_point({std::cos(t * 6.283185f), std::sin(t * 6.283185f), t});
   }
 
-  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(), mesh.geometry.z_span(), 0.05f, 24});
+  mesh.topology.build(
+      {mesh.geometry.x_span(), mesh.geometry.y_span(), mesh.geometry.z_span(), 24});
   return mesh;
 }
 

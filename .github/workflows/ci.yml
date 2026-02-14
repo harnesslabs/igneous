@@ -70,6 +70,7 @@ jobs:
           test_ops_spectral_geometry
           test_ops_hodge
           test_io_meshes
+          igneous-hodge
 
       - name: Run tests
         shell: bash
@@ -145,6 +146,7 @@ jobs:
           test_ops_spectral_geometry
           test_ops_hodge
           test_io_meshes
+          igneous-hodge
 
       - name: Run tests (Sanitizers)
         shell: bash

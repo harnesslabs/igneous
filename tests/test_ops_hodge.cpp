@@ -25,13 +25,14 @@ make_torus_cloud(size_t n_points) {
     mesh.geometry.push_point({x, y, z});
   }
 
-  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(), mesh.geometry.z_span(), 0.05f, 24});
+  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
+                       mesh.geometry.z_span(), 24});
   return mesh;
 }
 
 TEST_CASE("Hodge operators produce finite spectrum and circular coordinates") {
-  auto mesh = make_torus_cloud(320);
-  igneous::ops::compute_eigenbasis(mesh, 10);
+  auto mesh = make_torus_cloud(1000);
+  igneous::ops::compute_eigenbasis(mesh, 50);
 
   igneous::ops::GeometryWorkspace<decltype(mesh)> geom_ws;
   const auto G = igneous::ops::compute_1form_gram_matrix(mesh, 0.05f, geom_ws);
@@ -53,15 +54,38 @@ TEST_CASE("Hodge operators produce finite spectrum and circular coordinates") {
 
   auto [evals, evecs] = igneous::ops::compute_hodge_spectrum(L, G);
   CHECK(evals.size() > 0);
+  CHECK(evecs.cols() >= 2);
   for (int i = 0; i < evals.size(); ++i) {
     CHECK(std::isfinite(evals[i]));
   }
 
-  const auto theta = igneous::ops::compute_circular_coordinates(mesh, evecs.col(0), 0.05f);
-  CHECK(theta.size() == static_cast<int>(mesh.geometry.num_points()));
-  for (int i = 0; i < theta.size(); ++i) {
-    CHECK(std::isfinite(theta[i]));
-    CHECK(theta[i] >= -0.01f);
-    CHECK(theta[i] <= 1.01f);
-  }
+  const auto theta_0 = igneous::ops::compute_circular_coordinates(
+      mesh, evecs.col(0), 0.0f, 1.0f, 0);
+  const auto theta_1 = igneous::ops::compute_circular_coordinates(
+      mesh, evecs.col(1), 0.0f, 1.0f, 1);
+
+  const auto check_theta = [&](const Eigen::VectorXf &theta) {
+    CHECK(theta.size() == static_cast<int>(mesh.geometry.num_points()));
+
+    float mean = 0.0f;
+    for (int i = 0; i < theta.size(); ++i) {
+      CHECK(std::isfinite(theta[i]));
+      CHECK(theta[i] >= -0.01f);
+      CHECK(theta[i] <= 6.30f);
+      mean += theta[i];
+    }
+    mean /= static_cast<float>(std::max<int>(1, theta.size()));
+
+    float var = 0.0f;
+    for (int i = 0; i < theta.size(); ++i) {
+      const float d = theta[i] - mean;
+      var += d * d;
+    }
+    var /= static_cast<float>(std::max<int>(1, theta.size()));
+    const float stddev = std::sqrt(var);
+    CHECK(stddev > 0.03f);
+  };
+
+  check_theta(theta_0);
+  check_theta(theta_1);
 }
