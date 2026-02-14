@@ -4,8 +4,8 @@
 #include <cmath>
 #include <igneous/core/algebra.hpp>
 #include <igneous/data/mesh.hpp>
-#include <igneous/ops/geometry.hpp>
-#include <igneous/ops/spectral.hpp>
+#include <igneous/ops/diffusion/geometry.hpp>
+#include <igneous/ops/diffusion/spectral.hpp>
 
 static igneous::data::Mesh<igneous::core::Euclidean3D, igneous::data::DiffusionTopology>
 make_diffusion_cloud(size_t n_points) {

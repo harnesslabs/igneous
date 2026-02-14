@@ -1,0 +1,89 @@
+{
+  "label": "Diffusion topology parity round 20260214-211636",
+  "reference_root": "/Users/autoparallel/Code/igneous/notes/diffgeo_ops/results/round_20260214-211636/reference",
+  "cpp_root": "/Users/autoparallel/Code/igneous/notes/diffgeo_ops/results/round_20260214-211636/cpp",
+  "datasets": {
+    "torus": {
+      "warnings": [],
+      "harmonic1_subspace_max_angle_deg": 4.936677933328325,
+      "harmonic1_procrustes_rel_error": 0.05544014715507093,
+      "harmonic2_subspace_max_angle_deg": 61.516952865987776,
+      "harmonic2_procrustes_rel_error": 9.141403428641457,
+      "wedge_rel_error": 0.6666271391712728,
+      "form2_spectrum_rel_error": 0.4055600488902597,
+      "circular_modes": [
+        {
+          "name": "theta_0",
+          "orientation": "conjugate",
+          "complex_correlation": 0.7047701126167231,
+          "wrapped_error_mean_rad": 0.7048977146310328,
+          "wrapped_error_p95_rad": 1.565188159166347,
+          "wrapped_error_max_rad": 1.8201593702573533,
+          "phase_shift_rad": -0.4002324624603491
+        },
+        {
+          "name": "theta_1",
+          "orientation": "conjugate",
+          "complex_correlation": 0.9664792422883629,
+          "wrapped_error_mean_rad": 0.20271697402746416,
+          "wrapped_error_p95_rad": 0.47159551107528136,
+          "wrapped_error_max_rad": 1.033415980050497,
+          "phase_shift_rad": -2.0091963748638024
+        }
+      ],
+      "circular_complex_correlation_min": 0.7047701126167231,
+      "circular_complex_correlation_mean": 0.835624677452543,
+      "circular_wrapped_p95_rad_max": 1.565188159166347
+    },
+    "sphere": {
+      "warnings": [],
+      "harmonic1_subspace_max_angle_deg": 2.5217493428236257,
+      "harmonic1_procrustes_rel_error": 0.03131754958561606,
+      "harmonic2_subspace_max_angle_deg": 89.8216686188732,
+      "harmonic2_procrustes_rel_error": 10.612400364690211,
+      "wedge_rel_error": 27.64100241696263,
+      "form2_spectrum_rel_error": 0.4463347893347751,
+      "circular_modes": [
+        {
+          "name": "theta_0",
+          "orientation": "direct",
+          "complex_correlation": 0.054083560762643444,
+          "wrapped_error_mean_rad": 1.5141116564489725,
+          "wrapped_error_p95_rad": 3.0952618238612803,
+          "wrapped_error_max_rad": 3.1396901351283524,
+          "phase_shift_rad": -0.12380210241862927
+        },
+        {
+          "name": "theta_1",
+          "orientation": "direct",
+          "complex_correlation": 0.9993959964577359,
+          "wrapped_error_mean_rad": 0.01706291596527914,
+          "wrapped_error_p95_rad": 0.05280477772550362,
+          "wrapped_error_max_rad": 0.3100524615392891,
+          "phase_shift_rad": 0.8078082170297036
+        }
+      ],
+      "circular_complex_correlation_min": 0.054083560762643444,
+      "circular_complex_correlation_mean": 0.5267397786101897,
+      "circular_wrapped_p95_rad_max": 3.0952618238612803
+    }
+  },
+  "summary": {
+    "harmonic1_subspace_max_angle_deg": 4.936677933328325,
+    "harmonic1_procrustes_rel_error": 0.05544014715507093,
+    "harmonic2_subspace_max_angle_deg": 89.8216686188732,
+    "harmonic2_procrustes_rel_error": 10.612400364690211,
+    "wedge_rel_error": 27.64100241696263,
+    "form2_spectrum_rel_error": 0.4463347893347751,
+    "circular_complex_correlation_min": 0.054083560762643444,
+    "circular_wrapped_p95_rad_max": 3.0952618238612803,
+    "composite_score": 4.668913425108122
+  },
+  "warnings": [],
+  "gates": {
+    "final_pass": false,
+    "commit_gate_pass": true,
+    "commit_gate_details": "no previous baseline provided",
+    "improvement_vs_previous": null
+  }
+}

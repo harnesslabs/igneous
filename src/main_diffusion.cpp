@@ -9,7 +9,7 @@
 #include <igneous/data/mesh.hpp>
 #include <igneous/io/exporter.hpp>
 #include <igneous/io/importer.hpp>
-#include <igneous/ops/geometry.hpp>
+#include <igneous/ops/diffusion/geometry.hpp>
 #include <igneous/ops/transform.hpp>
 
 using namespace igneous;

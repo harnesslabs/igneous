@@ -70,6 +70,30 @@ notes/hodge/.venv_ref/bin/python \
   --round-dir "${ROUND_DIR}"
 ```
 
+## Diffusion Topology Parity Workflow
+
+Standard torus+sphere parity round:
+
+```bash
+./scripts/diffgeo/run_parity_round.sh
+```
+
+Optional diagnostics plot pack for a parity round:
+
+```bash
+ROUND_DIR="$(ls -1dt notes/diffgeo_ops/results/round_* | head -n1)"
+notes/diffgeo_ops/.venv_ref/bin/python \
+  ./scripts/diffgeo/diagnostics/plot_diffgeo_ops.py \
+  --round-dir "${ROUND_DIR}"
+```
+
+By default, `test_diffgeo_parity_optional` reports parity metrics but only hard-fails
+when strict enforcement is requested:
+
+```bash
+IGNEOUS_REQUIRE_PARITY=1 ctest --test-dir build -R test_diffgeo_parity_optional --output-on-failure
+```
+
 Set `IGNEOUS_BENCH_MODE=1` to disable heavy export paths in runtime apps.
 
 Runtime backend controls:
@@ -97,9 +121,14 @@ Current suites:
 - `test_ops_curvature_flow`
 - `test_ops_spectral_geometry`
 - `test_ops_hodge`
+- `test_ops_diffusion_basis`
+- `test_ops_diffusion_forms`
+- `test_ops_diffusion_wedge`
 - `test_io_meshes`
 - `test_hodge_cli_outputs`
 - `test_hodge_parity_optional` (skips unless `DiffusionGeometry/` is available, unless forced)
+- `test_diffgeo_cli_outputs`
+- `test_diffgeo_parity_optional` (strict-fail only when `IGNEOUS_REQUIRE_PARITY=1`)
 
 ## Benchmarks
 

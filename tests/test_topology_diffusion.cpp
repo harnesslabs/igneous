@@ -6,7 +6,7 @@
 #include <igneous/data/buffers.hpp>
 #include <igneous/data/mesh.hpp>
 #include <igneous/data/topology.hpp>
-#include <igneous/ops/geometry.hpp>
+#include <igneous/ops/diffusion/geometry.hpp>
 
 static Eigen::VectorXf csr_markov_reference(
     const igneous::data::DiffusionTopology &topo,
