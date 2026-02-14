@@ -48,6 +48,29 @@ cmake --build build -j8
 
 Set `IGNEOUS_BENCH_MODE=1` to disable heavy export paths in runtime apps.
 
+## Hodge Inspection (Headless Default)
+
+Run the Hodge pipeline and generate machine-readable report artifacts:
+
+```bash
+./build/igneous-hodge
+python3 scripts/diffusion/report_hodge.py \
+  --input-dir output_hodge \
+  --output-json output_hodge/report_hodge_metrics.json \
+  --metrics-file output_hodge/hodge_metrics.json
+```
+
+This emits:
+
+- `output_hodge/hodge_metrics.json` from runtime
+- `output_hodge/report_hodge_metrics.json` consolidated checks
+- quicklook PNG projections for angle, harmonic, and decomposition outputs
+
+Interactive inspection scripts remain optional:
+
+- `visualize_hodge.py`
+- `visualize_coordinates.py`
+
 Runtime backend controls:
 
 - `IGNEOUS_BACKEND=cpu` for single-thread CPU execution.
@@ -65,14 +88,25 @@ Runtime backend controls:
 ctest --test-dir build --output-on-failure --verbose
 ```
 
+Regression philosophy:
+
+- Invariant-first checks: symmetry, orthogonality, reconstruction identities, and residual bounds.
+- Canonical numeric envelopes on fixed-seed synthetic datasets for drift detection.
+- Deterministic test environment for numerically sensitive paths (`IGNEOUS_BACKEND=cpu`, single-threaded).
+
 Current suites:
 
 - `test_algebra`
 - `test_topology_triangle`
 - `test_topology_diffusion`
 - `test_ops_curvature_flow`
+- `test_ops_transform`
+- `test_ops_geometry`
 - `test_ops_spectral_geometry`
+- `test_ops_spectral_regression`
 - `test_ops_hodge`
+- `test_ops_hodge_regression`
+- `test_ops_hodge_decomposition`
 - `test_io_meshes`
 
 ## Benchmarks
@@ -199,6 +233,32 @@ int main() {
 
   igneous::ops::compute_curvature_measures(mesh, H, K, curvature_ws);
   igneous::ops::integrate_mean_curvature_flow(mesh, 0.01f, flow_ws);
+}
+```
+
+## API Example (Hodge Decomposition)
+
+```cpp
+#include <igneous/igneous.hpp>
+
+using Mesh = igneous::data::Mesh<igneous::core::Euclidean3D,
+                                 igneous::data::DiffusionTopology>;
+
+int main() {
+  Mesh mesh;
+  // ... fill geometry, then build diffusion topology ...
+  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
+                       mesh.geometry.z_span(), 0.05f, 32});
+
+  igneous::ops::compute_eigenbasis(mesh, 64);
+
+  // alpha is a 1-form coefficient vector in the (phi_i dx_a) basis.
+  Eigen::VectorXf alpha = Eigen::VectorXf::Zero(mesh.topology.eigen_basis.cols() * 3);
+  alpha[0] = 1.0f;
+
+  const auto decomp =
+      igneous::ops::compute_hodge_decomposition_1form(mesh, alpha, 0.05f);
+  // decomp.exact_component, decomp.harmonic_component, decomp.coexact_component
 }
 ```
 

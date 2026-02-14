@@ -40,12 +40,12 @@ Use one entry per hypothesis or implementation batch.
   - This entry establishes the pre-fix reference point for Wave 1.
 
 ## Math Regression Checklist
-- [ ] `compute_eigenbasis` solver-path diagnostics and residual checks.
-- [ ] Hodge low-mode envelope guard on canonical torus case.
-- [ ] Circular-coordinate dynamic-range guard.
-- [ ] 1-form decomposition reconstruction and orthogonality checks.
-- [ ] `carre_du_champ` bilinearity/symmetry/positivity checks.
-- [ ] transform/flow/curvature invariants and no-op checks.
+- [x] `compute_eigenbasis` solver-path diagnostics and residual checks.
+- [x] Hodge low-mode envelope guard on canonical torus case.
+- [x] Circular-coordinate dynamic-range guard.
+- [x] 1-form decomposition reconstruction and orthogonality checks.
+- [x] `carre_du_champ` bilinearity/symmetry/positivity checks.
+- [x] transform/flow/curvature invariants and no-op checks.
 
 ## 2026-02-14 Spectral Solver Safety Gate
 - Timestamp: 2026-02-14T00:00:00Z
