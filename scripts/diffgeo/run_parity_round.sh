@@ -105,7 +105,6 @@ if [[ -n "${PREVIOUS_REPORT_JSON:-}" ]]; then
 fi
 
 "${PYTHON_BIN}" "${SCRIPT_DIR}/compare_diffgeo_ops.py" "${COMPARE_ARGS[@]}"
-"${PYTHON_BIN}" "${SCRIPT_DIR}/diagnostics/plot_diffgeo_ops.py" --round-dir "${ROUND_DIR}"
 
 "${PYTHON_BIN}" - <<PY
 import json

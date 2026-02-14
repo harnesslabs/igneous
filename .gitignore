@@ -10,3 +10,6 @@ DiffusionGeometry/
 notes/hodge/.venv_ref/
 notes/hodge/results/*
 !notes/hodge/results/.gitkeep
+notes/diffgeo_ops/.venv_ref/
+notes/diffgeo_ops/results/*
+!notes/diffgeo_ops/results/.gitkeep

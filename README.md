@@ -61,30 +61,12 @@ Standard parity round:
 ./scripts/hodge/run_parity_round.sh
 ```
 
-Optional diagnostic plots for a parity round:
-
-```bash
-ROUND_DIR="$(ls -1dt notes/hodge/results/round_* | head -n1)"
-notes/hodge/.venv_ref/bin/python \
-  ./scripts/hodge/diagnostics/plot_hodge_outputs.py \
-  --round-dir "${ROUND_DIR}"
-```
-
 ## Diffusion Topology Parity Workflow
 
 Standard torus+sphere parity round:
 
 ```bash
 ./scripts/diffgeo/run_parity_round.sh
-```
-
-Optional diagnostics plot pack for a parity round:
-
-```bash
-ROUND_DIR="$(ls -1dt notes/diffgeo_ops/results/round_* | head -n1)"
-notes/diffgeo_ops/.venv_ref/bin/python \
-  ./scripts/diffgeo/diagnostics/plot_diffgeo_ops.py \
-  --round-dir "${ROUND_DIR}"
 ```
 
 By default, `test_diffgeo_parity_optional` reports parity metrics but only hard-fails
