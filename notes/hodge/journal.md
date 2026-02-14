@@ -236,3 +236,156 @@ Use one entry per parity hypothesis.
 - Notes:
   - Regression is intrinsic to the full-`ncv` patch under this pipeline and not a mode-index artifact.
   - Patch discarded and reverted.
+
+## 2026-02-14 Hypothesis A6: NumPy-Exact Even-Length Median for Bandwidth Normalisation
+- Timestamp: 2026-02-14T17:28:02Z
+- Commit: `53d53c0` + working tree (uncommitted)
+- Hypothesis: Matching NumPy median behavior for even-length arrays (`0.5*(x[n/2-1]+x[n/2])`) in `bandwidths_B` normalisation will reduce diffusion-kernel drift and improve harmonic parity.
+- Files touched:
+  - `include/igneous/data/topology.hpp` (reverted)
+- Commands:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+  - `PREVIOUS_REPORT_JSON=notes/hodge/results/round_20260214-170725/report/parity_report.json scripts/hodge/run_parity_round.sh`
+  - Circular mode sweep over `(mode_0, mode_1) in [0..3]x[0..3]` using `scripts/hodge/run_cpp_hodge.sh` + `scripts/hodge/compare_hodge_outputs.py`
+- Numeric parity deltas:
+  - Baseline report: `notes/hodge/results/round_20260214-170725/report/parity_report.json`
+  - Report: `notes/hodge/results/round_20260214-172638/report/parity_report.json`
+  - Composite: `0.141622` (`+229.71%` regression)
+  - Harmonic subspace max principal angle: `4.297839 deg` (no meaningful change)
+  - Harmonic Procrustes error: `0.066728` (no meaningful change)
+  - Circular correlation min: `0.711971` (major regression)
+  - Circular wrapped P95 max: `1.541341 rad` (major regression)
+  - Mode sweep confirmed no recovery path; best remained `(0,0)`.
+- Decision: `rejected`
+- Notes:
+  - This median change materially perturbs circular operator spectrum without improving harmonic metrics.
+  - Patch discarded and reverted.
+
+## 2026-02-14 Hypothesis H3: Double Precision in Hodge Spectrum Solve Only
+- Timestamp: 2026-02-14T17:29:37Z
+- Commit: `53d53c0` + working tree (uncommitted)
+- Hypothesis: Promoting only the generalized 1-form eigensolve (`compute_hodge_spectrum`) to `double` precision while keeping circular solve unchanged will improve harmonic parity without circular regression.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+- Commands:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+  - `PREVIOUS_REPORT_JSON=notes/hodge/results/round_20260214-170725/report/parity_report.json scripts/hodge/run_parity_round.sh`
+  - Circular mode sweep over `(mode_0, mode_1) in [0..3]x[0..3]` using `scripts/hodge/run_cpp_hodge.sh` + `scripts/hodge/compare_hodge_outputs.py`
+- Numeric parity deltas:
+  - Baseline report: `notes/hodge/results/round_20260214-170725/report/parity_report.json`
+  - Report: `notes/hodge/results/round_20260214-172859/report/parity_report.json`
+  - Composite: `0.076155` (`+77.29%` regression)
+  - Harmonic subspace max principal angle: `4.298632 deg` (no meaningful change)
+  - Harmonic Procrustes error: `0.066736` (no meaningful change)
+  - Circular correlation min: `0.915266` (regression)
+  - Circular wrapped P95 max: `0.622422 rad` (regression)
+  - Mode sweep confirmed no recovery path; best remained `(0,0)`.
+- Decision: `rejected`
+- Notes:
+  - Precision promotion in the Hodge spectrum alone destabilized circular parity with no harmonic gain.
+  - Patch discarded and reverted.
+
+## 2026-02-14 Hypothesis C1: Reference Harness Immersion Regularisation Parity
+- Timestamp: 2026-02-14T17:37:38Z
+- Commit: `53d53c0` + working tree (uncommitted)
+- Hypothesis: The reference harness currently bypasses diffusion regularisation by forcing `immersion_coords=points`; switching to `immersion_coords=None` should align with reference constructor semantics and reduce harmonic mismatch.
+- Files touched:
+  - `scripts/hodge/run_reference_hodge.py`
+- Commands:
+  - `PREVIOUS_REPORT_JSON=notes/hodge/results/round_20260214-170725/report/parity_report.json scripts/hodge/run_parity_round.sh`
+  - `MODE_INDICES=0,1 scripts/hodge/run_parity_round.sh`
+  - Circular mode sweeps on corrected reference artifacts (`mode_0,mode_1` in `[0..5]` and wide `mode_1` sweep)
+- Numeric parity deltas:
+  - Baseline report: `notes/hodge/results/round_20260214-170725/report/parity_report.json`
+  - Corrected reference report (`MODE_INDICES=0,0`): `notes/hodge/results/round_20260214-173113/report/parity_report.json`
+    - Composite: `0.068078` (`+58.49%` vs baseline)
+    - Harmonic subspace max principal angle: `2.261020 deg` (improved from `4.298653`)
+    - Harmonic Procrustes error: `0.030792` (improved from `0.066736`)
+    - Circular correlation min: `0.855133`
+    - Circular wrapped P95 max: `0.788353 rad`
+  - Notebook-style mode reference (`MODE_INDICES=0,1`): `notes/hodge/results/round_20260214-173327/report/parity_report.json`
+    - Composite: `0.044602`
+    - Harmonic subspace max principal angle: `2.261020 deg`
+    - Harmonic Procrustes error: `0.030792`
+    - Circular correlation min: `0.966479`
+    - Circular wrapped P95 max: `0.471590 rad`
+- Decision: `kept`
+- Notes:
+  - This is a concrete reference-harness correctness fix: diffusion regularisation is now active for immersion coordinates.
+  - Harmonic parity now meets final gates; remaining blocker is circular wrapped-error tail.
+
+## 2026-02-14 Hypothesis D2: Circular Eigensolve via Gram-Orthonormal Restriction
+- Timestamp: 2026-02-14T17:37:38Z
+- Commit: `53d53c0` + working tree (uncommitted)
+- Hypothesis: Replacing direct generalized eigensolve with the reference-style Gram-orthonormal restricted eigensolve (`rcond` cutoff + standard eig) will improve circular parity.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+- Commands:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+  - `scripts/hodge/run_parity_round.sh`
+  - `MODE_INDICES=0,1 scripts/hodge/run_parity_round.sh`
+- Numeric parity deltas:
+  - Corrected-reference report (`MODE_INDICES=0,0`): `notes/hodge/results/round_20260214-173647/report/parity_report.json`
+    - Composite: `0.068077` (no meaningful change)
+    - Circular correlation min: `0.855137` (no meaningful change)
+    - Circular wrapped P95 max: `0.788348 rad` (no meaningful change)
+  - Notebook-style mode report (`MODE_INDICES=0,1`): `notes/hodge/results/round_20260214-173656/report/parity_report.json`
+    - Composite: `0.044602` (no meaningful change)
+    - Circular correlation min: `0.966479` (no meaningful change)
+    - Circular wrapped P95 max: `0.471592 rad` (no meaningful change)
+- Decision: `rejected`
+- Notes:
+  - Functional behavior is effectively unchanged from the existing generalized formulation on this problem.
+  - Patch discarded and reverted.
+
+## 2026-02-14 Hypothesis D3: Double-Precision Circular Operator Eigensolve
+- Timestamp: 2026-02-14T17:39:55Z
+- Commit: `53d53c0` + working tree (uncommitted)
+- Hypothesis: Promoting circular operator generalized eigensolve and angle reconstruction to `double` precision should reduce wrapped-angle tail error.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp` (reverted)
+- Commands:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+  - `PREVIOUS_REPORT_JSON=notes/hodge/results/round_20260214-173327/report/parity_report.json MODE_INDICES=0,1 scripts/hodge/run_parity_round.sh`
+- Numeric parity deltas:
+  - Baseline report: `notes/hodge/results/round_20260214-173327/report/parity_report.json`
+  - Report: `notes/hodge/results/round_20260214-173927/report/parity_report.json`
+  - Composite: `0.044602` (no meaningful change)
+  - Harmonic subspace max principal angle: `2.261020 deg` (unchanged)
+  - Harmonic Procrustes error: `0.030792` (unchanged)
+  - Circular correlation min: `0.966479` (unchanged)
+  - Circular wrapped P95 max: `0.471593 rad` (unchanged)
+- Decision: `rejected`
+- Notes:
+  - Precision upgrade did not materially move any parity metric.
+  - Patch discarded and reverted.
+
+## 2026-02-14 Hypothesis D4: Notebook-Style Circular Mode Defaults (0,1)
+- Timestamp: 2026-02-14T17:41:20Z
+- Commit: `53d53c0` + working tree (uncommitted)
+- Hypothesis: After correcting immersion-regularisation parity, setting default circular mode indices to `(0,1)` (as in reference TDA torus workflow) should materially improve circular parity versus `(0,0)` while preserving harmonic gains.
+- Files touched:
+  - `src/main_hodge.cpp`
+  - `scripts/hodge/run_parity_round.sh`
+  - `scripts/hodge/run_cpp_hodge.sh`
+  - `scripts/hodge/run_reference_hodge.py`
+- Commands:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+  - `PREVIOUS_REPORT_JSON=notes/hodge/results/round_20260214-173113/report/parity_report.json scripts/hodge/run_parity_round.sh`
+- Numeric parity deltas:
+  - Baseline (corrected reference, `(0,0)`): `notes/hodge/results/round_20260214-173113/report/parity_report.json`
+  - Report (`(0,1)` defaults): `notes/hodge/results/round_20260214-174054/report/parity_report.json`
+  - Composite: `0.044602` (`-34.49%` improvement vs corrected `(0,0)` baseline)
+  - Harmonic subspace max principal angle: `2.261020 deg` (unchanged, passes target)
+  - Harmonic Procrustes error: `0.030792` (unchanged, passes target)
+  - Circular correlation min: `0.966479` (improved from `0.855133`)
+  - Circular wrapped P95 max: `0.471590 rad` (improved from `0.788353 rad`)
+- Decision: `kept`
+- Notes:
+  - This is a structural mode-selection alignment with the reference notebook workflow.
+  - Circular tail error remains above final gate threshold; further operator-level alignment is still required.

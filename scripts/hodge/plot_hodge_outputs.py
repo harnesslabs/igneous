@@ -135,6 +135,53 @@ def plot_angle_pair(
     plt.close(fig)
 
 
+def plot_circular_forms_grid(
+    out_path: Path,
+    points_ref: np.ndarray,
+    points_cpp: np.ndarray,
+    theta_ref0: np.ndarray,
+    theta_cpp0: np.ndarray,
+    theta_ref1: np.ndarray,
+    theta_cpp1: np.ndarray,
+):
+    fig = plt.figure(figsize=(14, 12))
+    axes = [
+        fig.add_subplot(2, 2, 1, projection="3d"),
+        fig.add_subplot(2, 2, 2, projection="3d"),
+        fig.add_subplot(2, 2, 3, projection="3d"),
+        fig.add_subplot(2, 2, 4, projection="3d"),
+    ]
+    panels = [
+        (axes[0], points_ref, theta_ref0, "Reference: Circular from Harmonic 1-Form 0"),
+        (axes[1], points_cpp, theta_cpp0, "C++: Circular from Harmonic 1-Form 0"),
+        (axes[2], points_ref, theta_ref1, "Reference: Circular from Harmonic 1-Form 1"),
+        (axes[3], points_cpp, theta_cpp1, "C++: Circular from Harmonic 1-Form 1"),
+    ]
+
+    for ax, pts, theta, label in panels:
+        sc = ax.scatter(
+            pts[:, 0],
+            pts[:, 1],
+            pts[:, 2],
+            c=theta,
+            s=8,
+            cmap="twilight",
+            vmin=0.0,
+            vmax=2.0 * np.pi,
+        )
+        set_equal_axes(ax, pts[:, 0], pts[:, 1], pts[:, 2])
+        ax.set_title(label, fontsize=10)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
+        plt.colorbar(sc, ax=ax, shrink=0.58, pad=0.02)
+
+    fig.suptitle("Circular Coordinates by Source Harmonic 1-Form", fontsize=14)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=220)
+    plt.close(fig)
+
+
 def plot_angle_error_hist(
     out_path: Path, errors: np.ndarray, title: str, p95: float, mean: float
 ):
@@ -242,6 +289,21 @@ def main():
             mean=float(np.mean(err)),
         )
         generated_paths.append(hist_path)
+
+    if len(common_thetas) >= 2:
+        theta0 = common_thetas[0]
+        theta1 = common_thetas[1]
+        grid_path = output_dir / "circular_from_harmonic_forms_compare.png"
+        plot_circular_forms_grid(
+            out_path=grid_path,
+            points_ref=points_ref,
+            points_cpp=points_cpp,
+            theta_ref0=np.asarray(ref_circular[f"theta_{theta0}"], dtype=np.float64),
+            theta_cpp0=np.asarray(cpp_circular[f"theta_{theta0}"], dtype=np.float64),
+            theta_ref1=np.asarray(ref_circular[f"theta_{theta1}"], dtype=np.float64),
+            theta_cpp1=np.asarray(cpp_circular[f"theta_{theta1}"], dtype=np.float64),
+        )
+        generated_paths.append(grid_path)
 
     print(f"plots_dir={output_dir}")
     for p in generated_paths:

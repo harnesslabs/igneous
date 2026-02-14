@@ -36,7 +36,7 @@ struct Config {
 
   float circular_lambda = 1.0f;
   int circular_mode_0 = 0;
-  int circular_mode_1 = 0;
+  int circular_mode_1 = 1;
 
   bool export_ply = true;
 };

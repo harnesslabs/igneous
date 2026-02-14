@@ -97,7 +97,7 @@ def main() -> None:
     parser.add_argument("--c", type=float, default=0.0)
     parser.add_argument("--circular-lambda", type=float, default=1.0)
     parser.add_argument("--form-indices", default="0,1")
-    parser.add_argument("--mode-indices", default="0,0")
+    parser.add_argument("--mode-indices", default="0,1")
     args = parser.parse_args()
 
     out_dir = pathlib.Path(args.output_dir)
@@ -121,7 +121,7 @@ def main() -> None:
     dg = DiffusionGeometry.from_knn_kernel(
         nbr_indices=nbr_indices,
         kernel=kernel,
-        immersion_coords=points,
+        immersion_coords=None,
         data_matrix=points,
         bandwidths=bandwidths,
         n_function_basis=args.n_function_basis,
