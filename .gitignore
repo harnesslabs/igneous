@@ -7,3 +7,6 @@ __pycache__/
 *.pyc
 *.png
 DiffusionGeometry/
+notes/hodge/.venv_ref/
+notes/hodge/results/*
+!notes/hodge/results/.gitkeep

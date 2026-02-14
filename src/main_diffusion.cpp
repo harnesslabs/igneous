@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
   ops::normalize(mesh);
 
   mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
-                       mesh.geometry.z_span(), 0.005f, 32});
+                       mesh.geometry.z_span(), 32});
 
   const int n = static_cast<int>(mesh.geometry.num_points());
   std::cout << "Markov Chain P: " << n << "x" << n << " ("

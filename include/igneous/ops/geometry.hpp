@@ -34,24 +34,53 @@ void fill_coordinate_vectors(const MeshT &mesh,
     coords[d].resize(static_cast<int>(n_verts));
   }
 
+  if constexpr (requires { mesh.topology.immersion_coords; }) {
+    const auto &immersion = mesh.topology.immersion_coords;
+    if (immersion.rows() == static_cast<int>(n_verts) && immersion.cols() >= 3) {
+      for (size_t i = 0; i < n_verts; ++i) {
+        const int idx = static_cast<int>(i);
+        coords[0][idx] = immersion(idx, 0);
+        coords[1][idx] = immersion(idx, 1);
+        coords[2][idx] = immersion(idx, 2);
+      }
+      return;
+    }
+  }
+
   for (size_t i = 0; i < n_verts; ++i) {
     const auto p = mesh.geometry.get_vec3(i);
-    coords[0][static_cast<int>(i)] = p.x;
-    coords[1][static_cast<int>(i)] = p.y;
-    coords[2][static_cast<int>(i)] = p.z;
+    const int idx = static_cast<int>(i);
+    coords[0][idx] = p.x;
+    coords[1][idx] = p.y;
+    coords[2][idx] = p.z;
+  }
+}
+
+template <typename MeshT>
+void fill_data_coordinate_vectors(const MeshT &mesh,
+                                  std::array<Eigen::VectorXf, 3> &coords) {
+  const size_t n_verts = mesh.geometry.num_points();
+  for (int d = 0; d < 3; ++d) {
+    coords[d].resize(static_cast<int>(n_verts));
+  }
+
+  for (size_t i = 0; i < n_verts; ++i) {
+    const auto p = mesh.geometry.get_vec3(i);
+    const int idx = static_cast<int>(i);
+    coords[0][idx] = p.x;
+    coords[1][idx] = p.y;
+    coords[2][idx] = p.z;
   }
 }
 
 template <typename MeshT>
 void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
-                    Eigen::Ref<const Eigen::VectorXf> h, float bandwidth,
+                    Eigen::Ref<const Eigen::VectorXf> h, [[maybe_unused]] float bandwidth,
                     Eigen::Ref<Eigen::VectorXf> gamma_out) {
   [[maybe_unused]] const int expected_size =
       static_cast<int>(mesh.geometry.num_points());
   assert(gamma_out.size() == expected_size);
   gamma_out.setZero();
-
-  const float inv_2t = 1.0f / std::max(2.0f * bandwidth, 1e-8f);
 
   if constexpr (requires {
                   mesh.topology.markov_row_offsets;
@@ -64,25 +93,33 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
 
     assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
 
-    const bool use_gpu =
-        core::compute_backend_from_env() == core::ComputeBackend::Gpu &&
-        (core::gpu::gpu_force_enabled() || expected_size >= core::gpu::gpu_min_rows());
-    if (use_gpu) {
-      if (core::gpu::carre_du_champ(
-              static_cast<const void *>(&mesh.topology),
-              std::span<const int>(row_offsets.data(), row_offsets.size()),
-              std::span<const int>(col_indices.data(), col_indices.size()),
-              std::span<const float>(weights.data(), weights.size()),
-              std::span<const float>(f.data(), static_cast<size_t>(expected_size)),
-              std::span<const float>(h.data(), static_cast<size_t>(expected_size)),
-              inv_2t,
-              std::span<float>(gamma_out.data(), static_cast<size_t>(expected_size)))) {
-        return;
-      }
-    }
-
     const float *f_data = f.data();
     const float *h_data = h.data();
+    Eigen::VectorXf means_f = Eigen::VectorXf::Zero(expected_size);
+    Eigen::VectorXf means_h = Eigen::VectorXf::Zero(expected_size);
+    const bool use_mean_centres = [&]() {
+      if constexpr (requires { mesh.topology.use_mean_centres; }) {
+        return mesh.topology.use_mean_centres;
+      }
+      return false;
+    }();
+
+    if (use_mean_centres) {
+      for (int i = 0; i < expected_size; ++i) {
+        const int begin = row_offsets[static_cast<size_t>(i)];
+        const int end = row_offsets[static_cast<size_t>(i) + 1];
+        const int *cols = col_indices.data() + begin;
+        const float *w = weights.data() + begin;
+        float mean_f = 0.0f;
+        float mean_h = 0.0f;
+        for (int idx = 0; idx < (end - begin); ++idx) {
+          mean_f += w[idx] * f_data[cols[idx]];
+          mean_h += w[idx] * h_data[cols[idx]];
+        }
+        means_f[i] = mean_f;
+        means_h[i] = mean_h;
+      }
+    }
 
     for (int i = 0; i < expected_size; ++i) {
       const int begin = row_offsets[static_cast<size_t>(i)];
@@ -90,8 +127,8 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
       const int count = end - begin;
       const int *cols = col_indices.data() + begin;
       const float *w = weights.data() + begin;
-      const float fi = f_data[i];
-      const float hi = h_data[i];
+      const float center_f = use_mean_centres ? means_f[i] : f_data[i];
+      const float center_h = use_mean_centres ? means_h[i] : h_data[i];
 
       float acc = 0.0f;
       int idx = 0;
@@ -100,17 +137,23 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
         const int j1 = cols[idx + 1];
         const int j2 = cols[idx + 2];
         const int j3 = cols[idx + 3];
-        acc += w[idx + 0] * (f_data[j0] - fi) * (h_data[j0] - hi);
-        acc += w[idx + 1] * (f_data[j1] - fi) * (h_data[j1] - hi);
-        acc += w[idx + 2] * (f_data[j2] - fi) * (h_data[j2] - hi);
-        acc += w[idx + 3] * (f_data[j3] - fi) * (h_data[j3] - hi);
+        acc += w[idx + 0] * (f_data[j0] - center_f) * (h_data[j0] - center_h);
+        acc += w[idx + 1] * (f_data[j1] - center_f) * (h_data[j1] - center_h);
+        acc += w[idx + 2] * (f_data[j2] - center_f) * (h_data[j2] - center_h);
+        acc += w[idx + 3] * (f_data[j3] - center_f) * (h_data[j3] - center_h);
       }
       for (; idx < count; ++idx) {
         const int j = cols[idx];
-        acc += w[idx] * (f_data[j] - fi) * (h_data[j] - hi);
+        acc += w[idx] * (f_data[j] - center_f) * (h_data[j] - center_h);
       }
 
-      gamma_out[i] = acc;
+      float denom = 2.0f;
+      if constexpr (requires { mesh.topology.local_bandwidths; }) {
+        if (mesh.topology.local_bandwidths.size() == expected_size) {
+          denom = 2.0f * std::max(mesh.topology.local_bandwidths[i], 1e-8f);
+        }
+      }
+      gamma_out[i] = acc / denom;
     }
   } else {
     const auto &P = mesh.topology.P;
@@ -123,9 +166,8 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
         gamma_out[i] += w * (f[j] - f[i]) * (h[j] - h[i]);
       }
     }
+    gamma_out *= 0.5f;
   }
-
-  gamma_out *= inv_2t;
 }
 
 template <typename MeshT>

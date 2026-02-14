@@ -83,9 +83,10 @@ int compute_max_y_vertex(const DiffusionMesh &mesh) {
   return max_y_idx;
 }
 
-void build_diffusion_topology(DiffusionMesh &mesh, float bandwidth, int k_neighbors) {
+void build_diffusion_topology(DiffusionMesh &mesh, float /*bandwidth*/,
+                              int k_neighbors) {
   mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
-                       mesh.geometry.z_span(), bandwidth, k_neighbors});
+                       mesh.geometry.z_span(), k_neighbors});
 }
 
 void bench_pipeline_diffusion_main(benchmark::State &state) {

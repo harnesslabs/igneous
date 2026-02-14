@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
 
   const float bandwidth = 0.005f;
   mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
-                       mesh.geometry.z_span(), bandwidth, 32});
+                       mesh.geometry.z_span(), 32});
 
   const int n_basis = 16;
   ops::compute_eigenbasis(mesh, n_basis);

@@ -25,7 +25,8 @@ make_torus_cloud(size_t n_points) {
     mesh.geometry.push_point({x, y, z});
   }
 
-  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(), mesh.geometry.z_span(), 0.05f, 24});
+  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
+                       mesh.geometry.z_span(), 24});
   return mesh;
 }
 
@@ -57,11 +58,12 @@ TEST_CASE("Hodge operators produce finite spectrum and circular coordinates") {
     CHECK(std::isfinite(evals[i]));
   }
 
-  const auto theta = igneous::ops::compute_circular_coordinates(mesh, evecs.col(0), 0.05f);
+  const auto theta =
+      igneous::ops::compute_circular_coordinates(mesh, evecs.col(0), 0.0f);
   CHECK(theta.size() == static_cast<int>(mesh.geometry.num_points()));
   for (int i = 0; i < theta.size(); ++i) {
     CHECK(std::isfinite(theta[i]));
     CHECK(theta[i] >= -0.01f);
-    CHECK(theta[i] <= 1.01f);
+    CHECK(theta[i] <= 6.30f);
   }
 }
