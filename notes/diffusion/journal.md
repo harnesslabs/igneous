@@ -152,3 +152,34 @@ Use one entry per hypothesis or implementation batch.
 - Decision: `kept`
 - Notes:
   - This becomes the default non-GUI inspection path; PyVista scripts remain optional.
+
+## 2026-02-14 Foundational Operator Regression Tests
+- Timestamp: 2026-02-14T00:00:00Z
+- Commit: working tree after headless tooling
+- Hypothesis: Add deterministic transform/geometry regression tests plus stronger curvature/flow invariants to catch mathematical drift early.
+- Files touched:
+  - `tests/support/test_env.hpp`
+  - `tests/support/tolerances.hpp`
+  - `tests/support/synthetic_meshes.hpp`
+  - `tests/test_ops_transform.cpp`
+  - `tests/test_ops_geometry.cpp`
+  - `tests/test_ops_curvature_flow.cpp`
+  - `CMakeLists.txt`
+- Commands:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+- Baseline:
+  - No dedicated transform/geometry invariant suite.
+- Results:
+  - Added deterministic test support and new tests for:
+    - normalize invariants/idempotence
+    - `carre_du_champ` symmetry/bilinearity/near-positivity
+    - 1-form Gram symmetry + PSD envelope
+    - curvature translation invariance
+    - mean-curvature-flow `dt=0` no-op and smoothing proxy
+  - Test count increased from `7` to `9`.
+- Numeric checks:
+  - `ctest`: pass (`9/9`)
+- Decision: `kept`
+- Notes:
+  - Runtime impact is minimal and within balanced CI budget.

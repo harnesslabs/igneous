@@ -3,42 +3,35 @@
 
 #include <cmath>
 #include <igneous/core/algebra.hpp>
-#include <igneous/data/mesh.hpp>
 #include <igneous/ops/curvature.hpp>
 #include <igneous/ops/flow.hpp>
 
-static igneous::data::Mesh<igneous::core::Euclidean3D, igneous::data::TriangleTopology>
-make_grid(int side) {
-  using Mesh = igneous::data::Mesh<igneous::core::Euclidean3D, igneous::data::TriangleTopology>;
-  Mesh mesh;
-  mesh.geometry.reserve(static_cast<size_t>(side * side));
+#include "support/synthetic_meshes.hpp"
+#include "support/test_env.hpp"
+#include "support/tolerances.hpp"
 
-  for (int y = 0; y < side; ++y) {
-    for (int x = 0; x < side; ++x) {
-      const float fx = static_cast<float>(x) / side;
-      const float fy = static_cast<float>(y) / side;
-      mesh.geometry.push_point({fx, fy, std::sin(fx) * std::cos(fy)});
+using TriangleMesh = igneous::test_support::TriangleMesh;
+
+static float roughness_proxy(const TriangleMesh &mesh) {
+  float sum = 0.0f;
+  for (size_t i = 0; i < mesh.geometry.num_points(); ++i) {
+    const auto pi = mesh.geometry.get_vec3(i);
+    for (uint32_t j : mesh.topology.get_vertex_neighbors(static_cast<uint32_t>(i))) {
+      if (j <= i) {
+        continue;
+      }
+      const auto pj = mesh.geometry.get_vec3(j);
+      const auto d = pi - pj;
+      sum += d.dot(d);
     }
   }
-
-  for (int y = 0; y < side - 1; ++y) {
-    for (int x = 0; x < side - 1; ++x) {
-      const uint32_t i0 = static_cast<uint32_t>(y * side + x);
-      const uint32_t i1 = static_cast<uint32_t>(y * side + x + 1);
-      const uint32_t i2 = static_cast<uint32_t>((y + 1) * side + x);
-      const uint32_t i3 = static_cast<uint32_t>((y + 1) * side + x + 1);
-
-      mesh.topology.faces_to_vertices.insert(mesh.topology.faces_to_vertices.end(), {i0, i1, i2, i1, i3, i2});
-    }
-  }
-
-  mesh.topology.build({mesh.geometry.num_points(), true});
-  return mesh;
+  return sum;
 }
 
 TEST_CASE("Curvature and flow kernels produce finite values") {
+  igneous::test_support::configure_deterministic_test_env();
   using Sig = igneous::core::Euclidean3D;
-  auto mesh = make_grid(20);
+  auto mesh = igneous::test_support::make_surface_grid(20);
 
   std::vector<float> H;
   std::vector<float> K;
@@ -67,4 +60,52 @@ TEST_CASE("Curvature and flow kernels produce finite values") {
   CHECK((p_before.x != doctest::Approx(p_after.x) ||
          p_before.y != doctest::Approx(p_after.y) ||
          p_before.z != doctest::Approx(p_after.z)));
+}
+
+TEST_CASE("Curvature is translation invariant") {
+  igneous::test_support::configure_deterministic_test_env();
+  using Sig = igneous::core::Euclidean3D;
+  auto mesh_a = igneous::test_support::make_surface_grid(18);
+  auto mesh_b = mesh_a;
+
+  const igneous::core::Vec3 offset{3.0f, -2.0f, 1.25f};
+  for (size_t i = 0; i < mesh_b.geometry.num_points(); ++i) {
+    mesh_b.geometry.set_vec3(i, mesh_b.geometry.get_vec3(i) + offset);
+  }
+
+  std::vector<float> H_a, K_a, H_b, K_b;
+  igneous::ops::CurvatureWorkspace<Sig, igneous::data::TriangleTopology> ws_a;
+  igneous::ops::CurvatureWorkspace<Sig, igneous::data::TriangleTopology> ws_b;
+
+  igneous::ops::compute_curvature_measures(mesh_a, H_a, K_a, ws_a);
+  igneous::ops::compute_curvature_measures(mesh_b, H_b, K_b, ws_b);
+
+  REQUIRE(H_a.size() == H_b.size());
+  REQUIRE(K_a.size() == K_b.size());
+  for (size_t i = 0; i < H_a.size(); ++i) {
+    CHECK(H_a[i] == doctest::Approx(H_b[i]).epsilon(5e-3f));
+    CHECK(K_a[i] == doctest::Approx(K_b[i]).epsilon(5e-3f));
+  }
+}
+
+TEST_CASE("Mean curvature flow dt=0 is a no-op and dt>0 smooths roughness proxy") {
+  igneous::test_support::configure_deterministic_test_env();
+  using Sig = igneous::core::Euclidean3D;
+  auto mesh = igneous::test_support::make_surface_grid(24);
+  auto mesh_zero = mesh;
+  igneous::ops::FlowWorkspace<Sig, igneous::data::TriangleTopology> ws;
+
+  igneous::ops::integrate_mean_curvature_flow(mesh_zero, 0.0f, ws);
+  for (size_t i = 0; i < mesh.geometry.num_points(); ++i) {
+    const auto p = mesh.geometry.get_vec3(i);
+    const auto q = mesh_zero.geometry.get_vec3(i);
+    CHECK(p.x == doctest::Approx(q.x).epsilon(igneous::test_support::kTolTight));
+    CHECK(p.y == doctest::Approx(q.y).epsilon(igneous::test_support::kTolTight));
+    CHECK(p.z == doctest::Approx(q.z).epsilon(igneous::test_support::kTolTight));
+  }
+
+  const float rough_before = roughness_proxy(mesh);
+  igneous::ops::integrate_mean_curvature_flow(mesh, 0.01f, ws);
+  const float rough_after = roughness_proxy(mesh);
+  CHECK(rough_after <= rough_before * 1.001f);
 }
