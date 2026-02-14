@@ -25,6 +25,15 @@ template <typename MeshT> struct HodgeWorkspace {
   Eigen::VectorXf weight;
 };
 
+struct CircularCoordinateOptions {
+  float epsilon = 1.0f;
+  float laplacian_scale = 0.02f;
+  bool use_laplacian_regularization = true;
+  float min_eigen_magnitude = 1e-6f;
+  float min_imaginary_norm = 1e-4f;
+  bool allow_real_fallback = true;
+};
+
 template <typename MeshT>
 Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
                                                  float bandwidth,
@@ -168,7 +177,7 @@ template <typename MeshT>
 Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
                                              const Eigen::VectorXf &alpha_coeffs,
                                              float bandwidth,
-                                             float epsilon = 1e-3f) {
+                                             const CircularCoordinateOptions &options) {
   const auto &U = mesh.topology.eigen_basis;
   const auto &mu = mesh.topology.mu;
 
@@ -214,19 +223,60 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
       },
       8);
 
-  Eigen::MatrixXf L_eps = X_op - epsilon * Eigen::MatrixXf::Identity(n0, n0);
+  Eigen::MatrixXf L_eps = X_op;
+  if (options.use_laplacian_regularization) {
+    Eigen::VectorXf lap_diag = Eigen::VectorXf::Ones(n0);
+    if constexpr (requires { mesh.topology.eigen_values; }) {
+      if (mesh.topology.eigen_values.size() >= n0) {
+        lap_diag = (Eigen::VectorXf::Ones(n0) - mesh.topology.eigen_values.head(n0))
+                       .cwiseMax(0.0f);
+      }
+    }
+    L_eps -= (options.epsilon * options.laplacian_scale) * lap_diag.asDiagonal();
+  } else {
+    L_eps -= options.epsilon * Eigen::MatrixXf::Identity(n0, n0);
+  }
 
   Eigen::EigenSolver<Eigen::MatrixXf> solver(L_eps);
   const auto evals = solver.eigenvalues();
   const auto evecs = solver.eigenvectors();
 
-  int best_idx = 0;
+  int best_idx = -1;
   float min_mag = std::numeric_limits<float>::max();
   for (int i = 0; i < n0; ++i) {
     const float mag = std::abs(evals(i));
-    if (mag > 1e-6f && mag < min_mag) {
+    if (mag <= options.min_eigen_magnitude) {
+      continue;
+    }
+    const float imag_norm = evecs.col(i).imag().norm();
+    if (imag_norm <= options.min_imaginary_norm) {
+      continue;
+    }
+    if (mag < min_mag) {
       min_mag = mag;
       best_idx = i;
+    }
+  }
+
+  if (best_idx < 0 && options.allow_real_fallback) {
+    for (int i = 0; i < n0; ++i) {
+      const float mag = std::abs(evals(i));
+      if (mag > options.min_eigen_magnitude && mag < min_mag) {
+        min_mag = mag;
+        best_idx = i;
+      }
+    }
+  }
+
+  if (best_idx < 0) {
+    best_idx = 0;
+    min_mag = std::abs(evals(0));
+    for (int i = 1; i < n0; ++i) {
+      const float mag = std::abs(evals(i));
+      if (mag < min_mag) {
+        min_mag = mag;
+        best_idx = i;
+      }
     }
   }
 
@@ -243,6 +293,16 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
   }
 
   return theta;
+}
+
+template <typename MeshT>
+Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
+                                             const Eigen::VectorXf &alpha_coeffs,
+                                             float bandwidth,
+                                             float epsilon = 1.0f) {
+  CircularCoordinateOptions options;
+  options.epsilon = epsilon;
+  return compute_circular_coordinates(mesh, alpha_coeffs, bandwidth, options);
 }
 
 } // namespace igneous::ops

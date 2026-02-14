@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <tuple>
 #include <vector>
 
 #include <igneous/core/algebra.hpp>
@@ -101,6 +102,16 @@ static void export_vector_field(const std::string &filename,
   }
 }
 
+static std::tuple<float, float, float>
+compute_scalar_stats(const Eigen::VectorXf &values) {
+  const float min_v = values.minCoeff();
+  const float max_v = values.maxCoeff();
+  const float mean = values.mean();
+  const float variance = (values.array() - mean).square().mean();
+  const float stddev = std::sqrt(std::max(variance, 0.0f));
+  return {min_v, max_v, stddev};
+}
+
 int main() {
   const bool bench_mode = std::getenv("IGNEOUS_BENCH_MODE") != nullptr;
   if (!bench_mode) {
@@ -127,8 +138,13 @@ int main() {
   const auto laplacian = ops::compute_hodge_laplacian_matrix(D_weak, E_up);
   auto [evals, evecs] = ops::compute_hodge_spectrum(laplacian, G);
 
-  const auto theta_0 = ops::compute_circular_coordinates(mesh, evecs.col(0), bandwidth);
-  const auto theta_1 = ops::compute_circular_coordinates(mesh, evecs.col(1), bandwidth);
+  ops::CircularCoordinateOptions circular_options;
+  const auto theta_0 =
+      ops::compute_circular_coordinates(mesh, evecs.col(0), bandwidth,
+                                        circular_options);
+  const auto theta_1 =
+      ops::compute_circular_coordinates(mesh, evecs.col(1), bandwidth,
+                                        circular_options);
 
   if (!bench_mode) {
     std::vector<float> field_0(static_cast<size_t>(theta_0.size()));
@@ -146,6 +162,23 @@ int main() {
   for (int i = 0; i < 12 && i < evals.size(); ++i) {
     std::cout << "Mode " << i << ": lambda = " << evals[i] << "\n";
   }
+
+  if (!bench_mode) {
+    const auto &diag = mesh.topology.spectral_diagnostics;
+    std::cout << "[Hodge] Spectral diagnostics: requested="
+              << ops::to_string(diag.requested_mode)
+              << ", used=" << ops::to_string(diag.used_mode)
+              << ", reversibility_pass="
+              << (diag.reversibility_pass ? "yes" : "no")
+              << ", nconv=" << diag.nconv << "\n";
+  }
+
+  const auto [theta0_min, theta0_max, theta0_std] = compute_scalar_stats(theta_0);
+  const auto [theta1_min, theta1_max, theta1_std] = compute_scalar_stats(theta_1);
+  std::cout << "[Hodge] Circular theta_0 range=[" << theta0_min << ", "
+            << theta0_max << "], std=" << theta0_std << "\n";
+  std::cout << "[Hodge] Circular theta_1 range=[" << theta1_min << ", "
+            << theta1_max << "], std=" << theta1_std << "\n";
 
   if (!bench_mode) {
     for (int i = 0; i < 3; ++i) {

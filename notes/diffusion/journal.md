@@ -72,3 +72,30 @@ Use one entry per hypothesis or implementation batch.
 - Decision: `kept`
 - Notes:
   - Fix restores expected near-harmonic low-mode behavior while keeping symmetric path available explicitly.
+
+## 2026-02-14 Circular Coordinate Paper Alignment
+- Timestamp: 2026-02-14T00:00:00Z
+- Commit: working tree after spectral gate
+- Hypothesis: Align circular-coordinate defaults with paper-style regularization while preserving practical angle quality on the torus benchmark.
+- Files touched:
+  - `include/igneous/ops/hodge.hpp`
+  - `src/main_hodge.cpp`
+- Commands:
+  - `cmake --build build -j8`
+  - `./build/igneous-hodge`
+  - `ctest --test-dir build --output-on-failure`
+- Baseline:
+  - Existing default used `epsilon=1e-3` and identity-style regularization.
+- Results:
+  - Added additive `CircularCoordinateOptions`.
+  - Default epsilon is now `1.0f`.
+  - Default path now regularizes using Laplacian-based term with calibrated scale for current discretization.
+  - Added deterministic circular diagnostics in `main_hodge` output.
+  - Current large torus run now reports:
+    - `theta_0 range=[0.000466881, 0.999998], std=0.288768`
+    - `theta_1 range=[0.000101466, 0.999627], std=0.281885`
+- Numeric checks:
+  - `ctest`: pass (`7/7`)
+- Decision: `kept`
+- Notes:
+  - Raw unscaled `epsilon * Delta` over-regularized this discretization and collapsed angular spread; retained Laplacian regularization with explicit scale parameter to preserve paper-aligned structure and practical stability.
