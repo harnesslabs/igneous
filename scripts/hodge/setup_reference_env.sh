@@ -24,7 +24,7 @@ fi
 source "${VENV_PATH}/bin/activate"
 
 python -m pip -q install --upgrade pip
-python -m pip -q install numpy scipy scikit-learn opt_einsum
+python -m pip -q install numpy scipy scikit-learn opt_einsum matplotlib
 python -m pip -q install -e "${ROOT_DIR}/DiffusionGeometry"
 
 echo "${VENV_PATH}"
