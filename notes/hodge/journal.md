@@ -160,3 +160,27 @@ Use one entry per parity hypothesis.
 - Decision: `rejected`
 - Notes:
   - Severe regression; reverted immediately.
+
+## 2026-02-14 Hypothesis A3: Symmetric Eigenvector Ordering Parity
+- Timestamp: 2026-02-14T16:57:05Z
+- Commit: `3c07519` + working tree (uncommitted)
+- Hypothesis: Reversing symmetric-eigensolver output columns after `LargestMagn` sorting is inconsistent with reference ordering and inflates parity error; removing the reversal should improve harmonic and circular alignment.
+- Files touched:
+  - `include/igneous/ops/spectral.hpp`
+- Commands:
+  - `cmake --build build -j8`
+  - `scripts/hodge/run_parity_round.sh`
+  - `scripts/hodge/run_parity_round.sh` (stability repeat)
+- Numeric parity deltas:
+  - Baseline report: `notes/hodge/results/round_20260214-162853/report/parity_report.json`
+  - Report: `notes/hodge/results/round_20260214-165639/report/parity_report.json`
+  - Stability report: `notes/hodge/results/round_20260214-165649/report/parity_report.json`
+  - Composite: `0.042955` (`-35.80%` vs baseline)
+  - Harmonic subspace max principal angle: `4.298653 deg` (improved from `6.376378 deg`)
+  - Harmonic Procrustes error: `0.066736` (improved from `0.097143`)
+  - Circular correlation min: `0.999483` (improved from `0.996571`)
+  - Circular wrapped P95 max: `0.059370 rad` (improved from `0.163400 rad`)
+- Decision: `kept`
+- Notes:
+  - Improvement is deterministic across repeated rounds with identical metrics.
+  - Final gates are not yet fully met; remaining blocker is harmonic-form error above target thresholds.

@@ -337,7 +337,6 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
 
           Eigen::MatrixXf basis = eigs.eigenvectors(nconv);
           basis = basis.array().colwise() * inv_sqrt_rows.array();
-          basis = basis.rowwise().reverse().eval();
           if (std::abs(basis(0, 0)) > 1e-12f) {
             basis /= basis(0, 0);
           }
