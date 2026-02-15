@@ -13,7 +13,10 @@
 
 #include <igneous/ops/curvature.hpp>
 #include <igneous/ops/flow.hpp>
-#include <igneous/ops/geometry.hpp>
-#include <igneous/ops/hodge.hpp>
-#include <igneous/ops/spectral.hpp>
+#include <igneous/ops/diffusion/basis.hpp>
+#include <igneous/ops/diffusion/forms.hpp>
+#include <igneous/ops/diffusion/geometry.hpp>
+#include <igneous/ops/diffusion/hodge.hpp>
+#include <igneous/ops/diffusion/products.hpp>
+#include <igneous/ops/diffusion/spectral.hpp>
 #include <igneous/ops/transform.hpp>

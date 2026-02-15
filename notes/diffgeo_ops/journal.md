@@ -1,0 +1,147 @@
+# Diffusion Topology Wave 2 Journal
+
+## Entry 0001
+- Hypothesis: Establish a clean baseline and hard-refactor include paths before adding new operators.
+- Structural Difference Targeted: Repository organization and include topology for diffusion operators.
+- Files Touched:
+  - `notes/diffgeo_ops/journal.md`
+  - `notes/diffgeo_ops/results/`
+- Commands Run:
+  - `mkdir -p notes/diffgeo_ops/results scripts/diffgeo/diagnostics include/igneous/ops/diffusion`
+- Unit Metrics:
+  - pending
+- Integration Metrics:
+  - pending
+- Decision: `kept`
+- Notes:
+  - Baseline scaffold created for Wave 2 workstream.
+
+## Entry 0002
+- Hypothesis: Hard-move diffusion ops headers into `include/igneous/ops/diffusion/` and update all callsites without compatibility shims.
+- Structural Difference Targeted: Repo navigation and API grouping by topology family.
+- Files Touched:
+  - `include/igneous/ops/diffusion/geometry.hpp`
+  - `include/igneous/ops/diffusion/spectral.hpp`
+  - `include/igneous/ops/diffusion/hodge.hpp`
+  - `include/igneous/igneous.hpp`
+  - `src/*`, `tests/*`, `benches/*` include rewrites
+  - removed: `include/igneous/ops/geometry.hpp`, `include/igneous/ops/spectral.hpp`, `include/igneous/ops/hodge.hpp`
+- Commands Run:
+  - `mv include/igneous/ops/{geometry,spectral,hodge}.hpp include/igneous/ops/diffusion/`
+  - include rewrite via `rg` + in-place replacement
+  - `cmake --build build -j8`
+- Unit Metrics:
+  - compile success after refactor
+- Integration Metrics:
+  - n/a
+- Decision: `kept`
+- Notes:
+  - Hard-move completed with no legacy include usage in repo code.
+
+## Entry 0003
+- Hypothesis: Reference-style wedge combinatorics (`basis.hpp`) and product APIs (`products.hpp`) will support deterministic wedge parity tests.
+- Structural Difference Targeted: Missing wedge-basis indexing, children/sign maps, wedge-product linearization.
+- Files Touched:
+  - `include/igneous/ops/diffusion/basis.hpp`
+  - `include/igneous/ops/diffusion/products.hpp`
+  - `tests/test_ops_diffusion_basis.cpp`
+  - `tests/test_ops_diffusion_wedge.cpp`
+- Commands Run:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure -R test_ops_diffusion_basis`
+  - `ctest --test-dir build --output-on-failure -R test_ops_diffusion_wedge`
+- Unit Metrics:
+  - basis fixtures pass (lex order, children mapping, signs)
+  - wedge direct-vs-operator relative error threshold pass (`<1e-4`)
+- Integration Metrics:
+  - n/a
+- Decision: `kept`
+- Notes:
+  - Wedge APIs and deterministic combinatorics are now in C++.
+
+## Entry 0004
+- Hypothesis: Generic k-form operators (`k=0..2`) plus new diffusion-topology CLI and parity harness will align C++ and reference outputs for torus/sphere workflows.
+- Structural Difference Targeted: 1-form-only pipeline and lack of 2-form/wedge parity infrastructure.
+- Files Touched:
+  - `include/igneous/ops/diffusion/forms.hpp`
+  - `src/main_diffusion_topology.cpp`
+  - `scripts/diffgeo/*`
+  - `scripts/diffgeo/diagnostics/plot_diffgeo_ops.py`
+  - `tests/test_ops_diffusion_forms.cpp`
+  - `tests/test_diffgeo_cli_outputs.sh`
+  - `tests/test_diffgeo_parity_optional.sh`
+  - `CMakeLists.txt`
+- Commands Run:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure`
+  - `scripts/diffgeo/run_parity_round.sh`
+- Unit Metrics:
+  - new tests pass: `test_ops_diffusion_forms`, `test_ops_diffusion_wedge`, `test_ops_diffusion_basis`
+  - full suite pass locally: 14/14
+- Integration Metrics:
+  - Round: `notes/diffgeo_ops/results/round_20260214-211636`
+  - composite_score: `4.668913`
+  - harmonic1_subspace_max_angle_deg: `4.936678`
+  - harmonic2_subspace_max_angle_deg: `89.821669`
+  - wedge_rel_error: `27.641002`
+  - form2_spectrum_rel_error: `0.446335`
+  - final_pass gate: `false`
+- Decision: `kept`
+- Notes:
+  - Infrastructure and outputs are complete and robustly testable.
+  - Final parity thresholds are not yet met; strict enforcement remains available with `IGNEOUS_REQUIRE_PARITY=1`.
+
+## Entry 0005
+- Hypothesis: Harmonic 2-form and wedge parity miss is primarily from two structural mismatches: (1) down-Laplacian assembled as `D D^T` instead of `D G_{k-1}^{-1} D^T`; (2) 2-form ambient export missing metric lifting (`Gamma * W * Gamma^T`) prior to Hodge dual vector extraction.
+- Structural Difference Targeted:
+  - Weak/strong adjoint convention for codifferential/down-Laplacian.
+  - Ambient reconstruction semantics for 2-forms and wedge outputs.
+- Files Touched:
+  - `include/igneous/ops/diffusion/forms.hpp`
+  - `src/main_diffusion_topology.cpp`
+- Commands Run:
+  - `cmake --build build -j8`
+  - `ctest --test-dir build --output-on-failure -R "test_ops_diffusion_forms|test_ops_diffusion_wedge|test_diffgeo_cli_outputs"`
+  - `scripts/diffgeo/run_parity_round.sh`
+- Unit Metrics:
+  - targeted tests pass (`test_ops_diffusion_forms`, `test_ops_diffusion_wedge`, `test_diffgeo_cli_outputs`).
+- Integration Metrics:
+  - Baseline (Entry 0004): composite `4.668913`, harmonic2 angle `89.821669`, harmonic2 procrustes `10.612400`, wedge `27.641002`, form2 spectrum `0.446335`.
+  - After patch (round `20260214-223208`): composite `0.101849`, harmonic2 angle `4.896336`, harmonic2 procrustes `0.048840`, wedge `0.038379`, form2 spectrum `0.011489`.
+- Decision: `kept`
+- Notes:
+  - This is the largest structural parity gain so far and directly addresses the 2-form/wedge mismatch.
+
+## Entry 0006
+- Hypothesis: Matching reference eigensolver init/order (`v0=ones`, tighter sorting emulation, reversed symmetric basis columns) will improve residual harmonic-1/circular gaps.
+- Structural Difference Targeted:
+  - Spectral basis extraction determinism and ordering.
+- Files Touched:
+  - `include/igneous/ops/diffusion/spectral.hpp`
+- Commands Run:
+  - `cmake --build build -j8`
+  - `scripts/diffgeo/run_parity_round.sh`
+- Unit Metrics:
+  - build/test remained healthy.
+- Integration Metrics:
+  - Round `20260214-223604`: composite `0.521756`, harmonic1 angle `71.551427`, harmonic2 angle `16.450203`, wedge `0.596772`.
+- Decision: `rejected`
+- Notes:
+  - Regression is severe; changes were discarded.
+
+## Entry 0007
+- Hypothesis: Replacing circular generalized eigen solve with projected Gram-orthonormal solve (reference operator-spectrum style) will improve theta parity.
+- Structural Difference Targeted:
+  - Circular-coordinate non-selfadjoint spectral solve path.
+- Files Touched:
+  - `include/igneous/ops/diffusion/hodge.hpp`
+- Commands Run:
+  - `cmake --build build -j8`
+  - `scripts/diffgeo/run_parity_round.sh`
+- Unit Metrics:
+  - build/test remained healthy.
+- Integration Metrics:
+  - Round `20260214-223851`: composite `0.139870`, circular correlation min `0.033217` (torus theta degraded strongly), circular p95 max `3.095262`.
+- Decision: `rejected`
+- Notes:
+  - Circular mode selection became unstable/regressed; changes were discarded.

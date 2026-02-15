@@ -14,9 +14,9 @@
 #include <igneous/core/algebra.hpp>
 #include <igneous/data/mesh.hpp>
 #include <igneous/io/importer.hpp>
-#include <igneous/ops/geometry.hpp>
-#include <igneous/ops/hodge.hpp>
-#include <igneous/ops/spectral.hpp>
+#include <igneous/ops/diffusion/geometry.hpp>
+#include <igneous/ops/diffusion/hodge.hpp>
+#include <igneous/ops/diffusion/spectral.hpp>
 #include <igneous/ops/transform.hpp>
 
 using MeshSig = igneous::core::Euclidean3D;

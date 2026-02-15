@@ -31,28 +31,6 @@ def write_table(path: pathlib.Path, header: List[str], rows: np.ndarray) -> None
             writer.writerow([float(v) for v in row])
 
 
-def write_matrix_csv(path: pathlib.Path, matrix: np.ndarray) -> None:
-    matrix = np.asarray(matrix, dtype=float)
-    rows, cols = matrix.shape
-    header = ["row"] + [f"c{i}" for i in range(cols)]
-    payload = np.column_stack([np.arange(rows, dtype=float), matrix])
-    write_table(path, header, payload)
-
-
-def write_complex_evals_csv(path: pathlib.Path, evals: np.ndarray) -> None:
-    evals = np.asarray(evals, dtype=complex)
-    rows = np.column_stack(
-        [
-            np.arange(evals.shape[0], dtype=float),
-            np.real(evals),
-            np.imag(evals),
-            np.abs(evals),
-            (np.imag(evals) > 0).astype(float),
-        ]
-    )
-    write_table(path, ["index", "real", "imag", "abs", "positive_imag"], rows)
-
-
 def compute_deterministic_basis(
     kernel: np.ndarray, nbr_indices: np.ndarray, n_function_basis: int
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -120,11 +98,6 @@ def main() -> None:
     parser.add_argument("--circular-lambda", type=float, default=1.0)
     parser.add_argument("--form-indices", default="0,1")
     parser.add_argument("--mode-indices", default="0,1")
-    parser.add_argument(
-        "--emit-operator-debug",
-        action="store_true",
-        help="Emit operator-level debug artifacts for diagnostics",
-    )
     args = parser.parse_args()
 
     out_dir = pathlib.Path(args.output_dir)
@@ -170,12 +143,6 @@ def main() -> None:
     harmonic_ambient = []
     circular_thetas = []
     circular_meta = []
-    laplacian0_weak = None
-    if args.emit_operator_debug:
-        laplacian0_weak = np.asarray(dg.laplacian(0).weak)
-        function_gram = np.asarray(dg.function_space.gram)
-        write_matrix_csv(out_dir / "reference_function_gram.csv", function_gram)
-        write_matrix_csv(out_dir / "reference_laplacian0_weak.csv", laplacian0_weak)
 
     for idx, form_idx in enumerate(form_indices):
         form = forms_1[form_idx]
@@ -183,7 +150,7 @@ def main() -> None:
         ambient = np.asarray(form.to_ambient(), dtype=float)
         harmonic_ambient.append(ambient)
 
-        theta, eigval, eig_idx, evals = circular_coordinates(
+        theta, eigval, eig_idx, _evals = circular_coordinates(
             form, args.circular_lambda, mode_indices[idx]
         )
         circular_thetas.append(theta)
@@ -199,27 +166,11 @@ def main() -> None:
             }
         )
 
-        if args.emit_operator_debug:
-            x_weak = np.asarray(form.sharp().operator.weak)
-            operator_weak = x_weak - args.circular_lambda * laplacian0_weak
-            write_matrix_csv(
-                out_dir / f"reference_circular_operator_form{idx}_x_weak.csv", x_weak
-            )
-            write_matrix_csv(
-                out_dir / f"reference_circular_operator_form{idx}_operator_weak.csv",
-                operator_weak,
-            )
-            write_complex_evals_csv(
-                out_dir / f"reference_circular_operator_form{idx}_evals.csv", evals
-            )
-
     write_table(
         out_dir / "reference_points.csv",
         ["x", "y", "z"],
         points,
     )
-    if args.emit_operator_debug:
-        write_matrix_csv(out_dir / "reference_function_basis.csv", function_basis)
 
     spectrum_rows = np.column_stack([np.arange(vals_1.shape[0]), np.asarray(vals_1, dtype=float)])
     write_table(

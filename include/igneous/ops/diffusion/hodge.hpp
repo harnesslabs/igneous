@@ -12,7 +12,9 @@
 
 #include <igneous/core/parallel.hpp>
 #include <igneous/data/mesh.hpp>
-#include <igneous/ops/geometry.hpp>
+#include <igneous/ops/diffusion/forms.hpp>
+#include <igneous/ops/diffusion/geometry.hpp>
+#include <igneous/ops/diffusion/products.hpp>
 
 namespace igneous::ops {
 

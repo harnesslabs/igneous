@@ -10,9 +10,9 @@
 #include <igneous/data/mesh.hpp>
 #include <igneous/ops/curvature.hpp>
 #include <igneous/ops/flow.hpp>
-#include <igneous/ops/geometry.hpp>
-#include <igneous/ops/hodge.hpp>
-#include <igneous/ops/spectral.hpp>
+#include <igneous/ops/diffusion/geometry.hpp>
+#include <igneous/ops/diffusion/hodge.hpp>
+#include <igneous/ops/diffusion/spectral.hpp>
 
 using MeshSig = igneous::core::Euclidean3D;
 using SurfaceMesh = igneous::data::Mesh<MeshSig, igneous::data::TriangleTopology>;

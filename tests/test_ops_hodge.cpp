@@ -4,9 +4,9 @@
 #include <cmath>
 #include <igneous/core/algebra.hpp>
 #include <igneous/data/mesh.hpp>
-#include <igneous/ops/geometry.hpp>
-#include <igneous/ops/hodge.hpp>
-#include <igneous/ops/spectral.hpp>
+#include <igneous/ops/diffusion/geometry.hpp>
+#include <igneous/ops/diffusion/hodge.hpp>
+#include <igneous/ops/diffusion/spectral.hpp>
 
 static igneous::data::Mesh<igneous::core::Euclidean3D, igneous::data::DiffusionTopology>
 make_torus_cloud(size_t n_points) {

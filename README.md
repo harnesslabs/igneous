@@ -46,6 +46,21 @@ cmake --build build -j8
 ./build/igneous-hodge
 ```
 
+## Visualizations
+
+Per-main output viewers are available under `visualizations/`.
+
+```bash
+python3 visualizations/view_main_point.py --run --open
+python3 visualizations/view_main_mesh.py --run --open
+python3 visualizations/view_main_diffusion.py --run --open
+python3 visualizations/view_main_spectral.py --run --open
+python3 visualizations/view_main_hodge.py --run --open
+python3 visualizations/view_main_diffusion_topology.py --run --open
+```
+
+Detailed usage is documented in `visualizations/README.md`.
+
 ## Reference Implementation
 
 The diffusion/Hodge parity work in this repository is aligned against the Python
@@ -61,13 +76,19 @@ Standard parity round:
 ./scripts/hodge/run_parity_round.sh
 ```
 
-Optional diagnostic plots for a parity round:
+## Diffusion Topology Parity Workflow
+
+Standard torus+sphere parity round:
 
 ```bash
-ROUND_DIR="$(ls -1dt notes/hodge/results/round_* | head -n1)"
-notes/hodge/.venv_ref/bin/python \
-  ./scripts/hodge/diagnostics/plot_hodge_outputs.py \
-  --round-dir "${ROUND_DIR}"
+./scripts/diffgeo/run_parity_round.sh
+```
+
+By default, `test_diffgeo_parity_optional` reports parity metrics but only hard-fails
+when strict enforcement is requested:
+
+```bash
+IGNEOUS_REQUIRE_PARITY=1 ctest --test-dir build -R test_diffgeo_parity_optional --output-on-failure
 ```
 
 Set `IGNEOUS_BENCH_MODE=1` to disable heavy export paths in runtime apps.
@@ -97,9 +118,14 @@ Current suites:
 - `test_ops_curvature_flow`
 - `test_ops_spectral_geometry`
 - `test_ops_hodge`
+- `test_ops_diffusion_basis`
+- `test_ops_diffusion_forms`
+- `test_ops_diffusion_wedge`
 - `test_io_meshes`
 - `test_hodge_cli_outputs`
 - `test_hodge_parity_optional` (skips unless `DiffusionGeometry/` is available, unless forced)
+- `test_diffgeo_cli_outputs`
+- `test_diffgeo_parity_optional` (strict-fail only when `IGNEOUS_REQUIRE_PARITY=1`)
 
 ## Benchmarks
 
