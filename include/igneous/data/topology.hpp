@@ -404,12 +404,15 @@ struct DiffusionTopology {
       nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>, PointCloudAdaptor,
       3>;
 
-  static std::vector<float> build_epsilons() {
-    std::vector<float> epsilons;
-    epsilons.reserve(80);
-    for (float exponent = -10.0f; exponent < 10.0f; exponent += 0.25f) {
-      epsilons.push_back(std::pow(2.0f, exponent));
-    }
+  static const std::vector<float> &build_epsilons() {
+    static const std::vector<float> epsilons = [] {
+      std::vector<float> values;
+      values.reserve(80);
+      for (float exponent = -10.0f; exponent < 10.0f; exponent += 0.25f) {
+        values.push_back(std::pow(2.0f, exponent));
+      }
+      return values;
+    }();
     return epsilons;
   }
 
@@ -418,25 +421,35 @@ struct DiffusionTopology {
                                              const std::vector<float> &epsilons) {
     const int e_count = static_cast<int>(epsilons.size());
     std::vector<float> averages(static_cast<size_t>(e_count), 0.0f);
+    std::vector<float> inv_eps(static_cast<size_t>(e_count), 0.0f);
+    std::vector<float> log_eps(static_cast<size_t>(e_count), 0.0f);
     const float inv_nk = 1.0f / static_cast<float>(std::max(1, n * k));
+    const float *entry_data = entries.data();
+    const size_t entry_count = entries.size();
 
-    for (int e = 0; e < e_count; ++e) {
-      const float epsilon = std::max(epsilons[static_cast<size_t>(e)], 1e-12f);
-      float sum = 0.0f;
-      for (float value : entries) {
-        sum += std::exp(-value / epsilon);
-      }
-      averages[static_cast<size_t>(e)] = sum * inv_nk;
-    }
+    core::parallel_for_index(
+        0, e_count,
+        [&](int e) {
+          const float epsilon =
+              std::max(epsilons[static_cast<size_t>(e)], 1e-12f);
+          const float inv_eps_e = 1.0f / epsilon;
+          inv_eps[static_cast<size_t>(e)] = inv_eps_e;
+          log_eps[static_cast<size_t>(e)] = std::log(epsilon);
+          float sum = 0.0f;
+          for (size_t idx = 0; idx < entry_count; ++idx) {
+            sum += std::exp(-entry_data[idx] * inv_eps_e);
+          }
+          averages[static_cast<size_t>(e)] = sum * inv_nk;
+        },
+        4);
 
     int best_idx = 0;
     float best_criterion = -std::numeric_limits<float>::infinity();
     for (int i = 0; i + 1 < e_count; ++i) {
       const float avg0 = std::max(averages[static_cast<size_t>(i)], 1e-30f);
       const float avg1 = std::max(averages[static_cast<size_t>(i + 1)], 1e-30f);
-      const float eps0 = std::max(epsilons[static_cast<size_t>(i)], 1e-12f);
-      const float eps1 = std::max(epsilons[static_cast<size_t>(i + 1)], 1e-12f);
-      const float denom = std::log(eps1) - std::log(eps0);
+      const float denom =
+          log_eps[static_cast<size_t>(i + 1)] - log_eps[static_cast<size_t>(i)];
       if (std::abs(denom) < 1e-12f) {
         continue;
       }
