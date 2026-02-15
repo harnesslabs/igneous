@@ -437,7 +437,7 @@ struct DiffusionTopology {
           log_eps[static_cast<size_t>(e)] = std::log(epsilon);
           float sum = 0.0f;
           for (size_t idx = 0; idx < entry_count; ++idx) {
-            sum += std::expf(-entry_data[idx] * inv_eps_e);
+            sum += std::exp(-entry_data[idx] * inv_eps_e);
           }
           averages[static_cast<size_t>(e)] = sum * inv_nk;
         },
