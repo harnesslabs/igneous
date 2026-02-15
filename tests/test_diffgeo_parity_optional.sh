@@ -4,13 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REQUIRE_PARITY="${IGNEOUS_REQUIRE_PARITY:-0}"
 
-if [[ ! -d "${ROOT_DIR}/DiffusionGeometry" ]]; then
-  if [[ "${REQUIRE_PARITY}" == "1" ]]; then
-    echo "DiffusionGeometry/ is required but missing" >&2
-    exit 1
-  fi
-  echo "Skipping optional diffusion topology parity test: DiffusionGeometry/ missing"
+if [[ "${REQUIRE_PARITY}" != "1" ]]; then
+  echo "Skipping optional diffusion topology parity test: CLI now emits PLY-only outputs"
   exit 0
+fi
+
+if [[ ! -d "${ROOT_DIR}/DiffusionGeometry" ]]; then
+  echo "DiffusionGeometry/ is required but missing" >&2
+  exit 1
 fi
 
 run_output="$("${ROOT_DIR}/scripts/diffgeo/run_parity_round.sh")"
@@ -28,9 +29,7 @@ from pathlib import Path
 report = Path("${report_json}")
 payload = json.loads(report.read_text())
 if not payload["gates"]["final_pass"]:
-    if "${REQUIRE_PARITY}" == "1":
-        raise SystemExit("final parity gate failed")
-    print("Diffusion topology parity round did not meet final gate; passing because IGNEOUS_REQUIRE_PARITY!=1")
+    raise SystemExit("final parity gate failed")
 PY
 
 echo "optional diffusion topology parity test passed"

@@ -43,7 +43,6 @@ struct Config {
   int circular_mode_1 = 1;
 
   float harmonic_tolerance = 1e-3f;
-  bool export_ply = false;
 };
 
 static void print_usage() {
@@ -66,8 +65,7 @@ static void print_usage() {
       << "  --harmonic-tolerance <float>\n"
       << "  --circular-lambda <float>\n"
       << "  --circular-mode-0 <int>\n"
-      << "  --circular-mode-1 <int>\n"
-      << "  --export-ply\n";
+      << "  --circular-mode-1 <int>\n";
 }
 
 static bool parse_args(int argc, char **argv, Config &cfg) {
@@ -158,11 +156,6 @@ static bool parse_args(int argc, char **argv, Config &cfg) {
       cfg.circular_mode_1 = std::stoi(require_value("--circular-mode-1"));
       continue;
     }
-    if (arg == "--export-ply") {
-      cfg.export_ply = true;
-      continue;
-    }
-
     std::cerr << "Unknown argument: " << arg << "\n";
     print_usage();
     return false;
@@ -242,78 +235,39 @@ static bool load_point_cloud_csv(const std::string &filename, DiffusionMesh &mes
   return mesh.geometry.num_points() > 0;
 }
 
-static void write_points_csv(const std::string &filename, const DiffusionMesh &mesh) {
-  std::ofstream file(filename);
-  file << "x,y,z\n";
-  for (size_t i = 0; i < mesh.geometry.num_points(); ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
-    file << p.x << "," << p.y << "," << p.z << "\n";
+static std::vector<float> to_scalar_field(const Eigen::VectorXf &values) {
+  std::vector<float> out(static_cast<size_t>(values.size()));
+  for (int i = 0; i < values.size(); ++i) {
+    out[static_cast<size_t>(i)] = values[i];
   }
+  return out;
 }
 
-static void write_spectrum_csv(const std::string &filename,
-                               const Eigen::VectorXf &evals) {
+static void export_vector_field(const std::string &filename,
+                                const DiffusionMesh &mesh,
+                                const std::vector<core::Vec3> &vectors) {
   std::ofstream file(filename);
-  file << "mode,lambda\n";
-  for (int i = 0; i < evals.size(); ++i) {
-    file << i << "," << evals[i] << "\n";
+  if (!file.is_open()) {
+    return;
   }
-}
-
-static void write_coeff_matrix_csv(const std::string &filename,
-                                   const Eigen::MatrixXf &coeffs) {
-  std::ofstream file(filename);
-  file << "coeff_index";
-  for (int c = 0; c < coeffs.cols(); ++c) {
-    file << ",form" << c;
-  }
-  file << "\n";
-
-  for (int r = 0; r < coeffs.rows(); ++r) {
-    file << r;
-    for (int c = 0; c < coeffs.cols(); ++c) {
-      file << "," << coeffs(r, c);
-    }
-    file << "\n";
-  }
-}
-
-static void write_vector_fields_csv(
-    const std::string &filename, const DiffusionMesh &mesh,
-    const std::vector<std::vector<core::Vec3>> &fields,
-    const std::vector<std::string> &labels) {
-  std::ofstream file(filename);
-  file << "x,y,z";
-  for (size_t i = 0; i < fields.size(); ++i) {
-    file << "," << labels[i] << "_x"
-         << "," << labels[i] << "_y"
-         << "," << labels[i] << "_z";
-  }
-  file << "\n";
 
   const size_t n = mesh.geometry.num_points();
+  file << "ply\n";
+  file << "format ascii 1.0\n";
+  file << "element vertex " << n << "\n";
+  file << "property float x\n";
+  file << "property float y\n";
+  file << "property float z\n";
+  file << "property float nx\n";
+  file << "property float ny\n";
+  file << "property float nz\n";
+  file << "end_header\n";
+
   for (size_t i = 0; i < n; ++i) {
     const auto p = mesh.geometry.get_vec3(i);
-    file << p.x << "," << p.y << "," << p.z;
-    for (size_t f = 0; f < fields.size(); ++f) {
-      const auto v = fields[f][i];
-      file << "," << v.x << "," << v.y << "," << v.z;
-    }
-    file << "\n";
-  }
-}
-
-static void write_circular_csv(const std::string &filename,
-                               const DiffusionMesh &mesh,
-                               const Eigen::VectorXf &theta_0,
-                               const Eigen::VectorXf &theta_1) {
-  std::ofstream file(filename);
-  file << "x,y,z,theta_0,theta_1\n";
-  for (size_t i = 0; i < mesh.geometry.num_points(); ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
-    const int idx = static_cast<int>(i);
-    file << p.x << "," << p.y << "," << p.z << "," << theta_0[idx] << ","
-         << theta_1[idx] << "\n";
+    const auto v = vectors[i];
+    file << p.x << " " << p.y << " " << p.z << " " << v.x << " " << v.y
+         << " " << v.z << "\n";
   }
 }
 
@@ -469,24 +423,20 @@ int main(int argc, char **argv) {
   const auto gamma_data_immersion = build_gamma_data_immersion(mesh);
 
   std::vector<std::vector<core::Vec3>> harmonic1_fields;
-  std::vector<std::string> harmonic1_labels;
   for (int c = 0; c < harmonic1_coeffs.cols(); ++c) {
     harmonic1_fields.push_back(
         reconstruct_1form_ambient(mesh, harmonic1_coeffs.col(c), n_coeff,
                                   gamma_data_immersion));
-    harmonic1_labels.push_back("form" + std::to_string(c));
   }
 
   const int idx0 = harmonic1_idx.empty() ? 0 : harmonic1_idx[0];
   const int idx1 = harmonic1_idx.size() > 1 ? harmonic1_idx[1] : idx0;
-  std::complex<float> selected_eval_0(0.0f, 0.0f);
-  std::complex<float> selected_eval_1(0.0f, 0.0f);
   const Eigen::VectorXf theta_0 = ops::compute_circular_coordinates(
       mesh, pad_1form_coeffs(evecs1.col(idx0), mesh.topology.eigen_basis.cols(), n_coeff),
-      0.0f, cfg.circular_lambda, cfg.circular_mode_0, &selected_eval_0);
+      0.0f, cfg.circular_lambda, cfg.circular_mode_0, nullptr);
   const Eigen::VectorXf theta_1 = ops::compute_circular_coordinates(
       mesh, pad_1form_coeffs(evecs1.col(idx1), mesh.topology.eigen_basis.cols(), n_coeff),
-      0.0f, cfg.circular_lambda, cfg.circular_mode_1, &selected_eval_1);
+      0.0f, cfg.circular_lambda, cfg.circular_mode_1, nullptr);
 
   // 2-forms
   const Eigen::MatrixXf G2 = ops::compute_kform_gram_matrix(mesh, 2, n_coeff, forms_ws);
@@ -510,11 +460,9 @@ int main(int argc, char **argv) {
   }
 
   std::vector<std::vector<core::Vec3>> harmonic2_fields;
-  std::vector<std::string> harmonic2_labels;
   for (int c = 0; c < harmonic2_coeffs.cols(); ++c) {
     harmonic2_fields.push_back(reconstruct_2form_dual_ambient(
         mesh, harmonic2_coeffs.col(c), n_coeff, gamma_data_immersion));
-    harmonic2_labels.push_back("form" + std::to_string(c));
   }
 
   // wedge(h1_0, h1_1)
@@ -531,33 +479,24 @@ int main(int argc, char **argv) {
   const auto wedge_field = reconstruct_2form_dual_ambient(
       mesh, wedge_coeffs, n_coeff, gamma_data_immersion);
 
-  write_points_csv(cfg.output_dir + "/points.csv", mesh);
-  write_spectrum_csv(cfg.output_dir + "/form1_spectrum.csv", evals1);
-  write_spectrum_csv(cfg.output_dir + "/form2_spectrum.csv", evals2);
-  write_coeff_matrix_csv(cfg.output_dir + "/harmonic1_coeffs.csv", harmonic1_coeffs);
-  write_coeff_matrix_csv(cfg.output_dir + "/harmonic2_coeffs.csv", harmonic2_coeffs);
+  io::export_ply_solid(mesh, to_scalar_field(theta_0),
+                       cfg.output_dir + "/circular_theta_0.ply", 0.01);
+  io::export_ply_solid(mesh, to_scalar_field(theta_1),
+                       cfg.output_dir + "/circular_theta_1.ply", 0.01);
 
-  Eigen::MatrixXf wedge_coeffs_mat(wedge_coeffs.size(), 1);
-  wedge_coeffs_mat.col(0) = wedge_coeffs;
-  write_coeff_matrix_csv(cfg.output_dir + "/wedge_h1h1_coeffs.csv", wedge_coeffs_mat);
-
-  write_vector_fields_csv(cfg.output_dir + "/harmonic1_ambient.csv", mesh,
-                          harmonic1_fields, harmonic1_labels);
-  write_vector_fields_csv(cfg.output_dir + "/harmonic2_ambient.csv", mesh,
-                          harmonic2_fields, harmonic2_labels);
-  write_vector_fields_csv(cfg.output_dir + "/wedge_h1h1_ambient.csv", mesh,
-                          {wedge_field}, {"wedge"});
-  write_circular_csv(cfg.output_dir + "/circular_coordinates.csv", mesh, theta_0,
-                     theta_1);
-
-  if (cfg.export_ply) {
-    for (int i = 0; i < harmonic1_coeffs.cols(); ++i) {
-      io::export_ply_solid(mesh,
-                           std::vector<float>(theta_0.data(), theta_0.data() + theta_0.size()),
-                           cfg.output_dir + "/theta0_preview.ply", 0.01);
-      break;
-    }
+  for (size_t i = 0; i < harmonic1_fields.size(); ++i) {
+    export_vector_field(cfg.output_dir + "/harmonic1_form_" + std::to_string(i) +
+                            ".ply",
+                        mesh, harmonic1_fields[i]);
   }
+
+  for (size_t i = 0; i < harmonic2_fields.size(); ++i) {
+    export_vector_field(cfg.output_dir + "/harmonic2_form_" + std::to_string(i) +
+                            ".ply",
+                        mesh, harmonic2_fields[i]);
+  }
+
+  export_vector_field(cfg.output_dir + "/wedge_h1h1_dual.ply", mesh, wedge_field);
 
   std::cout << "Computed form spectra and wedge outputs in: " << cfg.output_dir
             << "\n";

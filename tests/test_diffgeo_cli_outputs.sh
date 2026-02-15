@@ -45,16 +45,12 @@ OUT_DIR="${WORK_DIR}/out"
   --harmonic-tolerance 1e-3
 
 required=(
-  "points.csv"
-  "form1_spectrum.csv"
-  "form2_spectrum.csv"
-  "harmonic1_coeffs.csv"
-  "harmonic1_ambient.csv"
-  "harmonic2_coeffs.csv"
-  "harmonic2_ambient.csv"
-  "wedge_h1h1_coeffs.csv"
-  "wedge_h1h1_ambient.csv"
-  "circular_coordinates.csv"
+  "circular_theta_0.ply"
+  "circular_theta_1.ply"
+  "harmonic1_form_0.ply"
+  "harmonic1_form_1.ply"
+  "harmonic2_form_0.ply"
+  "wedge_h1h1_dual.ply"
 )
 for f in "${required[@]}"; do
   if [[ ! -f "${OUT_DIR}/${f}" ]]; then
@@ -63,16 +59,10 @@ for f in "${required[@]}"; do
   fi
 done
 
-debug_only=(
-  "function_gram.csv"
-  "laplacian0_weak.csv"
-  "function_basis.csv"
-)
-for f in "${debug_only[@]}"; do
-  if [[ -f "${OUT_DIR}/${f}" ]]; then
-    echo "unexpected debug output present: ${f}" >&2
-    exit 1
-  fi
-done
+if compgen -G "${OUT_DIR}/*.csv" >/dev/null; then
+  echo "unexpected csv outputs present in ${OUT_DIR}" >&2
+  ls -1 "${OUT_DIR}"/*.csv >&2
+  exit 1
+fi
 
 echo "diffgeo CLI output contract check passed"

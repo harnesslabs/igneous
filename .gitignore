@@ -13,3 +13,6 @@ notes/hodge/results/*
 notes/diffgeo_ops/.venv_ref/
 notes/diffgeo_ops/results/*
 !notes/diffgeo_ops/results/.gitkeep
+visualizations/results/*
+!visualizations/results/.gitkeep
+visualizations/tmp_*/

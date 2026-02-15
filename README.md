@@ -46,6 +46,21 @@ cmake --build build -j8
 ./build/igneous-hodge
 ```
 
+## Visualizations
+
+Per-main output viewers are available under `visualizations/`.
+
+```bash
+python3 visualizations/view_main_point.py --run --open
+python3 visualizations/view_main_mesh.py --run --open
+python3 visualizations/view_main_diffusion.py --run --open
+python3 visualizations/view_main_spectral.py --run --open
+python3 visualizations/view_main_hodge.py --run --open
+python3 visualizations/view_main_diffusion_topology.py --run --open
+```
+
+Detailed usage is documented in `visualizations/README.md`.
+
 ## Reference Implementation
 
 The diffusion/Hodge parity work in this repository is aligned against the Python
