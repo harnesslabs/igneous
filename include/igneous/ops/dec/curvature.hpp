@@ -13,10 +13,21 @@
 
 namespace igneous::ops::dec {
 
+/// \brief Scratch storage reused by curvature evaluation.
 template <data::SurfaceStructure StructureT> struct CurvatureWorkspace {
+  /// \brief Unnormalized per-face bivector normals.
   std::vector<core::Bivec3> face_normals;
 };
 
+/**
+ * \brief Compute mean (`H`) and Gaussian (`K`) curvature approximations.
+ *
+ * Uses angle-defect and neighborhood Laplacian estimates on triangle surfaces.
+ * \param space Input surface space.
+ * \param H Output mean-curvature-like scalar values per vertex.
+ * \param K Output Gaussian-curvature-like scalar values per vertex.
+ * \param workspace Reused temporary buffers.
+ */
 template <data::SurfaceStructure StructureT>
 void compute_curvature_measures(const data::Space<StructureT> &space,
                                 std::vector<float> &H,

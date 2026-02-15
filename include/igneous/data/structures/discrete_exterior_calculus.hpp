@@ -10,26 +10,48 @@
 
 namespace igneous::data {
 
+/**
+ * \brief Triangle-surface structure used by DEC-style operators.
+ *
+ * Connectivity is stored in CSR-style arrays for face incidence and
+ * vertex-neighbor traversal.
+ */
 struct DiscreteExteriorCalculus {
+  /// \brief Topological dimension of this structure.
   static constexpr int DIMENSION = 2;
 
+  /// \brief Input triangle index buffer (`[f0v0, f0v1, f0v2, ...]`).
   std::vector<uint32_t> faces_to_vertices;
 
+  /// \brief Split face corner arrays for cache-friendly face traversal.
   std::vector<uint32_t> face_v0;
+  /// \brief Split face corner arrays for cache-friendly face traversal.
   std::vector<uint32_t> face_v1;
+  /// \brief Split face corner arrays for cache-friendly face traversal.
   std::vector<uint32_t> face_v2;
 
+  /// \brief CSR offsets for face incidence per vertex.
   std::vector<uint32_t> vertex_face_offsets;
+  /// \brief CSR payload of face indices per vertex.
   std::vector<uint32_t> vertex_face_data;
 
+  /// \brief CSR offsets for 1-ring neighbors per vertex.
   std::vector<uint32_t> vertex_neighbor_offsets;
+  /// \brief CSR payload of neighbor vertex indices.
   std::vector<uint32_t> vertex_neighbor_data;
 
+  /// \brief Parameters used by `build`.
   struct Input {
+    /// \brief Number of vertices in the associated geometry.
     size_t num_vertices = 0;
+    /// \brief Whether to build vertex-neighbor CSR in addition to face incidence.
     bool build_vertex_neighbors = true;
   };
 
+  /**
+   * \brief Number of triangles in the structure.
+   * \return Triangle count.
+   */
   [[nodiscard]] size_t num_faces() const {
     if (!face_v0.empty()) {
       return face_v0.size();
@@ -37,6 +59,12 @@ struct DiscreteExteriorCalculus {
     return faces_to_vertices.size() / 3;
   }
 
+  /**
+   * \brief Return the vertex index for a face corner (`corner` in `[0,2]`).
+   * \param face_idx Face index.
+   * \param corner Corner index (`0`, `1`, or `2`).
+   * \return Vertex index for the requested corner.
+   */
   [[nodiscard]] uint32_t get_vertex_for_face(size_t face_idx, int corner) const {
     switch (corner) {
     case 0:
@@ -48,6 +76,11 @@ struct DiscreteExteriorCalculus {
     }
   }
 
+  /**
+   * \brief Faces incident to vertex `vertex_idx`.
+   * \param vertex_idx Vertex index.
+   * \return Span of incident face indices.
+   */
   [[nodiscard]] std::span<const uint32_t> get_faces_for_vertex(uint32_t vertex_idx) const {
     if (vertex_idx + 1 >= vertex_face_offsets.size()) {
       return {};
@@ -58,6 +91,11 @@ struct DiscreteExteriorCalculus {
     return {&vertex_face_data[begin], end - begin};
   }
 
+  /**
+   * \brief 1-ring neighbors for vertex `vertex_idx`.
+   * \param vertex_idx Vertex index.
+   * \return Span of neighboring vertex indices.
+   */
   [[nodiscard]] std::span<const uint32_t> get_vertex_neighbors(uint32_t vertex_idx) const {
     if (vertex_idx + 1 >= vertex_neighbor_offsets.size()) {
       return {};
@@ -68,10 +106,21 @@ struct DiscreteExteriorCalculus {
     return {&vertex_neighbor_data[begin], end - begin};
   }
 
+  /**
+   * \brief Generic neighborhood accessor required by `data::Structure`.
+   * \param vertex_idx Vertex index.
+   * \return Same data as `get_faces_for_vertex(vertex_idx)`.
+   */
   [[nodiscard]] std::span<const uint32_t> get_neighborhood(uint32_t vertex_idx) const {
     return get_faces_for_vertex(vertex_idx);
   }
 
+  /**
+   * \brief Build CSR structures from `faces_to_vertices`.
+   *
+   * If `face_v*` arrays are already provided, they are reused.
+   * \param input Build configuration and vertex count.
+   */
   void build(Input input) {
     const size_t num_vertices = input.num_vertices;
 
@@ -260,6 +309,7 @@ struct DiscreteExteriorCalculus {
         32768);
   }
 
+  /// \brief Drop all connectivity storage.
   void clear() {
     faces_to_vertices.clear();
     face_v0.clear();

@@ -88,3 +88,35 @@
     - `IGNEOUS_BENCH_MODE=1 ./build/bench_geometry`
     - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_min_time=0.02s --benchmark_repetitions=1 --benchmark_report_aggregates_only=true`
     - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_min_time=0.02s --benchmark_repetitions=1 --benchmark_report_aggregates_only=true`
+
+## Entry 0006
+- Timestamp: 2026-02-15
+- Structural Difference Targeted: Improve API discoverability with inline C++ docs and generated reference docs.
+- Documentation Additions:
+  - Added Doxygen comments across `include/igneous` headers, including internal/private state fields for key workspace and runtime classes.
+  - Added docs generation tooling:
+    - `docs/Doxyfile.in`
+    - `docs/mainpage.md`
+    - CMake `docs` target (when Doxygen is available)
+    - `Makefile` `docs` shortcut
+  - Added README docs section with generation instructions and output path.
+- Decisions:
+  - Use Doxygen as the canonical C++ API doc generator (closest to Rust `cargo doc` workflow).
+  - Keep extraction of private members enabled in docs config (`EXTRACT_PRIVATE=YES`) to match maintenance needs.
+
+## Entry 0007
+- Timestamp: 2026-02-15
+- Structural Difference Targeted: Add docs quality checks to CI and deploy generated docs.
+- CI Additions:
+  - Added `docs` job to `.github/workflows/ci.yml`:
+    - installs Doxygen + Graphviz
+    - configures CMake with `IGNEOUS_BUILD_DOCS=ON`
+    - builds `docs` target
+    - verifies `build-docs/docs/html/index.html` exists
+- Deployment Additions:
+  - Added `.github/workflows/docs.yml`:
+    - triggers on `push` to `main` and manual dispatch
+    - builds docs artifact
+    - deploys to GitHub Pages using `actions/deploy-pages`
+- Documentation:
+  - Added README note for docs deployment URL pattern.

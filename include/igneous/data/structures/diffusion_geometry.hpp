@@ -19,53 +19,96 @@
 
 namespace igneous::data {
 
+/**
+ * \brief Point-cloud diffusion structure with kNN Markov geometry.
+ *
+ * This structure builds:
+ * - row-stochastic Markov CSR (`markov_*`)
+ * - symmetric kernel CSR (`symmetric_*`) for spectral solves
+ * - stationary density (`mu`)
+ * - auxiliary geometric fields used by downstream operators
+ */
 struct DiffusionGeometry {
+  /// \brief Dimension marker used by the `Structure` concept.
   static constexpr int DIMENSION = 0;
 
+  /// \brief Parameters for diffusion graph construction.
   struct Input {
+    /// \brief X coordinates of points.
     std::span<const float> x;
+    /// \brief Y coordinates of points.
     std::span<const float> y;
+    /// \brief Z coordinates of points.
     std::span<const float> z;
+    /// \brief Number of nearest neighbors per row.
     int k_neighbors = 32;
+    /// \brief Number of neighbors used for local bandwidth estimation.
     int knn_bandwidth = 8;
+    /// \brief Density-adaptive bandwidth exponent.
     float bandwidth_variability = -0.5f;
+    /// \brief Drift tuning parameter from the reference construction.
     float c = 0.0f;
+    /// \brief Center `carre_du_champ` with row means instead of self values.
     bool use_mean_centres = true;
   };
 
+  /// \brief Stationary measure induced by the symmetric kernel.
   Eigen::VectorXf mu;
+  /// \brief Spectral basis produced by diffusion eigensolves.
   Eigen::MatrixXf eigen_basis;
+  /// \brief Per-point local diffusion timescale.
   Eigen::VectorXf local_bandwidths;
+  /// \brief Row sums of the symmetric kernel.
   Eigen::VectorXf symmetric_row_sums;
+  /// \brief Markov-averaged embedding coordinates.
   Eigen::MatrixXf immersion_coords;
+  /// \brief Runtime toggle for centered `carre_du_champ`.
   bool use_mean_centres = true;
+  /// \brief Effective k used by the latest build.
   int knn_k = 0;
 
-  // Dense kNN row storage used by the reference-style diffusion build.
+  /// \brief Dense kNN column indices (`n * k`).
   std::vector<int> knn_indices;
+  /// \brief Dense kNN distances (`n * k`).
   std::vector<float> knn_distances;
+  /// \brief Dense row-stochastic kernel values (`n * k`).
   std::vector<float> knn_kernel;
 
-  // Direct CSR view for hot diffusion operators.
+  /// \brief CSR row offsets for Markov transition matrix.
   std::vector<int> markov_row_offsets;
+  /// \brief CSR column indices for Markov transition matrix.
   std::vector<int> markov_col_indices;
+  /// \brief CSR values for Markov transition matrix.
   std::vector<float> markov_values;
 
-  // Symmetric kernel used to reproduce reference spectral basis construction.
+  /// \brief CSR row offsets for symmetric kernel matrix.
   std::vector<int> symmetric_row_offsets;
+  /// \brief CSR column indices for symmetric kernel matrix.
   std::vector<int> symmetric_col_indices;
+  /// \brief CSR values for symmetric kernel matrix.
   std::vector<float> symmetric_values;
 
+  /**
+   * \brief Number of points represented by the CSR graph.
+   * \return Row count inferred from `markov_row_offsets`.
+   */
   [[nodiscard]] size_t num_primitives() const {
     if (markov_row_offsets.empty()) {
       return 0;
     }
     return markov_row_offsets.size() - 1;
   }
-  [[nodiscard]] std::span<const uint32_t> get_neighborhood(uint32_t) const {
+  /**
+   * \brief Neighborhood accessor required by `data::Structure`.
+   * \param vertex_idx Unused.
+   * \return Empty span (diffusion neighborhoods are held in CSR arrays).
+   */
+  [[nodiscard]] std::span<const uint32_t> get_neighborhood(uint32_t vertex_idx) const {
+    (void)vertex_idx;
     return {};
   }
 
+  /// \brief Clear all diffusion data and invalidate any GPU-side cache.
   void clear() {
     core::gpu::invalidate_markov_cache(this);
     mu.resize(0);
@@ -86,13 +129,19 @@ struct DiffusionGeometry {
     symmetric_values.clear();
   }
 
+  /// \brief nanoflann adaptor over the SoA coordinate spans.
   struct PointCloudAdaptor {
+    /// \brief X coordinate channel.
     std::span<const float> x;
+    /// \brief Y coordinate channel.
     std::span<const float> y;
+    /// \brief Z coordinate channel.
     std::span<const float> z;
 
+    /// \brief Number of points available to the k-d tree.
     [[nodiscard]] size_t kdtree_get_point_count() const { return x.size(); }
 
+    /// \brief Coordinate accessor required by nanoflann.
     [[nodiscard]] float kdtree_get_pt(size_t idx, size_t dim) const {
       if (dim == 0) {
         return x[idx];
@@ -103,13 +152,19 @@ struct DiffusionGeometry {
       return z[idx];
     }
 
+    /// \brief Bounding box callback (unused for this adaptor).
     template <class BBOX> bool kdtree_get_bbox(BBOX &) const { return false; }
   };
 
+  /// \brief nanoflann 3D L2 tree type.
   using KDTree = nanoflann::KDTreeSingleIndexAdaptor<
       nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>, PointCloudAdaptor,
       3>;
 
+  /**
+   * \brief Candidate epsilon sweep used during kernel tuning.
+   * \return Monotonic list of epsilon values.
+   */
   static std::vector<float> build_epsilons() {
     std::vector<float> epsilons;
     epsilons.reserve(80);
@@ -119,6 +174,14 @@ struct DiffusionGeometry {
     return epsilons;
   }
 
+  /**
+   * \brief Tune kernel scale and intrinsic dimension surrogate.
+   * \param entries Squared-distance-like kernel arguments.
+   * \param n Number of points.
+   * \param k Number of neighbors per point.
+   * \param epsilons Candidate kernel scales.
+   * \return Pair `(epsilon, dim_surrogate)`.
+   */
   static std::pair<float, float> tune_kernel(const std::vector<float> &entries,
                                              int n, int k,
                                              const std::vector<float> &epsilons) {
@@ -159,6 +222,14 @@ struct DiffusionGeometry {
     return {epsilon, dim};
   }
 
+  /**
+   * \brief Compute per-point local bandwidth estimates from kNN distances.
+   * \param nbr_distances Dense kNN distance matrix in row-major flat storage.
+   * \param n Number of points.
+   * \param k Number of neighbors per point.
+   * \param knn_bandwidth Number of neighbors used for RMS estimate.
+   * \param bandwidths_out Output vector of local bandwidths.
+   */
   static void compute_local_bandwidths(const std::vector<float> &nbr_distances,
                                        int n, int k, int knn_bandwidth,
                                        Eigen::VectorXf &bandwidths_out) {
@@ -182,6 +253,11 @@ struct DiffusionGeometry {
     }
   }
 
+  /**
+   * \brief Median helper used for robust bandwidth normalization.
+   * \param values Input values (consumed by value).
+   * \return Median value (or `1.0f` when empty).
+   */
   static float vector_median(std::vector<float> values) {
     if (values.empty()) {
       return 1.0f;
@@ -192,6 +268,10 @@ struct DiffusionGeometry {
     return values[mid];
   }
 
+  /**
+   * \brief Build diffusion CSR structures from point coordinates.
+   * \param input Build parameters and coordinate spans.
+   */
   void build(Input input) {
     core::gpu::invalidate_markov_cache(this);
     const size_t n_verts = input.x.size();

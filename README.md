@@ -36,6 +36,28 @@ cmake --preset default-local -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
 ```
 
+## API Docs
+
+The repo uses Doxygen-style comments in headers under `include/igneous/`.
+
+Generate docs:
+
+```bash
+cmake -S . -B build -G Ninja
+cmake --build build --target docs
+```
+
+Output:
+
+- `build/docs/html/index.html`
+
+If Doxygen is missing, install it first (for example via Homebrew: `brew install doxygen graphviz`).
+
+Deployment:
+
+- GitHub Actions workflow `.github/workflows/docs.yml` builds and deploys docs to GitHub Pages on `main`.
+- Published URL pattern: `https://<org-or-user>.github.io/igneous/`
+
 ## Run Examples
 
 ```bash
@@ -190,6 +212,7 @@ Pipeline benchmark groups:
 ## CI/CD Workflows
 
 - `.github/workflows/ci.yml`: Linux/macOS build + tests, sanitizer pass, compile commands artifact.
+- `.github/workflows/docs.yml`: Doxygen build and GitHub Pages deployment for API docs.
 - `.github/workflows/perf-smoke.yml`: PR smoke benchmark report against baseline (report-only).
 - `.github/workflows/perf-deep.yml`: nightly/manual deep benchmark capture and summary (report-only).
 - `.github/workflows/release.yml`: tag-triggered `v*` release packaging and GitHub Release asset publish.

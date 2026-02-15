@@ -17,24 +17,46 @@
 
 namespace igneous::ops::diffusion {
 
+/// \brief Shared scratch buffers for diffusion k-form operators.
 template <typename MeshT> struct DiffusionFormWorkspace {
+  /// \brief Coordinate vectors used for gamma evaluations.
   std::array<Eigen::VectorXf, 3> coords;
+  /// \brief `Gamma(x_a, x_b)` caches.
   std::array<std::array<Eigen::VectorXf, 3>, 3> gamma_coords;
+  /// \brief `Gamma(x_a, phi_i)` matrix cache per axis.
   std::array<Eigen::MatrixXf, 3> gamma_mixed;
+  /// \brief Generic temporary gamma vector.
   Eigen::VectorXf gamma_tmp;
+  /// \brief Number of columns currently available in `gamma_mixed`.
   int gamma_mixed_cols = 0;
+  /// \brief Whether `gamma_coords` has been initialized.
   bool gamma_coords_ready = false;
 };
 
+/// \brief Precomputed compound-minor determinants for metric pullbacks.
 struct CompoundDeterminantData {
+  /// \brief Basis index combinations for the target degree.
   std::vector<std::vector<int>> indices;
+  /// \brief Determinant vectors for each basis-pair minor.
   std::vector<Eigen::VectorXf> values;
+  /// \brief Degree (`k`) these determinants correspond to.
   int degree = 0;
+  /// \brief Number of basis components for this degree.
   int n_components = 0;
 };
 
+/**
+ * \brief Ambient coordinate dimension used by current diffusion form operators.
+ * \return Ambient dimension (`3`).
+ */
 inline int ambient_dim_3d() { return 3; }
 
+/**
+ * \brief Determinant of a tiny dense matrix packed row-major in `data`.
+ * \param data Matrix values in row-major order.
+ * \param k Matrix dimension.
+ * \return Determinant value.
+ */
 inline float determinant_small(const float *data, int k) {
   if (k == 0) {
     return 1.0f;
@@ -59,6 +81,13 @@ inline float determinant_small(const float *data, int k) {
   return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
 }
 
+/**
+ * \brief Build per-point minors of `Gamma(x,x)` for selected row/column subsets.
+ * \param gamma_coords Precomputed coordinate gamma tensors.
+ * \param rows Row-index subset.
+ * \param cols Column-index subset.
+ * \return Vector of determinant values per point.
+ */
 inline Eigen::VectorXf build_minor_det_vector(
     const std::array<std::array<Eigen::VectorXf, 3>, 3> &gamma_coords,
     const std::vector<int> &rows, const std::vector<int> &cols) {
@@ -79,6 +108,11 @@ inline Eigen::VectorXf build_minor_det_vector(
   return out;
 }
 
+/**
+ * \brief Ensure `workspace.gamma_coords` is initialized.
+ * \param mesh Input diffusion space.
+ * \param workspace Scratch workspace to populate.
+ */
 template <typename MeshT>
 void ensure_gamma_coords(const MeshT &mesh, DiffusionFormWorkspace<MeshT> &workspace) {
   if (workspace.gamma_coords_ready) {
@@ -100,6 +134,12 @@ void ensure_gamma_coords(const MeshT &mesh, DiffusionFormWorkspace<MeshT> &works
   workspace.gamma_coords_ready = true;
 }
 
+/**
+ * \brief Ensure mixed coordinate/basis gamma caches have at least `n_coefficients` columns.
+ * \param mesh Input diffusion space.
+ * \param n_coefficients Required basis column count.
+ * \param workspace Scratch workspace to populate.
+ */
 template <typename MeshT>
 void ensure_gamma_mixed(const MeshT &mesh, int n_coefficients,
                         DiffusionFormWorkspace<MeshT> &workspace) {
@@ -125,6 +165,13 @@ void ensure_gamma_mixed(const MeshT &mesh, int n_coefficients,
   workspace.gamma_mixed_cols = n1;
 }
 
+/**
+ * \brief Compute all compound determinant vectors for k-form metric pullbacks.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param workspace Scratch workspace.
+ * \return Precomputed compound determinant data.
+ */
 template <typename MeshT>
 CompoundDeterminantData compute_compound_determinants(
     const MeshT &mesh, int k, DiffusionFormWorkspace<MeshT> &workspace) {
@@ -152,6 +199,14 @@ CompoundDeterminantData compute_compound_determinants(
   return out;
 }
 
+/**
+ * \brief Assemble Gram matrix for k-form basis coefficients.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch workspace.
+ * \return Symmetric Gram matrix for k-forms.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
                                           int n_coefficients,
@@ -202,6 +257,13 @@ Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
   return G;
 }
 
+/**
+ * \brief Convenience overload for k-form Gram assembly.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \return Symmetric Gram matrix for k-forms.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
                                           int n_coefficients) {
@@ -209,6 +271,14 @@ Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
   return compute_kform_gram_matrix(mesh, k, n_coefficients, workspace);
 }
 
+/**
+ * \brief Assemble weak exterior derivative matrix `d_k` in coefficient space.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch workspace.
+ * \return Weak derivative matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_weak_exterior_derivative(
     const MeshT &mesh, int k, int n_coefficients,
@@ -273,6 +343,13 @@ Eigen::MatrixXf compute_weak_exterior_derivative(
   return D;
 }
 
+/**
+ * \brief Convenience overload for weak exterior derivative assembly.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \return Weak derivative matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh, int k,
                                                  int n_coefficients) {
@@ -280,9 +357,23 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh, int k,
   return compute_weak_exterior_derivative(mesh, k, n_coefficients, workspace);
 }
 
+/**
+ * \brief Forward declaration of symmetric pseudo-inverse helper.
+ * \param matrix Symmetric matrix.
+ * \param rcond Relative conditioning threshold.
+ * \return Pseudo-inverse matrix.
+ */
 inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf &matrix,
                                                 float rcond);
 
+/**
+ * \brief Assemble codifferential matrix `delta_k` from `d_{k-1}` and mass.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch workspace.
+ * \return Codifferential matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_codifferential_matrix(
     const MeshT &mesh, int k, int n_coefficients,
@@ -299,6 +390,13 @@ Eigen::MatrixXf compute_codifferential_matrix(
   return G_prev_inv * D_prev.transpose();
 }
 
+/**
+ * \brief Convenience overload for codifferential assembly.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \return Codifferential matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_codifferential_matrix(const MeshT &mesh, int k,
                                               int n_coefficients) {
@@ -306,6 +404,12 @@ Eigen::MatrixXf compute_codifferential_matrix(const MeshT &mesh, int k,
   return compute_codifferential_matrix(mesh, k, n_coefficients, workspace);
 }
 
+/**
+ * \brief Numerically stable solve for small 2x2 systems with SVD fallback.
+ * \param A Input `2x2` matrix.
+ * \param b Right-hand side vector.
+ * \return Solution vector.
+ */
 inline Eigen::Vector2f solve_stable_2x2(const Eigen::Matrix2f &A,
                                         const Eigen::Vector2f &b) {
   const float det = A(0, 0) * A(1, 1) - A(0, 1) * A(1, 0);
@@ -328,6 +432,12 @@ inline Eigen::Vector2f solve_stable_2x2(const Eigen::Matrix2f &A,
   return svd.matrixV() * inv_s.asDiagonal() * svd.matrixU().transpose() * b;
 }
 
+/**
+ * \brief Pseudo-inverse for symmetric matrices using eigenvalue thresholding.
+ * \param matrix Input matrix.
+ * \param rcond Relative threshold for inverting eigenvalues.
+ * \return Pseudo-inverse matrix.
+ */
 inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf &matrix,
                                                 float rcond = 1e-5f) {
   if (matrix.rows() == 0 || matrix.cols() == 0) {
@@ -354,6 +464,14 @@ inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf &matrix,
   return evecs * inv.asDiagonal() * evecs.transpose();
 }
 
+/**
+ * \brief Assemble up-Laplacian contribution for k-forms.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch workspace.
+ * \return Up-Laplacian matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT &mesh, int k,
                                             int n_coefficients,
@@ -444,6 +562,13 @@ Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT &mesh, int k,
   return L;
 }
 
+/**
+ * \brief Convenience overload for up-Laplacian assembly.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \return Up-Laplacian matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT &mesh, int k,
                                             int n_coefficients) {
@@ -451,6 +576,14 @@ Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT &mesh, int k,
   return compute_up_laplacian_matrix(mesh, k, n_coefficients, workspace);
 }
 
+/**
+ * \brief Assemble down-Laplacian contribution for k-forms.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch workspace.
+ * \return Down-Laplacian matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_down_laplacian_matrix(
     const MeshT &mesh, int k, int n_coefficients,
@@ -470,6 +603,13 @@ Eigen::MatrixXf compute_down_laplacian_matrix(
   return D_prev * G_prev_inv * D_prev.transpose();
 }
 
+/**
+ * \brief Convenience overload for down-Laplacian assembly.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \return Down-Laplacian matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_down_laplacian_matrix(const MeshT &mesh, int k,
                                               int n_coefficients) {
@@ -477,12 +617,25 @@ Eigen::MatrixXf compute_down_laplacian_matrix(const MeshT &mesh, int k,
   return compute_down_laplacian_matrix(mesh, k, n_coefficients, workspace);
 }
 
+/**
+ * \brief Sum up and down contributions into a Hodge Laplacian.
+ * \param up Up-Laplacian contribution.
+ * \param down Down-Laplacian contribution.
+ * \return Combined Hodge Laplacian.
+ */
 inline Eigen::MatrixXf
 assemble_hodge_laplacian_matrix(const Eigen::MatrixXf &up,
                                 const Eigen::MatrixXf &down) {
   return up + down;
 }
 
+/**
+ * \brief Solve generalized eigenproblem for form Laplacian and mass matrix.
+ * \param laplacian Form Laplacian matrix.
+ * \param mass_matrix Form mass matrix.
+ * \param rcond Relative threshold for mass-space regularization.
+ * \return Pair `(eigenvalues, eigenvectors)`.
+ */
 inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
 compute_form_spectrum(const Eigen::MatrixXf &laplacian,
                       const Eigen::MatrixXf &mass_matrix,
@@ -523,6 +676,13 @@ compute_form_spectrum(const Eigen::MatrixXf &laplacian,
   return std::make_pair(solver.eigenvalues(), phi * solver.eigenvectors());
 }
 
+/**
+ * \brief Extract near-zero eigenvalue indices as harmonic modes.
+ * \param evals Eigenvalue vector.
+ * \param tolerance Absolute threshold used to classify harmonic modes.
+ * \param max_modes Maximum number of modes to return.
+ * \return Harmonic mode indices.
+ */
 inline std::vector<int> extract_harmonic_mode_indices(const Eigen::VectorXf &evals,
                                                       float tolerance = 1e-3f,
                                                       int max_modes = 3) {
@@ -544,6 +704,14 @@ inline std::vector<int> extract_harmonic_mode_indices(const Eigen::VectorXf &eva
   return out;
 }
 
+/**
+ * \brief Expand flattened coefficient vector to pointwise k-form components.
+ * \param mesh Input diffusion space.
+ * \param coeffs Flattened coefficient vector.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \return Pointwise matrix (`n_points x C(k)`).
+ */
 template <typename MeshT>
 Eigen::MatrixXf coefficients_to_pointwise(const MeshT &mesh,
                                           const Eigen::VectorXf &coeffs, int k,
@@ -560,6 +728,13 @@ Eigen::MatrixXf coefficients_to_pointwise(const MeshT &mesh,
   return pointwise;
 }
 
+/**
+ * \brief Project pointwise components back to coefficient vectors.
+ * \param mesh Input diffusion space.
+ * \param pointwise Pointwise form component matrix.
+ * \param n_coefficients Basis truncation size.
+ * \return Flattened coefficient vector.
+ */
 template <typename MeshT>
 Eigen::VectorXf project_pointwise_to_coefficients(const MeshT &mesh,
                                                   const Eigen::MatrixXf &pointwise,
@@ -590,6 +765,11 @@ Eigen::VectorXf project_pointwise_to_coefficients(const MeshT &mesh,
   return flattened;
 }
 
+/**
+ * \brief Convert ambient 2-form components `(w01,w02,w12)` to dual 3D vectors.
+ * \param pointwise_2form Pointwise 2-form matrix.
+ * \return Per-point dual vector field.
+ */
 inline std::vector<core::Vec3>
 pointwise_2form_to_dual_vectors(const Eigen::MatrixXf &pointwise_2form) {
   std::vector<core::Vec3> out(static_cast<size_t>(pointwise_2form.rows()),

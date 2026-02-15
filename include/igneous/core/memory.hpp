@@ -6,31 +6,52 @@
 
 namespace igneous::core {
 
-// A simple linear allocator (Arena).
-// It grabs a big chunk of memory upfront and hands it out sequentially.
-// Deallocation only happens when the entire arena is reset or destroyed.
+/**
+ * \brief Monotonic arena allocator backed by a contiguous byte buffer.
+ *
+ * Individual deallocation is intentionally unsupported; callers reset the arena
+ * when all allocations can be discarded together.
+ */
 class MemoryArena : public std::pmr::memory_resource {
 private:
-  std::vector<std::byte> buffer; // The backing storage
-  std::byte *ptr = nullptr;      // Current allocation pointer
-  std::size_t offset = 0;        // Current offset in bytes
+  /// \brief Owned backing storage.
+  std::vector<std::byte> buffer;
+  /// \brief Base pointer into `buffer`.
+  std::byte *ptr = nullptr;
+  /// \brief Current linear allocation offset in bytes.
+  std::size_t offset = 0;
 
 public:
-  // Reserve a big block of memory (default 1MB for now)
+  /**
+   * \brief Construct arena with fixed capacity (`1 MiB` default).
+   * \param size_bytes Backing buffer size in bytes.
+   */
   explicit MemoryArena(std::size_t size_bytes = 1024 * 1024) {
     buffer.resize(size_bytes);
     ptr = buffer.data();
   }
 
-  // Reset the arena (wipe all allocations instantly)
+  /// \brief Reset all allocations in constant time.
   void reset() { offset = 0; }
 
-  // Get usage statistics
+  /**
+   * \brief Number of bytes currently allocated from this arena.
+   * \return Used bytes.
+   */
   std::size_t used_bytes() const { return offset; }
+  /**
+   * \brief Total arena capacity in bytes.
+   * \return Total bytes.
+   */
   std::size_t total_bytes() const { return buffer.size(); }
 
 protected:
-  // Implementation of do_allocate (required by std::pmr)
+  /**
+   * \brief `std::pmr` allocation entry point.
+   * \param bytes Requested size in bytes.
+   * \param alignment Requested alignment.
+   * \return Pointer to allocated storage.
+   */
   void *do_allocate(std::size_t bytes, std::size_t alignment) override {
     // Calculate padding needed for alignment
     std::size_t padding = 0;
@@ -45,7 +66,7 @@ protected:
     }
 
     if (offset + padding + bytes > buffer.size()) {
-      throw std::bad_alloc(); // Arena is full!
+      throw std::bad_alloc();
     }
 
     void *result = ptr + offset + padding;
@@ -53,17 +74,24 @@ protected:
     return result;
   }
 
-  // Linear allocators don't support individual deallocation.
-  // We just ignore calls to deallocate.
+  /**
+   * \brief No-op for monotonic allocation strategy.
+   * \param p Ignored.
+   * \param bytes Ignored.
+   * \param alignment Ignored.
+   */
   void do_deallocate(void *p, std::size_t bytes,
                      std::size_t alignment) override {
-    // No-op. Memory is freed when Arena is reset or destroyed.
     (void)p;
     (void)bytes;
     (void)alignment;
   }
 
-  // Comparison (two arenas are equal if they are the same object)
+  /**
+   * \brief Memory resources compare equal only by object identity.
+   * \param other Resource to compare against.
+   * \return `true` if both references point to the same object.
+   */
   bool
   do_is_equal(const std::pmr::memory_resource &other) const noexcept override {
     return this == &other;

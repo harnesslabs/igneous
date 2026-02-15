@@ -1,4 +1,4 @@
-.PHONY: all debug release build clean test test-all test-algebra test-structure test-ops bench bench-memory bench-geometry bench-dod bench-deep run-mesh run-diffusion run-spectral run-hodge
+.PHONY: all debug release build docs clean test test-all test-algebra test-structure test-ops bench bench-memory bench-geometry bench-dod bench-deep run-mesh run-diffusion run-spectral run-hodge
 
 all: build
 
@@ -10,6 +10,9 @@ release:
 
 build:
 	cmake --build build
+
+docs: debug
+	cmake --build build --target docs
 
 clean:
 	rm -rf build

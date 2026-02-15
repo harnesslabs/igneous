@@ -8,6 +8,15 @@
 
 namespace igneous::data {
 
+/**
+ * \brief Concept for a structure object carried by `data::Space`.
+ *
+ * A valid structure type must define:
+ * - a build input type (`T::Input`)
+ * - a topological dimension (`T::DIMENSION`)
+ * - explicit lifecycle methods (`build`, `clear`)
+ * - a neighborhood query (`get_neighborhood`)
+ */
 template <typename T>
 concept Structure = requires(T &t, const T &ct, uint32_t idx) {
   typename T::Input;
@@ -17,6 +26,11 @@ concept Structure = requires(T &t, const T &ct, uint32_t idx) {
   { ct.get_neighborhood(idx) } -> std::convertible_to<std::span<const uint32_t>>;
 };
 
+/**
+ * \brief Refinement of `Structure` for surface/triangle-based connectivity.
+ *
+ * Surface structures expose face and vertex adjacency needed by DEC operators.
+ */
 template <typename T>
 concept SurfaceStructure =
     Structure<T> && requires(T &t, const T &ct, size_t f_idx, size_t v_idx, int corner) {

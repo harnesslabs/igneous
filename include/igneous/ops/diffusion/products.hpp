@@ -9,6 +9,17 @@
 
 namespace igneous::ops::diffusion {
 
+/**
+ * \brief Compute coefficients of `alpha ^ beta` in diffusion-form basis.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Left operand coefficients.
+ * \param k1 Left exterior degree.
+ * \param beta_coeffs Right operand coefficients.
+ * \param k2 Right exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch buffers.
+ * \return Flattened coefficient vector of the wedge product.
+ */
 template <typename MeshT>
 Eigen::VectorXf compute_wedge_product_coeffs(
     const MeshT &mesh, const Eigen::VectorXf &alpha_coeffs, int k1,
@@ -56,6 +67,16 @@ Eigen::VectorXf compute_wedge_product_coeffs(
   return project_pointwise_to_coefficients(mesh, wedge_pw, n1);
 }
 
+/**
+ * \brief Convenience overload for wedge coefficient assembly.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Left operand coefficients.
+ * \param k1 Left exterior degree.
+ * \param beta_coeffs Right operand coefficients.
+ * \param k2 Right exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \return Flattened coefficient vector of the wedge product.
+ */
 template <typename MeshT>
 Eigen::VectorXf compute_wedge_product_coeffs(const MeshT &mesh,
                                              const Eigen::VectorXf &alpha_coeffs,
@@ -68,6 +89,18 @@ Eigen::VectorXf compute_wedge_product_coeffs(const MeshT &mesh,
                                       n_coefficients, workspace);
 }
 
+/**
+ * \brief Build the linear operator matrix for left wedge multiplication.
+ *
+ * Returns `W` such that `W * beta_coeffs` approximates `alpha ^ beta`.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Fixed left operand coefficients.
+ * \param k_left Left exterior degree.
+ * \param k_right Right exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch buffers.
+ * \return Dense linear operator matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_wedge_operator_matrix(
     const MeshT &mesh, const Eigen::VectorXf &alpha_coeffs, int k_left,
@@ -93,6 +126,15 @@ Eigen::MatrixXf compute_wedge_operator_matrix(
   return op;
 }
 
+/**
+ * \brief Convenience overload for wedge operator assembly.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Fixed left operand coefficients.
+ * \param k_left Left exterior degree.
+ * \param k_right Right exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \return Dense linear operator matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_wedge_operator_matrix(const MeshT &mesh,
                                               const Eigen::VectorXf &alpha_coeffs,

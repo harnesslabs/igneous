@@ -3,43 +3,74 @@
 
 namespace igneous::core {
 
-// A pure 3-component Bivector (xy, yz, zx)
-// Used for Cross Products / Areas
+/// \brief 3D bivector with `(xy, yz, zx)` components.
 struct Bivec3 {
-  float xy, yz,
-      zx; // e12, e23, e31 (Order varies by convention, sticking to xy, yz, zx)
+  /// \brief XY plane component (`e12`).
+  float xy;
+  /// \brief YZ plane component (`e23`).
+  float yz;
+  /// \brief ZX plane component (`e31`).
+  float zx;
 
-  // Magnitude Squared: |B|^2 = -B*B (technically).
-  // For Euclidean, it's just sum of squares.
+  /**
+   * \brief Squared Euclidean magnitude.
+   * \return Squared norm.
+   */
   float norm_sq() const { return xy * xy + yz * yz + zx * zx; }
 
+  /**
+   * \brief Euclidean magnitude.
+   * \return Norm.
+   */
   float norm() const { return std::sqrt(norm_sq()); }
 };
 
-// A pure 3-component Vector (x, y, z)
+/// \brief Lightweight 3D vector utility for geometry kernels.
 struct Vec3 {
-  float x, y, z;
+  /// \brief X coordinate.
+  float x;
+  /// \brief Y coordinate.
+  float y;
+  /// \brief Z coordinate.
+  float z;
 
-  // Addition
+  /**
+   * \brief Vector addition.
+   * \param o Right-hand operand.
+   * \return Sum vector.
+   */
   Vec3 operator+(const Vec3 &o) const { return {x + o.x, y + o.y, z + o.z}; }
+  /**
+   * \brief Vector subtraction.
+   * \param o Right-hand operand.
+   * \return Difference vector.
+   */
   Vec3 operator-(const Vec3 &o) const { return {x - o.x, y - o.y, z - o.z}; }
 
-  // Scalar Mult
+  /**
+   * \brief Scalar multiplication.
+   * \param s Scalar factor.
+   * \return Scaled vector.
+   */
   Vec3 operator*(float s) const { return {x * s, y * s, z * s}; }
 
-  // Dot Product (Inner Product) -> Scalar
-  // Note: In GA, a|b is the scalar part of ab
+  /**
+   * \brief Dot product.
+   * \param o Right-hand operand.
+   * \return Dot product scalar.
+   */
   float dot(const Vec3 &o) const { return x * o.x + y * o.y + z * o.z; }
 
-  // Wedge Product (Outer Product) -> Bivector
-  // This is the "Cross Product" logic
+  /**
+   * \brief Exterior product producing a bivector.
+   * \param o Right-hand operand.
+   * \return Bivector wedge product.
+   */
   Bivec3 operator^(const Vec3 &o) const {
     return {
-        x * o.y - y * o.x, // xy (e12)
-        y * o.z - z * o.y, // yz (e23)
-        z * o.x - x * o.z  // zx (e31/e13 sign depends on basis)
-        // Note: Standard Euclidean cross product result corresponds to dual of
-        // wedge. e1^e2 = e12.
+        x * o.y - y * o.x,
+        y * o.z - z * o.y,
+        z * o.x - x * o.z
     };
   }
 };

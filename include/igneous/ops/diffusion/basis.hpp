@@ -12,22 +12,40 @@
 
 namespace igneous::ops::diffusion {
 
+/// \brief Dense lookup tables for wedge-product index expansion.
 struct WedgeProductIndexData {
+  /// \brief Output component index for each wedge term.
   std::vector<int> target_indices;
+  /// \brief Left operand component index for each wedge term.
   std::vector<int> left_indices;
+  /// \brief Right operand component index for each wedge term.
   std::vector<int> right_indices;
+  /// \brief Orientation sign for each wedge term.
   std::vector<int> signs;
+  /// \brief Number of target basis components.
   int n_targets = 0;
+  /// \brief Number of left/right split patterns.
   int n_splits = 0;
 };
 
+/// \brief Child-index tables used by weak exterior derivative assembly.
 struct Kp1ChildrenAndSignsData {
+  /// \brief Basis indices for k-forms.
   std::vector<std::vector<int>> idx_k;
+  /// \brief Basis indices for (k+1)-forms.
   std::vector<std::vector<int>> idx_kp1;
+  /// \brief Child mapping from each (k+1)-index to k-indices.
   std::vector<std::vector<int>> children;
+  /// \brief Alternating signs applied during assembly.
   std::vector<int> signs;
 };
 
+/**
+ * \brief Binomial coefficient helper (`n choose k`).
+ * \param n Universe size.
+ * \param k Selection size.
+ * \return Binomial coefficient value.
+ */
 inline int binomial_coeff(int n, int k) {
   if (k < 0 || k > n) {
     return 0;
@@ -43,6 +61,14 @@ inline int binomial_coeff(int n, int k) {
   return static_cast<int>(result);
 }
 
+/**
+ * \brief Recursive generator for lexicographic combinations.
+ * \param n Universe size.
+ * \param k Selection size.
+ * \param start First candidate value.
+ * \param current Current partial combination.
+ * \param out Destination list of combinations.
+ */
 inline void combinations_recursive(int n, int k, int start,
                                    std::vector<int> &current,
                                    std::vector<std::vector<int>> &out) {
@@ -59,6 +85,12 @@ inline void combinations_recursive(int n, int k, int start,
   }
 }
 
+/**
+ * \brief Enumerate ordered wedge-basis index combinations for degree `k`.
+ * \param d Ambient dimension.
+ * \param k Exterior degree.
+ * \return Lexicographically ordered basis-index combinations.
+ */
 inline std::vector<std::vector<int>> get_wedge_basis_indices(int d, int k) {
   if (k < 0 || k > d) {
     return {};
@@ -76,6 +108,12 @@ inline std::vector<std::vector<int>> get_wedge_basis_indices(int d, int k) {
   return out;
 }
 
+/**
+ * \brief Lexicographic rank of a sorted combination.
+ * \param comb Sorted combination indices.
+ * \param d Ambient dimension.
+ * \return Zero-based rank among all `k`-combinations.
+ */
 inline int lex_rank_combination(const std::vector<int> &comb, int d) {
   const int k = static_cast<int>(comb.size());
   if (k == 0) {
@@ -94,6 +132,12 @@ inline int lex_rank_combination(const std::vector<int> &comb, int d) {
   return rank;
 }
 
+/**
+ * \brief Precompute child indices and signs for `d_k` style expansions.
+ * \param d Ambient dimension.
+ * \param k Exterior degree.
+ * \return Tables used to assemble `(k+1)` from `k` components.
+ */
 inline Kp1ChildrenAndSignsData kp1_children_and_signs(int d, int k) {
   if (k < 1 || k > d - 1) {
     throw std::invalid_argument("kp1_children_and_signs requires 1 <= k <= d-1");
@@ -126,6 +170,12 @@ inline Kp1ChildrenAndSignsData kp1_children_and_signs(int d, int k) {
   return out;
 }
 
+/**
+ * \brief Return complement indices of `subset` in `[0, total)`.
+ * \param total Universe size.
+ * \param subset Sorted subset indices.
+ * \return Sorted complement indices.
+ */
 inline std::vector<int> complement_indices(int total, const std::vector<int> &subset) {
   std::vector<int> out;
   out.reserve(static_cast<size_t>(total - static_cast<int>(subset.size())));
@@ -140,6 +190,15 @@ inline std::vector<int> complement_indices(int total, const std::vector<int> &su
   return out;
 }
 
+/**
+ * \brief Precompute sparse mapping from `(k1,k2)` components to `k1+k2` wedge components.
+ *
+ * The output drives fast pointwise wedge assembly in diffusion-form operators.
+ * \param d Ambient dimension.
+ * \param k1 Left exterior degree.
+ * \param k2 Right exterior degree.
+ * \return Index/sign mapping for wedge assembly.
+ */
 inline WedgeProductIndexData get_wedge_product_indices(int d, int k1, int k2) {
   WedgeProductIndexData out;
   const int k_total = k1 + k2;

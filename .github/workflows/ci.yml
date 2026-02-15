@@ -171,3 +171,52 @@ jobs:
         with:
           name: compile-commands
           path: build-debug/compile_commands.json
+
+  docs:
+    name: API Docs (doxygen)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install docs tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-${{ runner.os }}-x64-linux-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: ./vcpkg/bootstrap-vcpkg.sh
+
+      - name: Configure (Docs)
+        shell: bash
+        run: >-
+          cmake -S . -B build-docs -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=x64-linux
+          -DIGNEOUS_BUILD_DOCS=ON
+
+      - name: Build docs
+        shell: bash
+        run: cmake --build build-docs --target docs
+
+      - name: Verify docs output
+        shell: bash
+        run: test -f build-docs/docs/html/index.html

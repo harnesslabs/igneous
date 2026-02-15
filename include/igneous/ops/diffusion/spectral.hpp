@@ -12,19 +12,32 @@
 
 namespace igneous::ops::diffusion {
 
+/**
+ * \brief Spectra-compatible matrix product wrapper over Markov CSR data.
+ *
+ * Implements the matrix-operation interface expected by Spectra.
+ */
 class MarkovCsrMatProd {
 public:
   using Scalar = float;
 
+  /// \brief Construct operator view over CSR arrays.
   MarkovCsrMatProd(const std::vector<int> &row_offsets,
                    const std::vector<int> &col_indices,
                    const std::vector<float> &values, int n)
       : row_offsets_(row_offsets), col_indices_(col_indices), values_(values),
         n_(n) {}
 
+  /// \return Matrix row count.
   [[nodiscard]] int rows() const { return n_; }
+  /// \return Matrix column count.
   [[nodiscard]] int cols() const { return n_; }
 
+  /**
+   * \brief Apply matrix-vector product.
+   * \param x_in Input vector.
+   * \param y_out Output vector.
+   */
   void perform_op(const Scalar *x_in, Scalar *y_out) const {
     core::parallel_for_index(
         0, n_,
@@ -52,16 +65,22 @@ public:
   }
 
 private:
+  /// \brief CSR row offsets.
   const std::vector<int> &row_offsets_;
+  /// \brief CSR column indices.
   const std::vector<int> &col_indices_;
+  /// \brief CSR values.
   const std::vector<float> &values_;
+  /// \brief Matrix dimension.
   int n_ = 0;
 };
 
+/// \brief Spectra operator for the symmetrized Markov transform.
 class MarkovSymmetricCsrMatProd {
 public:
   using Scalar = float;
 
+  /// \brief Construct normalized symmetric Markov operator.
   MarkovSymmetricCsrMatProd(const std::vector<int> &row_offsets,
                             const std::vector<int> &col_indices,
                             const std::vector<float> &values,
@@ -70,9 +89,16 @@ public:
       : row_offsets_(row_offsets), col_indices_(col_indices), values_(values),
         sqrt_mu_(sqrt_mu), inv_sqrt_mu_(inv_sqrt_mu), n_(n) {}
 
+  /// \return Matrix row count.
   [[nodiscard]] int rows() const { return n_; }
+  /// \return Matrix column count.
   [[nodiscard]] int cols() const { return n_; }
 
+  /**
+   * \brief Apply matrix-vector product.
+   * \param x_in Input vector.
+   * \param y_out Output vector.
+   */
   void perform_op(const Scalar *x_in, Scalar *y_out) const {
     const float *sqrt_mu_data = sqrt_mu_.data();
     const float *inv_sqrt_mu_data = inv_sqrt_mu_.data();
@@ -108,27 +134,42 @@ public:
   }
 
 private:
+  /// \brief CSR row offsets.
   const std::vector<int> &row_offsets_;
+  /// \brief CSR column indices.
   const std::vector<int> &col_indices_;
+  /// \brief CSR values.
   const std::vector<float> &values_;
+  /// \brief `sqrt(mu)` scaling.
   const Eigen::VectorXf &sqrt_mu_;
+  /// \brief `1/sqrt(mu)` scaling.
   const Eigen::VectorXf &inv_sqrt_mu_;
+  /// \brief Matrix dimension.
   int n_ = 0;
 };
 
+/// \brief Spectra operator over the symmetric kernel CSR matrix.
 class SymmetricKernelCsrMatProd {
 public:
   using Scalar = float;
 
+  /// \brief Construct operator view over symmetric-kernel CSR arrays.
   SymmetricKernelCsrMatProd(const std::vector<int> &row_offsets,
                             const std::vector<int> &col_indices,
                             const std::vector<float> &values, int n)
       : row_offsets_(row_offsets), col_indices_(col_indices), values_(values),
         n_(n) {}
 
+  /// \return Matrix row count.
   [[nodiscard]] int rows() const { return n_; }
+  /// \return Matrix column count.
   [[nodiscard]] int cols() const { return n_; }
 
+  /**
+   * \brief Apply matrix-vector product.
+   * \param x_in Input vector.
+   * \param y_out Output vector.
+   */
   void perform_op(const Scalar *x_in, Scalar *y_out) const {
     core::parallel_for_index(
         0, n_,
@@ -156,16 +197,22 @@ public:
   }
 
 private:
+  /// \brief CSR row offsets.
   const std::vector<int> &row_offsets_;
+  /// \brief CSR column indices.
   const std::vector<int> &col_indices_;
+  /// \brief CSR values.
   const std::vector<float> &values_;
+  /// \brief Matrix dimension.
   int n_ = 0;
 };
 
+/// \brief Spectra operator for normalized symmetric-kernel eigensolve.
 class NormalizedSymmetricKernelCsrMatProd {
 public:
   using Scalar = float;
 
+  /// \brief Construct normalized symmetric-kernel operator.
   NormalizedSymmetricKernelCsrMatProd(const std::vector<int> &row_offsets,
                                       const std::vector<int> &col_indices,
                                       const std::vector<float> &values,
@@ -174,9 +221,16 @@ public:
       : row_offsets_(row_offsets), col_indices_(col_indices), values_(values),
         inv_sqrt_rows_(inv_sqrt_rows), n_(n) {}
 
+  /// \return Matrix row count.
   [[nodiscard]] int rows() const { return n_; }
+  /// \return Matrix column count.
   [[nodiscard]] int cols() const { return n_; }
 
+  /**
+   * \brief Apply matrix-vector product.
+   * \param x_in Input vector.
+   * \param y_out Output vector.
+   */
   void perform_op(const Scalar *x_in, Scalar *y_out) const {
     const float *inv_sqrt_data = inv_sqrt_rows_.data();
     core::parallel_for_index(
@@ -210,14 +264,23 @@ public:
   }
 
 private:
+  /// \brief CSR row offsets.
   const std::vector<int> &row_offsets_;
+  /// \brief CSR column indices.
   const std::vector<int> &col_indices_;
+  /// \brief CSR values.
   const std::vector<float> &values_;
+  /// \brief Inverse square-root row scaling.
   const Eigen::VectorXf &inv_sqrt_rows_;
+  /// \brief Matrix dimension.
   int n_ = 0;
 };
 
-// Computes the first k eigenvectors of the Markov Chain P.
+/**
+ * \brief Compute a diffusion eigenbasis from Markov CSR data.
+ * \param mesh Input diffusion space. `mesh.structure.eigen_basis` is overwritten.
+ * \param n_eigenvectors Number of eigenvectors requested.
+ */
 template <typename MeshT>
 void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
   const bool verbose = std::getenv("IGNEOUS_BENCH_MODE") == nullptr;

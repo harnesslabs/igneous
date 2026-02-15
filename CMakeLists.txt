@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(-Wall -Wextra -Wpedantic)
+option(IGNEOUS_BUILD_DOCS "Build Doxygen API documentation target" ON)
 
 if(APPLE)
   enable_language(OBJCXX)
@@ -42,6 +43,28 @@ target_link_libraries(
             nanoflann::nanoflann
             Spectra::Spectra
             igneous_runtime)
+
+if(IGNEOUS_BUILD_DOCS)
+  find_package(Doxygen QUIET)
+  if(DOXYGEN_FOUND)
+    set(IGNEOUS_DOXYFILE_IN ${CMAKE_SOURCE_DIR}/docs/Doxyfile.in)
+    set(IGNEOUS_DOXYFILE_OUT ${CMAKE_BINARY_DIR}/Doxyfile)
+    configure_file(${IGNEOUS_DOXYFILE_IN} ${IGNEOUS_DOXYFILE_OUT} @ONLY)
+    add_custom_target(
+      docs
+      COMMAND ${DOXYGEN_EXECUTABLE} ${IGNEOUS_DOXYFILE_OUT}
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+      COMMENT "Generating API documentation with Doxygen"
+      VERBATIM)
+  else()
+    message(STATUS "Doxygen not found; 'docs' target will print install guidance")
+    add_custom_target(
+      docs
+      COMMAND ${CMAKE_COMMAND} -E echo "Doxygen not found. Install doxygen (and graphviz optionally), then re-run CMake configure."
+      COMMENT "API docs unavailable: Doxygen not installed"
+      VERBATIM)
+  endif()
+endif()
 
 enable_testing()
 

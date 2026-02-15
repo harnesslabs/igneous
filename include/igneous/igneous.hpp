@@ -1,5 +1,8 @@
 #pragma once
 
+/// \file
+/// \brief Umbrella header for the public igneous API.
+
 #include <igneous/core/algebra.hpp>
 #include <igneous/core/blades.hpp>
 #include <igneous/core/memory.hpp>

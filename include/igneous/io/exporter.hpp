@@ -17,6 +17,11 @@ namespace igneous::io {
 
 using igneous::data::Space;
 
+/**
+ * \brief Map normalized scalar `t` in `[0,1]` to an RGB heatmap color.
+ * \param t Normalized scalar value.
+ * \return RGB tuple as 8-bit channels.
+ */
 inline std::tuple<uint8_t, uint8_t, uint8_t> get_heatmap_color_bytes(double t) {
   t = std::clamp(t, 0.0, 1.0);
   float r = 0.0f;
@@ -42,6 +47,14 @@ inline std::tuple<uint8_t, uint8_t, uint8_t> get_heatmap_color_bytes(double t) {
   };
 }
 
+/**
+ * \brief Compute robust color bounds via mean +/- `sigma_clip` * stddev.
+ *
+ * Non-finite values are skipped.
+ * \param field Scalar field values.
+ * \param sigma_clip Number of standard deviations used for clipping.
+ * \return Pair `(min_value, max_value)` used for color normalization.
+ */
 template <typename Field>
 inline std::pair<double, double> compute_field_bounds(std::span<const Field> field, double sigma_clip) {
   double sum = 0.0;
@@ -65,6 +78,13 @@ inline std::pair<double, double> compute_field_bounds(std::span<const Field> fie
   return {mean - (sigma_clip * std_dev), mean + (sigma_clip * std_dev)};
 }
 
+/**
+ * \brief Export a scalar field as colored point vertices in ASCII PLY.
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output PLY file path.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
 template <typename StructureT, typename Field>
 void export_ply(const Space<StructureT> &mesh, std::span<const Field> field,
                 const std::string &filename, double sigma_clip = 2.0) {
@@ -102,6 +122,13 @@ void export_ply(const Space<StructureT> &mesh, std::span<const Field> field,
   std::cout << "[IO] Exported PLY " << filename << "\n";
 }
 
+/**
+ * \brief `std::vector` overload for `export_ply`.
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output PLY file path.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
 template <typename StructureT, typename Field>
 void export_ply(const Space<StructureT> &mesh, const std::vector<Field> &field,
                 const std::string &filename, double sigma_clip = 2.0) {
@@ -109,6 +136,17 @@ void export_ply(const Space<StructureT> &mesh, const std::vector<Field> &field,
              sigma_clip);
 }
 
+/**
+ * \brief Export a heatmap OBJ.
+ *
+ * Surface structures emit triangle faces; non-surface structures emit OBJ point
+ * records (`p`) referencing all vertices.
+ *
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output OBJ file path.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
 template <typename StructureT, typename Field>
 void export_heatmap(const Space<StructureT> &mesh, std::span<const Field> field,
                     const std::string &filename, double sigma_clip = 2.0) {
@@ -153,6 +191,13 @@ void export_heatmap(const Space<StructureT> &mesh, std::span<const Field> field,
   std::cout << "[IO] Exported OBJ " << filename << "\n";
 }
 
+/**
+ * \brief `std::vector` overload for `export_heatmap`.
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output OBJ file path.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
 template <typename StructureT, typename Field>
 void export_heatmap(const Space<StructureT> &mesh,
                     const std::vector<Field> &field,
@@ -161,6 +206,18 @@ void export_heatmap(const Space<StructureT> &mesh,
                  filename, sigma_clip);
 }
 
+/**
+ * \brief Export each point as a small tetrahedron in a colored PLY mesh.
+ *
+ * This is useful for visualizing point clouds in tools that primarily render
+ * polygonal meshes.
+ *
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output PLY file path.
+ * \param radius Tetrahedron scale per point.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
 template <typename StructureT, typename Field>
 void export_ply_solid(const Space<StructureT> &mesh, std::span<const Field> field,
                       const std::string &filename, double radius = 0.01,
@@ -220,6 +277,14 @@ void export_ply_solid(const Space<StructureT> &mesh, std::span<const Field> fiel
   std::cout << "[IO] Exported Solid PLY " << filename << "\n";
 }
 
+/**
+ * \brief `std::vector` overload for `export_ply_solid`.
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output PLY file path.
+ * \param radius Tetrahedron scale per point.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
 template <typename StructureT, typename Field>
 void export_ply_solid(const Space<StructureT> &mesh,
                       const std::vector<Field> &field,

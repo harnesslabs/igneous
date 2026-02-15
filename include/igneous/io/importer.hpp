@@ -12,6 +12,17 @@ namespace igneous::io {
 
 using igneous::data::Space;
 
+/**
+ * \brief Load geometry/connectivity from an OBJ file into a `Space`.
+ *
+ * This function is intentionally load-only:
+ * - point positions are parsed from `v` records
+ * - surface faces are parsed from `f` records when `StructureT` is a surface structure
+ * - no `structure.build(...)` call is performed
+ *
+ * \param mesh Destination space to overwrite.
+ * \param filename OBJ file path.
+ */
 template <typename StructureT>
 void load_obj(Space<StructureT> &mesh, const std::string &filename) {
   std::ifstream file(filename);

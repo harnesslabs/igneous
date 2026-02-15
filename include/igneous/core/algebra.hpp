@@ -7,9 +7,7 @@
 
 namespace igneous::core {
 
-// ========================================================================
-// 1. SIGNATURE & METRIC
-// ========================================================================
+/// \brief Clifford signature descriptor (`p`,`q`,`r`).
 template <int P, int Q, int R = 0>
   requires(P >= 0) && (Q >= 0) && (R >= 0)
 struct Signature {
@@ -24,7 +22,11 @@ using Euclidean3D = Signature<3, 0>;
 using PGA = Signature<3, 0, 1>;
 using CGA = Signature<4, 1>;
 
-// Metric Helper
+/**
+ * \brief Metric coefficient for basis direction `index`.
+ * \param index Basis vector index.
+ * \return `+1`, `-1`, or `0` depending on signature axis type.
+ */
 template <typename Sig> constexpr int get_basis_metric(int index) {
   if (index < Sig::p)
     return 1;
@@ -33,7 +35,12 @@ template <typename Sig> constexpr int get_basis_metric(int index) {
   return 0;
 }
 
-// Computes the sign/metric for basis blade multiplication a * b
+/**
+ * \brief Sign and metric factor for geometric product of basis blades.
+ * \param a Left blade bitmap.
+ * \param b Right blade bitmap.
+ * \return Multiplicative sign/metric coefficient.
+ */
 template <typename Sig>
 constexpr int geometric_product_sign(unsigned int a, unsigned int b) {
   int sign = 1;
@@ -55,23 +62,17 @@ constexpr int geometric_product_sign(unsigned int a, unsigned int b) {
   return sign;
 }
 
-// Concept for valid signatures
+/// \brief Concept for valid signature-like types.
 template <typename T>
 concept IsSignature = requires {
   { T::p } -> std::convertible_to<int>;
   { T::dim } -> std::convertible_to<int>;
 };
 
-// Forward declaration
+/// \brief Forward declaration of multivector type.
 template <typename Field, IsSignature Sig> struct Multivector;
 
-// ========================================================================
-// 2. KERNEL INTERFACE ( The "Engine" )
-// ========================================================================
-// This struct defines HOW we multiply.
-// The default implementation uses the generic compile-time unroll.
-// We will specialize this for Euclidean3D, PGA, CGA.
-
+/// \brief Product-kernel policy object used by `Multivector`.
 template <typename Field, IsSignature Sig> struct AlgebraKernels {
   using MV = Multivector<Field, Sig>;
 
@@ -115,22 +116,28 @@ template <typename Field, IsSignature Sig> struct AlgebraKernels {
     return result;
   }
 
-  // --- PUBLIC API ---
+  /**
+   * \brief Geometric product.
+   * \param a Left operand.
+   * \param b Right operand.
+   * \return Product multivector.
+   */
   static constexpr MV geometric_product(const MV &a, const MV &b) {
     return product_generic<false>(a, b, std::make_index_sequence<Sig::size>{});
   }
 
+  /**
+   * \brief Exterior/wedge product.
+   * \param a Left operand.
+   * \param b Right operand.
+   * \return Wedge-product multivector.
+   */
   static constexpr MV wedge_product(const MV &a, const MV &b) {
     return product_generic<true>(a, b, std::make_index_sequence<Sig::size>{});
   }
 };
 
-// ========================================================================
-// 3. SPECIALIZATION: EUCLIDEAN 3D (Cl(3,0))
-// ========================================================================
-// Hand-unrolled kernel for maximum performance.
-// Eliminates all loops and complex template instantiation depth.
-
+/// \brief Hand-unrolled `Cl(3,0)` kernel specialization.
 template <typename Field> struct AlgebraKernels<Field, Euclidean3D> {
   using MV = Multivector<Field, Euclidean3D>;
 
@@ -214,17 +221,20 @@ template <typename Field> struct AlgebraKernels<Field, Euclidean3D> {
   }
 };
 
-// ========================================================================
-// 4. MULTIVECTOR
-// ========================================================================
+/// \brief Fixed-size multivector value type.
 template <typename Field, IsSignature Sig> struct Multivector {
   static constexpr size_t Size = Sig::size;
   alignas(xsimd::default_arch::alignment()) std::array<Field, Sig::size> data;
 
-  // Constructors
+  /// \brief Zero-initialized multivector.
   constexpr Multivector() : data{0} {}
 
-  // Helpers
+  /**
+   * \brief Build a multivector with one basis blade set to `scale`.
+   * \param bitmap Blade bitmap index.
+   * \param scale Coefficient value.
+   * \return Newly constructed multivector.
+   */
   static constexpr Multivector from_blade(unsigned int bitmap, Field scale) {
     Multivector mv;
     if (bitmap < Sig::size)
@@ -232,19 +242,42 @@ template <typename Field, IsSignature Sig> struct Multivector {
     return mv;
   }
 
+  /**
+   * \brief Immutable component access.
+   * \param i Component index.
+   * \return Component value.
+   */
   constexpr Field operator[](size_t i) const { return data[i]; }
+  /**
+   * \brief Mutable component access.
+   * \param i Component index.
+   * \return Mutable reference to component.
+   */
   constexpr Field &operator[](size_t i) { return data[i]; }
 
-  // --- ARITHMETIC OPERATORS (Delegating to Kernel) ---
-
+  /**
+   * \brief Geometric product.
+   * \param other Right-hand operand.
+   * \return Product multivector.
+   */
   constexpr Multivector operator*(const Multivector &other) const {
     return AlgebraKernels<Field, Sig>::geometric_product(*this, other);
   }
 
+  /**
+   * \brief Wedge product.
+   * \param other Right-hand operand.
+   * \return Wedge-product multivector.
+   */
   constexpr Multivector operator^(const Multivector &other) const {
     return AlgebraKernels<Field, Sig>::wedge_product(*this, other);
   }
 
+  /**
+   * \brief Component-wise addition.
+   * \param other Right-hand operand.
+   * \return Sum multivector.
+   */
   constexpr Multivector operator+(const Multivector &other) const {
     Multivector res;
     for (size_t i = 0; i < Size; ++i)
@@ -252,6 +285,11 @@ template <typename Field, IsSignature Sig> struct Multivector {
     return res;
   }
 
+  /**
+   * \brief Component-wise subtraction.
+   * \param other Right-hand operand.
+   * \return Difference multivector.
+   */
   constexpr Multivector operator-(const Multivector &other) const {
     Multivector res;
     for (size_t i = 0; i < Size; ++i)
@@ -260,10 +298,9 @@ template <typename Field, IsSignature Sig> struct Multivector {
   }
 };
 
-// ========================================================================
-// 5. WIDE TYPES
-// ========================================================================
+/// \brief SIMD packet scalar used by wide multivectors.
 using Packet = xsimd::batch<float>;
+/// \brief Multivector whose scalar components are SIMD packets.
 template <typename Sig> using WideMultivector = Multivector<Packet, Sig>;
 
 } // namespace igneous::core

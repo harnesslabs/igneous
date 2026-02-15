@@ -18,17 +18,33 @@
 
 namespace igneous::ops::diffusion {
 
+/// \brief Reusable buffers for diffusion-Hodge assembly.
 template <typename MeshT> struct HodgeWorkspace {
+  /// \brief Coordinate vectors used in gamma evaluations.
   std::array<Eigen::VectorXf, 3> coords;
-  std::array<Eigen::MatrixXf, 3> gamma_x_phi_mat; // [3] each [n_verts x n0]
-  Eigen::MatrixXf weighted_u;                     // [n_verts x n0]
-  std::vector<std::vector<Eigen::VectorXf>> gamma_x_phi; // [3][n0]
-  std::vector<std::vector<Eigen::VectorXf>> gamma_phi_x; // [n0][3]
+  /// \brief `Gamma(x_a, phi_i)` matrix cache for each axis.
+  std::array<Eigen::MatrixXf, 3> gamma_x_phi_mat;
+  /// \brief Basis weighted by stationary measure.
+  Eigen::MatrixXf weighted_u;
+  /// \brief Reserved for mixed gamma layouts.
+  std::vector<std::vector<Eigen::VectorXf>> gamma_x_phi;
+  /// \brief `Gamma(phi_i, x_a)` cache per mode and axis.
+  std::vector<std::vector<Eigen::VectorXf>> gamma_phi_x;
+  /// \brief `Gamma(x_a, x_b)` caches.
   std::array<std::array<Eigen::VectorXf, 3>, 3> gamma_xx;
+  /// \brief Temporary `Gamma(phi_i, phi_j)` buffer.
   Eigen::VectorXf gamma_phi_phi;
+  /// \brief Generic temporary weight vector.
   Eigen::VectorXf weight;
 };
 
+/**
+ * \brief Assemble weak exterior derivative matrix for 1-forms.
+ * \param mesh Input diffusion space.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \param workspace Scratch buffers.
+ * \return Weak derivative matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
                                                  float bandwidth,
@@ -73,6 +89,12 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
   return D;
 }
 
+/**
+ * \brief Convenience overload for weak exterior derivative assembly.
+ * \param mesh Input diffusion space.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \return Weak derivative matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
                                                  float bandwidth) {
@@ -80,6 +102,13 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
   return compute_weak_exterior_derivative(mesh, bandwidth, workspace);
 }
 
+/**
+ * \brief Assemble curl-energy term used in diffusion Hodge Laplacian.
+ * \param mesh Input diffusion space.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \param workspace Scratch buffers.
+ * \return Curl-energy matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
                                            HodgeWorkspace<MeshT> &workspace) {
@@ -149,18 +178,37 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
   return E_up;
 }
 
+/**
+ * \brief Convenience overload for curl-energy assembly.
+ * \param mesh Input diffusion space.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \return Curl-energy matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth) {
   HodgeWorkspace<MeshT> workspace;
   return compute_curl_energy_matrix(mesh, bandwidth, workspace);
 }
 
+/**
+ * \brief Combine down and up terms into a Hodge Laplacian.
+ * \param D_weak Weak derivative matrix.
+ * \param E_up Curl-energy matrix.
+ * \return Hodge Laplacian matrix.
+ */
 inline Eigen::MatrixXf compute_hodge_laplacian_matrix(
     const Eigen::MatrixXf &D_weak, const Eigen::MatrixXf &E_up) {
   const Eigen::MatrixXf L_down = D_weak * D_weak.transpose();
   return L_down + E_up;
 }
 
+/**
+ * \brief Solve generalized Hodge eigenproblem `(L, G)` with regularization cutoff.
+ * \param laplacian Hodge Laplacian matrix.
+ * \param mass_matrix Gram/mass matrix.
+ * \param rcond Eigenvalue threshold for regularization.
+ * \return Pair `(eigenvalues, eigenvectors)`.
+ */
 inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
 compute_hodge_spectrum(const Eigen::MatrixXf &laplacian,
                        const Eigen::MatrixXf &mass_matrix,
@@ -203,6 +251,19 @@ compute_hodge_spectrum(const Eigen::MatrixXf &laplacian,
   return std::make_pair(evals, evecs);
 }
 
+/**
+ * \brief Compute scalar circular coordinates from a harmonic 1-form mode.
+ *
+ * This solves a generalized eigenproblem for an advection-diffusion operator
+ * built from `alpha_coeffs`.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Harmonic 1-form coefficients.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \param lambda Diffusion regularization weight.
+ * \param positive_imag_mode Which positive-imaginary mode to choose.
+ * \param selected_eval Optional output for selected complex eigenvalue.
+ * \return Angle field in `[0, 2*pi)`.
+ */
 template <typename MeshT>
 Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
                                              const Eigen::VectorXf &alpha_coeffs,

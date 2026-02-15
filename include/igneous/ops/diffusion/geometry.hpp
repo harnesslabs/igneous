@@ -14,18 +14,31 @@
 
 namespace igneous::ops::diffusion {
 
+/// \brief Reusable buffers for diffusion geometry operators.
 template <typename MeshT> struct GeometryWorkspace {
+  /// \brief Coordinate vectors used in gamma evaluations.
   std::array<Eigen::VectorXf, 3> coords;
+  /// \brief Pairwise `carre_du_champ` values for coordinates.
   std::array<std::array<Eigen::VectorXf, 3>, 3> gamma_coords;
+  /// \brief Temporary weighted basis product storage.
   Eigen::VectorXf weights;
+  /// \brief General temporary gamma output vector.
   Eigen::VectorXf gamma_tmp;
 };
 
+/// \brief Ping-pong buffers for repeated Markov transitions.
 template <typename MeshT> struct DiffusionWorkspace {
+  /// \brief Source vector for the current transition step.
   Eigen::VectorXf ping;
+  /// \brief Destination vector for the current transition step.
   Eigen::VectorXf pong;
 };
 
+/**
+ * \brief Fill ambient coordinate vectors (prefers immersion coordinates when available).
+ * \param mesh Input diffusion space.
+ * \param coords Output coordinate vectors (`x,y,z`).
+ */
 template <typename MeshT>
 void fill_coordinate_vectors(const MeshT &mesh,
                              std::array<Eigen::VectorXf, 3> &coords) {
@@ -56,6 +69,11 @@ void fill_coordinate_vectors(const MeshT &mesh,
   }
 }
 
+/**
+ * \brief Fill coordinate vectors from raw input geometry (`Space::x/y/z`).
+ * \param mesh Input space.
+ * \param coords Output coordinate vectors (`x,y,z`).
+ */
 template <typename MeshT>
 void fill_data_coordinate_vectors(const MeshT &mesh,
                                   std::array<Eigen::VectorXf, 3> &coords) {
@@ -73,6 +91,16 @@ void fill_data_coordinate_vectors(const MeshT &mesh,
   }
 }
 
+/**
+ * \brief Compute diffusion carré du champ: `Gamma(f, h)`.
+ *
+ * The implementation consumes CSR Markov rows and optional local bandwidths.
+ * \param mesh Input diffusion space.
+ * \param f First scalar field.
+ * \param h Second scalar field.
+ * \param bandwidth Legacy bandwidth parameter (unused in CSR path).
+ * \param gamma_out Output vector of pointwise gamma values.
+ */
 template <typename MeshT>
 void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
                     Eigen::Ref<const Eigen::VectorXf> h, [[maybe_unused]] float bandwidth,
@@ -159,6 +187,12 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
   }
 }
 
+/**
+ * \brief Apply one Markov transition `output = P * input`.
+ * \param mesh Input diffusion space.
+ * \param input Input scalar vector.
+ * \param output Output scalar vector.
+ */
 template <typename MeshT>
 void apply_markov_transition(const MeshT &mesh,
                              Eigen::Ref<const Eigen::VectorXf> input,
@@ -223,6 +257,14 @@ void apply_markov_transition(const MeshT &mesh,
   }
 }
 
+/**
+ * \brief Apply `steps` Markov transitions using a caller-provided workspace.
+ * \param mesh Input diffusion space.
+ * \param input Input scalar vector.
+ * \param steps Number of repeated transitions.
+ * \param output Output scalar vector.
+ * \param workspace Scratch buffers reused across calls.
+ */
 template <typename MeshT>
 void apply_markov_transition_steps(const MeshT &mesh,
                                    Eigen::Ref<const Eigen::VectorXf> input,
@@ -287,6 +329,13 @@ void apply_markov_transition_steps(const MeshT &mesh,
   output = *src;
 }
 
+/**
+ * \brief Convenience overload that allocates a temporary workspace.
+ * \param mesh Input diffusion space.
+ * \param input Input scalar vector.
+ * \param steps Number of repeated transitions.
+ * \param output Output scalar vector.
+ */
 template <typename MeshT>
 void apply_markov_transition_steps(const MeshT &mesh,
                                    Eigen::Ref<const Eigen::VectorXf> input,
@@ -296,6 +345,13 @@ void apply_markov_transition_steps(const MeshT &mesh,
   apply_markov_transition_steps(mesh, input, steps, output, workspace);
 }
 
+/**
+ * \brief Assemble the diffusion 1-form Gram matrix.
+ * \param mesh Input diffusion space.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \param workspace Scratch buffers reused across calls.
+ * \return Symmetric 1-form Gram matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_1form_gram_matrix(const MeshT &mesh, float bandwidth,
                                           GeometryWorkspace<MeshT> &workspace) {
@@ -349,6 +405,12 @@ Eigen::MatrixXf compute_1form_gram_matrix(const MeshT &mesh, float bandwidth,
   return G;
 }
 
+/**
+ * \brief Convenience overload for 1-form Gram assembly.
+ * \param mesh Input diffusion space.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \return Symmetric 1-form Gram matrix.
+ */
 template <typename MeshT>
 Eigen::MatrixXf compute_1form_gram_matrix(const MeshT &mesh, float bandwidth) {
   GeometryWorkspace<MeshT> workspace;

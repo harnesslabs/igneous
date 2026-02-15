@@ -10,10 +10,20 @@
 
 namespace igneous::ops::dec {
 
+/// \brief Scratch storage reused by curvature-flow integration.
 template <data::SurfaceStructure StructureT> struct FlowWorkspace {
+  /// \brief Per-vertex displacement computed from local neighborhood averaging.
   std::vector<core::Vec3> displacements;
 };
 
+/**
+ * \brief Advance one explicit mean-curvature flow step.
+ *
+ * The update is a neighborhood average displacement scaled by `dt`.
+ * \param space Input/output surface space.
+ * \param dt Time step scale.
+ * \param workspace Reused temporary buffers.
+ */
 template <data::SurfaceStructure StructureT>
 void integrate_mean_curvature_flow(data::Space<StructureT> &space, float dt,
                                    FlowWorkspace<StructureT> &workspace) {
