@@ -59,18 +59,10 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
           -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}
 
-      - name: Build tests (Debug)
+      - name: Build all targets (Debug)
         shell: bash
         run: >-
-          cmake --build build-debug --parallel --target
-          test_algebra
-          test_topology_triangle
-          test_topology_diffusion
-          test_ops_curvature_flow
-          test_ops_spectral_geometry
-          test_ops_hodge
-          test_io_meshes
-          igneous-hodge
+          cmake --build build-debug --parallel
 
       - name: Run tests
         shell: bash
@@ -84,18 +76,10 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
           -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}
 
-      - name: Build release binaries
+      - name: Build all targets (Release)
         shell: bash
         run: >-
-          cmake --build build-release --parallel --target
-          igneous-mesh
-          igneous-point
-          igneous-diffusion
-          igneous-spectral
-          igneous-hodge
-          bench_geometry
-          bench_dod
-          bench_pipelines
+          cmake --build build-release --parallel
 
   sanitizers:
     name: Sanitizers (ubuntu)
@@ -135,18 +119,10 @@ jobs:
           -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer'
           -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'
 
-      - name: Build tests (Sanitizers)
+      - name: Build all targets (Sanitizers)
         shell: bash
         run: >-
-          cmake --build build-sanitize --parallel --target
-          test_algebra
-          test_topology_triangle
-          test_topology_diffusion
-          test_ops_curvature_flow
-          test_ops_spectral_geometry
-          test_ops_hodge
-          test_io_meshes
-          igneous-hodge
+          cmake --build build-sanitize --parallel
 
       - name: Run tests (Sanitizers)
         shell: bash
