@@ -12,7 +12,7 @@
 namespace igneous::core::gpu {
 namespace {
 
-constexpr const char *kMetalDiffusionSource = R"METAL(
+constexpr const char* kMetalDiffusionSource = R"METAL(
 #include <metal_stdlib>
 using namespace metal;
 
@@ -74,24 +74,24 @@ struct CsrBuffers {
 
 class MetalDiffusionRuntime {
 public:
-  static MetalDiffusionRuntime &instance() {
+  static MetalDiffusionRuntime& instance() {
     static MetalDiffusionRuntime runtime;
     return runtime;
   }
 
-  [[nodiscard]] bool is_available() const { return ready_; }
+  [[nodiscard]] bool is_available() const {
+    return ready_;
+  }
 
-  void invalidate_markov_cache(const void *cache_key) {
+  void invalidate_markov_cache(const void* cache_key) {
     std::lock_guard<std::mutex> lock(cache_mutex_);
     csr_cache_.erase(cache_key);
   }
 
-  [[nodiscard]] bool apply_markov_transition(const void *cache_key,
-                                             std::span<const int> row_offsets,
-                                             std::span<const int> col_indices,
-                                             std::span<const float> weights,
-                                             std::span<const float> input,
-                                             std::span<float> output) {
+  [[nodiscard]] bool
+  apply_markov_transition(const void* cache_key, std::span<const int> row_offsets,
+                          std::span<const int> col_indices, std::span<const float> weights,
+                          std::span<const float> input, std::span<float> output) {
     if (!ready_ || row_offsets.size() < 2) {
       return false;
     }
@@ -105,18 +105,16 @@ public:
     id<MTLBuffer> rows_buffer = nil;
     id<MTLBuffer> cols_buffer = nil;
     id<MTLBuffer> weights_buffer = nil;
-    if (!prepare_csr_buffers(cache_key, row_offsets, col_indices, weights,
-                             rows_buffer, cols_buffer, weights_buffer)) {
+    if (!prepare_csr_buffers(cache_key, row_offsets, col_indices, weights, rows_buffer, cols_buffer,
+                             weights_buffer)) {
       return false;
     }
 
     const size_t vector_bytes = row_count * sizeof(float);
-    id<MTLBuffer> input_buffer =
-        [device_ newBufferWithLength:vector_bytes
-                             options:MTLResourceStorageModeShared];
-    id<MTLBuffer> output_buffer =
-        [device_ newBufferWithLength:vector_bytes
-                             options:MTLResourceStorageModeShared];
+    id<MTLBuffer> input_buffer = [device_ newBufferWithLength:vector_bytes
+                                                      options:MTLResourceStorageModeShared];
+    id<MTLBuffer> output_buffer = [device_ newBufferWithLength:vector_bytes
+                                                       options:MTLResourceStorageModeShared];
     if (input_buffer == nil || output_buffer == nil) {
       return false;
     }
@@ -154,10 +152,10 @@ public:
     return true;
   }
 
-  [[nodiscard]] bool apply_markov_transition_steps(
-      const void *cache_key, std::span<const int> row_offsets,
-      std::span<const int> col_indices, std::span<const float> weights,
-      std::span<const float> input, int steps, std::span<float> output) {
+  [[nodiscard]] bool
+  apply_markov_transition_steps(const void* cache_key, std::span<const int> row_offsets,
+                                std::span<const int> col_indices, std::span<const float> weights,
+                                std::span<const float> input, int steps, std::span<float> output) {
     if (!ready_ || row_offsets.size() < 2 || steps <= 0) {
       return false;
     }
@@ -169,25 +167,22 @@ public:
     }
 
     if (steps == 1) {
-      return apply_markov_transition(cache_key, row_offsets, col_indices, weights,
-                                     input, output);
+      return apply_markov_transition(cache_key, row_offsets, col_indices, weights, input, output);
     }
 
     id<MTLBuffer> rows_buffer = nil;
     id<MTLBuffer> cols_buffer = nil;
     id<MTLBuffer> weights_buffer = nil;
-    if (!prepare_csr_buffers(cache_key, row_offsets, col_indices, weights,
-                             rows_buffer, cols_buffer, weights_buffer)) {
+    if (!prepare_csr_buffers(cache_key, row_offsets, col_indices, weights, rows_buffer, cols_buffer,
+                             weights_buffer)) {
       return false;
     }
 
     const size_t vector_bytes = row_count * sizeof(float);
-    id<MTLBuffer> buffer_a =
-        [device_ newBufferWithLength:vector_bytes
-                             options:MTLResourceStorageModeShared];
-    id<MTLBuffer> buffer_b =
-        [device_ newBufferWithLength:vector_bytes
-                             options:MTLResourceStorageModeShared];
+    id<MTLBuffer> buffer_a = [device_ newBufferWithLength:vector_bytes
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> buffer_b = [device_ newBufferWithLength:vector_bytes
+                                                  options:MTLResourceStorageModeShared];
     if (buffer_a == nil || buffer_b == nil) {
       return false;
     }
@@ -232,11 +227,9 @@ public:
     return true;
   }
 
-  [[nodiscard]] bool carre_du_champ(const void *cache_key,
-                                    std::span<const int> row_offsets,
+  [[nodiscard]] bool carre_du_champ(const void* cache_key, std::span<const int> row_offsets,
                                     std::span<const int> col_indices,
-                                    std::span<const float> weights,
-                                    std::span<const float> f,
+                                    std::span<const float> weights, std::span<const float> f,
                                     std::span<const float> h, float inv_2t,
                                     std::span<float> output) {
     if (!ready_ || row_offsets.size() < 2) {
@@ -244,29 +237,26 @@ public:
     }
 
     const size_t row_count = row_offsets.size() - 1;
-    if (f.size() != row_count || h.size() != row_count ||
-        output.size() != row_count || col_indices.size() != weights.size()) {
+    if (f.size() != row_count || h.size() != row_count || output.size() != row_count ||
+        col_indices.size() != weights.size()) {
       return false;
     }
 
     id<MTLBuffer> rows_buffer = nil;
     id<MTLBuffer> cols_buffer = nil;
     id<MTLBuffer> weights_buffer = nil;
-    if (!prepare_csr_buffers(cache_key, row_offsets, col_indices, weights,
-                             rows_buffer, cols_buffer, weights_buffer)) {
+    if (!prepare_csr_buffers(cache_key, row_offsets, col_indices, weights, rows_buffer, cols_buffer,
+                             weights_buffer)) {
       return false;
     }
 
     const size_t vector_bytes = row_count * sizeof(float);
-    id<MTLBuffer> f_buffer =
-        [device_ newBufferWithLength:vector_bytes
-                             options:MTLResourceStorageModeShared];
-    id<MTLBuffer> h_buffer =
-        [device_ newBufferWithLength:vector_bytes
-                             options:MTLResourceStorageModeShared];
-    id<MTLBuffer> output_buffer =
-        [device_ newBufferWithLength:vector_bytes
-                             options:MTLResourceStorageModeShared];
+    id<MTLBuffer> f_buffer = [device_ newBufferWithLength:vector_bytes
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> h_buffer = [device_ newBufferWithLength:vector_bytes
+                                                  options:MTLResourceStorageModeShared];
+    id<MTLBuffer> output_buffer = [device_ newBufferWithLength:vector_bytes
+                                                       options:MTLResourceStorageModeShared];
     if (f_buffer == nil || h_buffer == nil || output_buffer == nil) {
       return false;
     }
@@ -319,10 +309,9 @@ private:
       return;
     }
 
-    NSError *error = nil;
-    NSString *source = [NSString stringWithUTF8String:kMetalDiffusionSource];
-    id<MTLLibrary> library =
-        [device_ newLibraryWithSource:source options:nil error:&error];
+    NSError* error = nil;
+    NSString* source = [NSString stringWithUTF8String:kMetalDiffusionSource];
+    id<MTLLibrary> library = [device_ newLibraryWithSource:source options:nil error:&error];
     if (library == nil) {
       return;
     }
@@ -332,20 +321,17 @@ private:
       return;
     }
 
-    matvec_pipeline_ =
-        [device_ newComputePipelineStateWithFunction:matvec_fn error:&error];
+    matvec_pipeline_ = [device_ newComputePipelineStateWithFunction:matvec_fn error:&error];
     if (matvec_pipeline_ == nil) {
       return;
     }
 
-    id<MTLFunction> carre_fn =
-        [library newFunctionWithName:@"csr_carre_du_champ"];
+    id<MTLFunction> carre_fn = [library newFunctionWithName:@"csr_carre_du_champ"];
     if (carre_fn == nil) {
       return;
     }
 
-    carre_pipeline_ =
-        [device_ newComputePipelineStateWithFunction:carre_fn error:&error];
+    carre_pipeline_ = [device_ newComputePipelineStateWithFunction:carre_fn error:&error];
     if (carre_pipeline_ == nil) {
       return;
     }
@@ -353,40 +339,32 @@ private:
     ready_ = true;
   }
 
-  [[nodiscard]] bool prepare_csr_buffers(const void *cache_key,
-                                         std::span<const int> row_offsets,
+  [[nodiscard]] bool prepare_csr_buffers(const void* cache_key, std::span<const int> row_offsets,
                                          std::span<const int> col_indices,
-                                         std::span<const float> weights,
-                                         id<MTLBuffer> &rows_buffer,
-                                         id<MTLBuffer> &cols_buffer,
-                                         id<MTLBuffer> &weights_buffer) {
-    const void *key =
-        (cache_key != nullptr) ? cache_key
-                               : static_cast<const void *>(row_offsets.data());
+                                         std::span<const float> weights, id<MTLBuffer>& rows_buffer,
+                                         id<MTLBuffer>& cols_buffer,
+                                         id<MTLBuffer>& weights_buffer) {
+    const void* key =
+        (cache_key != nullptr) ? cache_key : static_cast<const void*>(row_offsets.data());
     const size_t row_count = row_offsets.size() - 1;
     const size_t nnz = weights.size();
 
     std::lock_guard<std::mutex> lock(cache_mutex_);
-    CsrBuffers &entry = csr_cache_[key];
+    CsrBuffers& entry = csr_cache_[key];
 
-    if (entry.row_count != row_count || entry.nnz != nnz ||
-        entry.row_offsets == nil || entry.col_indices == nil ||
-        entry.weights == nil) {
+    if (entry.row_count != row_count || entry.nnz != nnz || entry.row_offsets == nil ||
+        entry.col_indices == nil || entry.weights == nil) {
       const size_t row_bytes = row_offsets.size() * sizeof(int);
       const size_t col_bytes = col_indices.size() * sizeof(int);
       const size_t weight_bytes = weights.size() * sizeof(float);
 
-      entry.row_offsets =
-          [device_ newBufferWithLength:row_bytes
-                               options:MTLResourceStorageModeShared];
-      entry.col_indices =
-          [device_ newBufferWithLength:col_bytes
-                               options:MTLResourceStorageModeShared];
-      entry.weights =
-          [device_ newBufferWithLength:weight_bytes
-                               options:MTLResourceStorageModeShared];
-      if (entry.row_offsets == nil || entry.col_indices == nil ||
-          entry.weights == nil) {
+      entry.row_offsets = [device_ newBufferWithLength:row_bytes
+                                               options:MTLResourceStorageModeShared];
+      entry.col_indices = [device_ newBufferWithLength:col_bytes
+                                               options:MTLResourceStorageModeShared];
+      entry.weights = [device_ newBufferWithLength:weight_bytes
+                                           options:MTLResourceStorageModeShared];
+      if (entry.row_offsets == nil || entry.col_indices == nil || entry.weights == nil) {
         csr_cache_.erase(key);
         return false;
       }
@@ -405,16 +383,12 @@ private:
   }
 
   static void dispatch_rows(id<MTLComputeCommandEncoder> encoder,
-                            id<MTLComputePipelineState> pipeline,
-                            size_t row_count) {
+                            id<MTLComputePipelineState> pipeline, size_t row_count) {
     const NSUInteger width =
-        std::max<NSUInteger>(1, std::min<NSUInteger>(
-                                    pipeline.maxTotalThreadsPerThreadgroup, 256));
+        std::max<NSUInteger>(1, std::min<NSUInteger>(pipeline.maxTotalThreadsPerThreadgroup, 256));
     const MTLSize threads_per_group = MTLSizeMake(width, 1, 1);
-    const MTLSize threads_per_grid =
-        MTLSizeMake(static_cast<NSUInteger>(row_count), 1, 1);
-    [encoder dispatchThreads:threads_per_grid
-      threadsPerThreadgroup:threads_per_group];
+    const MTLSize threads_per_grid = MTLSizeMake(static_cast<NSUInteger>(row_count), 1, 1);
+    [encoder dispatchThreads:threads_per_grid threadsPerThreadgroup:threads_per_group];
   }
 
   bool ready_ = false;
@@ -424,47 +398,43 @@ private:
   id<MTLComputePipelineState> carre_pipeline_ = nil;
 
   std::mutex cache_mutex_;
-  std::unordered_map<const void *, CsrBuffers> csr_cache_;
+  std::unordered_map<const void*, CsrBuffers> csr_cache_;
 };
 
 } // namespace
 
-bool available() { return MetalDiffusionRuntime::instance().is_available(); }
+bool available() {
+  return MetalDiffusionRuntime::instance().is_available();
+}
 
-void invalidate_markov_cache(const void *cache_key) {
+void invalidate_markov_cache(const void* cache_key) {
   if (cache_key == nullptr) {
     return;
   }
   MetalDiffusionRuntime::instance().invalidate_markov_cache(cache_key);
 }
 
-bool apply_markov_transition(const void *cache_key,
-                             std::span<const int> row_offsets,
-                             std::span<const int> col_indices,
-                             std::span<const float> weights,
-                             std::span<const float> input,
-                             std::span<float> output) {
+bool apply_markov_transition(const void* cache_key, std::span<const int> row_offsets,
+                             std::span<const int> col_indices, std::span<const float> weights,
+                             std::span<const float> input, std::span<float> output) {
   return MetalDiffusionRuntime::instance().apply_markov_transition(
       cache_key, row_offsets, col_indices, weights, input, output);
 }
 
-bool apply_markov_transition_steps(const void *cache_key,
-                                   std::span<const int> row_offsets,
-                                   std::span<const int> col_indices,
-                                   std::span<const float> weights,
+bool apply_markov_transition_steps(const void* cache_key, std::span<const int> row_offsets,
+                                   std::span<const int> col_indices, std::span<const float> weights,
                                    std::span<const float> input, int steps,
                                    std::span<float> output) {
   return MetalDiffusionRuntime::instance().apply_markov_transition_steps(
       cache_key, row_offsets, col_indices, weights, input, steps, output);
 }
 
-bool carre_du_champ(const void *cache_key, std::span<const int> row_offsets,
-                    std::span<const int> col_indices,
-                    std::span<const float> weights, std::span<const float> f,
-                    std::span<const float> h, float inv_2t,
+bool carre_du_champ(const void* cache_key, std::span<const int> row_offsets,
+                    std::span<const int> col_indices, std::span<const float> weights,
+                    std::span<const float> f, std::span<const float> h, float inv_2t,
                     std::span<float> output) {
-  return MetalDiffusionRuntime::instance().carre_du_champ(
-      cache_key, row_offsets, col_indices, weights, f, h, inv_2t, output);
+  return MetalDiffusionRuntime::instance().carre_du_champ(cache_key, row_offsets, col_indices,
+                                                          weights, f, h, inv_2t, output);
 }
 
 } // namespace igneous::core::gpu

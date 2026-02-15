@@ -151,3 +151,13 @@
   - Added `std::cstddef` include and removed unused includes in `include/igneous/ops/diffusion/basis.hpp`.
 - Verification:
   - `make lint` now surfaces include-cleaner diagnostics from headers (including `basis.hpp`) and reports missing-direct-include issues.
+
+## Entry 0010
+- Timestamp: 2026-02-15
+- Structural Difference Targeted: Establish a repo-wide canonical C++ formatting baseline.
+- Formatting Changes:
+  - Ran `make format` across `include/`, `src/`, `tests/`, and `benches/` using `.clang-format`.
+  - Applied style-only edits (spacing/wrapping/alignment) with no intended behavioral changes.
+- Verification:
+  - `make format-check` -> pass.
+  - `ctest --test-dir build --output-on-failure` -> `14/14` passed after formatting sweep.

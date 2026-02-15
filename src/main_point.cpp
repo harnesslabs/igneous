@@ -12,7 +12,7 @@ using namespace igneous;
 using PointCloud = data::Space<data::DiffusionGeometry>;
 using SurfaceSpace = data::Space<data::DiscreteExteriorCalculus>;
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   if (argc < 2) {
     std::cout << "Usage: ./test_points <obj_file>\n";
     return 1;

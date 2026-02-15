@@ -16,13 +16,17 @@ struct Bivec3 {
    * \brief Squared Euclidean magnitude.
    * \return Squared norm.
    */
-  float norm_sq() const { return xy * xy + yz * yz + zx * zx; }
+  float norm_sq() const {
+    return xy * xy + yz * yz + zx * zx;
+  }
 
   /**
    * \brief Euclidean magnitude.
    * \return Norm.
    */
-  float norm() const { return std::sqrt(norm_sq()); }
+  float norm() const {
+    return std::sqrt(norm_sq());
+  }
 };
 
 /// \brief Lightweight 3D vector utility for geometry kernels.
@@ -39,39 +43,43 @@ struct Vec3 {
    * \param o Right-hand operand.
    * \return Sum vector.
    */
-  Vec3 operator+(const Vec3 &o) const { return {x + o.x, y + o.y, z + o.z}; }
+  Vec3 operator+(const Vec3& o) const {
+    return {x + o.x, y + o.y, z + o.z};
+  }
   /**
    * \brief Vector subtraction.
    * \param o Right-hand operand.
    * \return Difference vector.
    */
-  Vec3 operator-(const Vec3 &o) const { return {x - o.x, y - o.y, z - o.z}; }
+  Vec3 operator-(const Vec3& o) const {
+    return {x - o.x, y - o.y, z - o.z};
+  }
 
   /**
    * \brief Scalar multiplication.
    * \param s Scalar factor.
    * \return Scaled vector.
    */
-  Vec3 operator*(float s) const { return {x * s, y * s, z * s}; }
+  Vec3 operator*(float s) const {
+    return {x * s, y * s, z * s};
+  }
 
   /**
    * \brief Dot product.
    * \param o Right-hand operand.
    * \return Dot product scalar.
    */
-  float dot(const Vec3 &o) const { return x * o.x + y * o.y + z * o.z; }
+  float dot(const Vec3& o) const {
+    return x * o.x + y * o.y + z * o.z;
+  }
 
   /**
    * \brief Exterior product producing a bivector.
    * \param o Right-hand operand.
    * \return Bivector wedge product.
    */
-  Bivec3 operator^(const Vec3 &o) const {
-    return {
-        x * o.y - y * o.x,
-        y * o.z - z * o.y,
-        z * o.x - x * o.z
-    };
+  Bivec3 operator^(const Vec3& o) const {
+    return {x * o.y - y * o.x, y * o.z - z * o.y, z * o.x - x * o.z};
   }
 };
 

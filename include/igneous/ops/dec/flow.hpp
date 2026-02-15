@@ -25,9 +25,9 @@ template <data::SurfaceStructure StructureT> struct FlowWorkspace {
  * \param workspace Reused temporary buffers.
  */
 template <data::SurfaceStructure StructureT>
-void integrate_mean_curvature_flow(data::Space<StructureT> &space, float dt,
-                                   FlowWorkspace<StructureT> &workspace) {
-  const auto &structure = space.structure;
+void integrate_mean_curvature_flow(data::Space<StructureT>& space, float dt,
+                                   FlowWorkspace<StructureT>& workspace) {
+  const auto& structure = space.structure;
 
   const size_t num_verts = space.num_points();
 
@@ -36,8 +36,8 @@ void integrate_mean_curvature_flow(data::Space<StructureT> &space, float dt,
   }
 
   if constexpr (std::is_same_v<StructureT, data::DiscreteExteriorCalculus>) {
-    const auto &neighbor_offsets = structure.vertex_neighbor_offsets;
-    const auto &neighbor_data = structure.vertex_neighbor_data;
+    const auto& neighbor_offsets = structure.vertex_neighbor_offsets;
+    const auto& neighbor_data = structure.vertex_neighbor_data;
 
     core::parallel_for_index(
         0, static_cast<int>(num_verts),
@@ -61,8 +61,7 @@ void integrate_mean_curvature_flow(data::Space<StructureT> &space, float dt,
           }
 
           const float inv_count = 1.0f / static_cast<float>(end - begin);
-          workspace.displacements[i] = {sx * inv_count - space.x[i],
-                                        sy * inv_count - space.y[i],
+          workspace.displacements[i] = {sx * inv_count - space.x[i], sy * inv_count - space.y[i],
                                         sz * inv_count - space.z[i]};
         },
         131072);
@@ -71,7 +70,7 @@ void integrate_mean_curvature_flow(data::Space<StructureT> &space, float dt,
         0, static_cast<int>(num_verts),
         [&](int vertex_idx) {
           const size_t i = static_cast<size_t>(vertex_idx);
-          const core::Vec3 &d = workspace.displacements[i];
+          const core::Vec3& d = workspace.displacements[i];
           space.x[i] += d.x * dt;
           space.y[i] += d.y * dt;
           space.z[i] += d.z * dt;

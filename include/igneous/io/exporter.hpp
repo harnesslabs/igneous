@@ -56,7 +56,8 @@ inline std::tuple<uint8_t, uint8_t, uint8_t> get_heatmap_color_bytes(double t) {
  * \return Pair `(min_value, max_value)` used for color normalization.
  */
 template <typename Field>
-inline std::pair<double, double> compute_field_bounds(std::span<const Field> field, double sigma_clip) {
+inline std::pair<double, double> compute_field_bounds(std::span<const Field> field,
+                                                      double sigma_clip) {
   double sum = 0.0;
   double sum_sq = 0.0;
   int count = 0;
@@ -86,8 +87,8 @@ inline std::pair<double, double> compute_field_bounds(std::span<const Field> fie
  * \param sigma_clip Sigma clipping for color normalization.
  */
 template <typename StructureT, typename Field>
-void export_ply(const Space<StructureT> &mesh, std::span<const Field> field,
-                const std::string &filename, double sigma_clip = 2.0) {
+void export_ply(const Space<StructureT>& mesh, std::span<const Field> field,
+                const std::string& filename, double sigma_clip = 2.0) {
   const auto [min_v, max_v] = compute_field_bounds(field, sigma_clip);
 
   std::ofstream file(filename);
@@ -115,8 +116,8 @@ void export_ply(const Space<StructureT> &mesh, std::span<const Field> field,
     const double t = (val - min_v) / denom;
     const auto [r, g, b] = get_heatmap_color_bytes(t);
 
-    file << p.x << " " << p.y << " " << p.z << " " << static_cast<int>(r) << " " << static_cast<int>(g)
-         << " " << static_cast<int>(b) << "\n";
+    file << p.x << " " << p.y << " " << p.z << " " << static_cast<int>(r) << " "
+         << static_cast<int>(g) << " " << static_cast<int>(b) << "\n";
   }
 
   std::cout << "[IO] Exported PLY " << filename << "\n";
@@ -130,10 +131,9 @@ void export_ply(const Space<StructureT> &mesh, std::span<const Field> field,
  * \param sigma_clip Sigma clipping for color normalization.
  */
 template <typename StructureT, typename Field>
-void export_ply(const Space<StructureT> &mesh, const std::vector<Field> &field,
-                const std::string &filename, double sigma_clip = 2.0) {
-  export_ply(mesh, std::span<const Field>(field.data(), field.size()), filename,
-             sigma_clip);
+void export_ply(const Space<StructureT>& mesh, const std::vector<Field>& field,
+                const std::string& filename, double sigma_clip = 2.0) {
+  export_ply(mesh, std::span<const Field>(field.data(), field.size()), filename, sigma_clip);
 }
 
 /**
@@ -148,8 +148,8 @@ void export_ply(const Space<StructureT> &mesh, const std::vector<Field> &field,
  * \param sigma_clip Sigma clipping for color normalization.
  */
 template <typename StructureT, typename Field>
-void export_heatmap(const Space<StructureT> &mesh, std::span<const Field> field,
-                    const std::string &filename, double sigma_clip = 2.0) {
+void export_heatmap(const Space<StructureT>& mesh, std::span<const Field> field,
+                    const std::string& filename, double sigma_clip = 2.0) {
   const auto [min_v, max_v] = compute_field_bounds(field, sigma_clip);
 
   std::ofstream file(filename);
@@ -166,8 +166,8 @@ void export_heatmap(const Space<StructureT> &mesh, std::span<const Field> field,
     const double t = (val - min_v) / denom;
     const auto [r, g, b] = get_heatmap_color_bytes(t);
 
-    file << "v " << p.x << " " << p.y << " " << p.z << " " << (r / 255.0f) << " " << (g / 255.0f) << " "
-         << (b / 255.0f) << "\n";
+    file << "v " << p.x << " " << p.y << " " << p.z << " " << (r / 255.0f) << " " << (g / 255.0f)
+         << " " << (b / 255.0f) << "\n";
   }
 
   if constexpr (igneous::data::SurfaceStructure<StructureT>) {
@@ -199,11 +199,9 @@ void export_heatmap(const Space<StructureT> &mesh, std::span<const Field> field,
  * \param sigma_clip Sigma clipping for color normalization.
  */
 template <typename StructureT, typename Field>
-void export_heatmap(const Space<StructureT> &mesh,
-                    const std::vector<Field> &field,
-                    const std::string &filename, double sigma_clip = 2.0) {
-  export_heatmap(mesh, std::span<const Field>(field.data(), field.size()),
-                 filename, sigma_clip);
+void export_heatmap(const Space<StructureT>& mesh, const std::vector<Field>& field,
+                    const std::string& filename, double sigma_clip = 2.0) {
+  export_heatmap(mesh, std::span<const Field>(field.data(), field.size()), filename, sigma_clip);
 }
 
 /**
@@ -219,9 +217,8 @@ void export_heatmap(const Space<StructureT> &mesh,
  * \param sigma_clip Sigma clipping for color normalization.
  */
 template <typename StructureT, typename Field>
-void export_ply_solid(const Space<StructureT> &mesh, std::span<const Field> field,
-                      const std::string &filename, double radius = 0.01,
-                      double sigma_clip = 2.0) {
+void export_ply_solid(const Space<StructureT>& mesh, std::span<const Field> field,
+                      const std::string& filename, double radius = 0.01, double sigma_clip = 2.0) {
   const auto [min_v, max_v] = compute_field_bounds(field, sigma_clip);
 
   std::ofstream file(filename);
@@ -261,9 +258,12 @@ void export_ply_solid(const Space<StructureT> &mesh, std::span<const Field> fiel
     const int ib = b;
 
     file << p.x << " " << (p.y + h) << " " << p.z << " " << ir << " " << ig << " " << ib << "\n";
-    file << (p.x - s) << " " << (p.y - s) << " " << (p.z + s) << " " << ir << " " << ig << " " << ib << "\n";
-    file << (p.x + s) << " " << (p.y - s) << " " << (p.z + s) << " " << ir << " " << ig << " " << ib << "\n";
-    file << p.x << " " << (p.y - s) << " " << (p.z - s) << " " << ir << " " << ig << " " << ib << "\n";
+    file << (p.x - s) << " " << (p.y - s) << " " << (p.z + s) << " " << ir << " " << ig << " " << ib
+         << "\n";
+    file << (p.x + s) << " " << (p.y - s) << " " << (p.z + s) << " " << ir << " " << ig << " " << ib
+         << "\n";
+    file << p.x << " " << (p.y - s) << " " << (p.z - s) << " " << ir << " " << ig << " " << ib
+         << "\n";
   }
 
   for (size_t i = 0; i < n_points; ++i) {
@@ -286,12 +286,10 @@ void export_ply_solid(const Space<StructureT> &mesh, std::span<const Field> fiel
  * \param sigma_clip Sigma clipping for color normalization.
  */
 template <typename StructureT, typename Field>
-void export_ply_solid(const Space<StructureT> &mesh,
-                      const std::vector<Field> &field,
-                      const std::string &filename, double radius = 0.01,
-                      double sigma_clip = 2.0) {
-  export_ply_solid(mesh, std::span<const Field>(field.data(), field.size()),
-                   filename, radius, sigma_clip);
+void export_ply_solid(const Space<StructureT>& mesh, const std::vector<Field>& field,
+                      const std::string& filename, double radius = 0.01, double sigma_clip = 2.0) {
+  export_ply_solid(mesh, std::span<const Field>(field.data(), field.size()), filename, radius,
+                   sigma_clip);
 }
 
 } // namespace igneous::io

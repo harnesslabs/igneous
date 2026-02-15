@@ -60,10 +60,10 @@ static void print_usage() {
             << "  --no-ply\n";
 }
 
-static bool parse_args(int argc, char **argv, Config &cfg) {
+static bool parse_args(int argc, char** argv, Config& cfg) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
-    auto require_value = [&](const char *name) -> const char * {
+    auto require_value = [&](const char* name) -> const char* {
       if (i + 1 >= argc) {
         std::cerr << "Missing value for " << name << "\n";
         std::exit(1);
@@ -145,7 +145,7 @@ static bool parse_args(int argc, char **argv, Config &cfg) {
   return true;
 }
 
-static void generate_torus(DiffusionMesh &mesh, size_t n_points, float major_radius,
+static void generate_torus(DiffusionMesh& mesh, size_t n_points, float major_radius,
                            float minor_radius, uint32_t seed) {
   mesh.clear();
   mesh.reserve(n_points);
@@ -163,7 +163,7 @@ static void generate_torus(DiffusionMesh &mesh, size_t n_points, float major_rad
   }
 }
 
-static bool load_point_cloud_csv(const std::string &filename, DiffusionMesh &mesh) {
+static bool load_point_cloud_csv(const std::string& filename, DiffusionMesh& mesh) {
   std::ifstream file(filename);
   if (!file.is_open()) {
     std::cerr << "Failed to open input CSV: " << filename << "\n";
@@ -177,7 +177,7 @@ static bool load_point_cloud_csv(const std::string &filename, DiffusionMesh &mes
       continue;
     }
 
-    for (char &c : line) {
+    for (char& c : line) {
       if (c == ',') {
         c = ' ';
       }
@@ -196,7 +196,7 @@ static bool load_point_cloud_csv(const std::string &filename, DiffusionMesh &mes
   return mesh.num_points() > 0;
 }
 
-static void write_points_csv(const std::string &filename, const DiffusionMesh &mesh) {
+static void write_points_csv(const std::string& filename, const DiffusionMesh& mesh) {
   std::ofstream file(filename);
   file << "x,y,z\n";
   const size_t n = mesh.num_points();
@@ -206,8 +206,7 @@ static void write_points_csv(const std::string &filename, const DiffusionMesh &m
   }
 }
 
-static void write_spectrum_csv(const std::string &filename,
-                               const Eigen::VectorXf &evals) {
+static void write_spectrum_csv(const std::string& filename, const Eigen::VectorXf& evals) {
   std::ofstream file(filename);
   file << "mode,lambda\n";
   for (int i = 0; i < evals.size(); ++i) {
@@ -215,8 +214,7 @@ static void write_spectrum_csv(const std::string &filename,
   }
 }
 
-static void write_harmonic_coeffs_csv(const std::string &filename,
-                                      const Eigen::MatrixXf &evecs,
+static void write_harmonic_coeffs_csv(const std::string& filename, const Eigen::MatrixXf& evecs,
                                       int n_forms) {
   std::ofstream file(filename);
   file << "coeff_index";
@@ -234,12 +232,11 @@ static void write_harmonic_coeffs_csv(const std::string &filename,
   }
 }
 
-static std::vector<core::Vec3>
-reconstruct_harmonic_ambient(const DiffusionMesh &mesh,
-                             const Eigen::VectorXf &coeffs) {
+static std::vector<core::Vec3> reconstruct_harmonic_ambient(const DiffusionMesh& mesh,
+                                                            const Eigen::VectorXf& coeffs) {
   const size_t n_verts = mesh.num_points();
   const int n_basis = mesh.structure.eigen_basis.cols();
-  const auto &U = mesh.structure.eigen_basis;
+  const auto& U = mesh.structure.eigen_basis;
 
   std::array<Eigen::VectorXf, 3> data_coords;
   std::array<Eigen::VectorXf, 3> immersion_coords;
@@ -251,7 +248,7 @@ reconstruct_harmonic_ambient(const DiffusionMesh &mesh,
     for (int b = 0; b < 3; ++b) {
       gamma_data_imm[a][b].resize(static_cast<int>(n_verts));
       ops::diffusion::carre_du_champ(mesh, data_coords[a], immersion_coords[b], 0.0f,
-                          gamma_data_imm[a][b]);
+                                     gamma_data_imm[a][b]);
     }
   }
 
@@ -266,14 +263,11 @@ reconstruct_harmonic_ambient(const DiffusionMesh &mesh,
   std::vector<core::Vec3> field(n_verts, {0.0f, 0.0f, 0.0f});
   for (size_t i = 0; i < n_verts; ++i) {
     const int idx = static_cast<int>(i);
-    const float vx = gamma_data_imm[0][0][idx] * q(idx, 0) +
-                     gamma_data_imm[0][1][idx] * q(idx, 1) +
+    const float vx = gamma_data_imm[0][0][idx] * q(idx, 0) + gamma_data_imm[0][1][idx] * q(idx, 1) +
                      gamma_data_imm[0][2][idx] * q(idx, 2);
-    const float vy = gamma_data_imm[1][0][idx] * q(idx, 0) +
-                     gamma_data_imm[1][1][idx] * q(idx, 1) +
+    const float vy = gamma_data_imm[1][0][idx] * q(idx, 0) + gamma_data_imm[1][1][idx] * q(idx, 1) +
                      gamma_data_imm[1][2][idx] * q(idx, 2);
-    const float vz = gamma_data_imm[2][0][idx] * q(idx, 0) +
-                     gamma_data_imm[2][1][idx] * q(idx, 1) +
+    const float vz = gamma_data_imm[2][0][idx] * q(idx, 0) + gamma_data_imm[2][1][idx] * q(idx, 1) +
                      gamma_data_imm[2][2][idx] * q(idx, 2);
     field[i] = {vx, vy, vz};
   }
@@ -281,8 +275,7 @@ reconstruct_harmonic_ambient(const DiffusionMesh &mesh,
   return field;
 }
 
-static double orientation_score(const DiffusionMesh &mesh,
-                                const std::vector<core::Vec3> &field) {
+static double orientation_score(const DiffusionMesh& mesh, const std::vector<core::Vec3>& field) {
   const size_t n_verts = mesh.num_points();
   if (n_verts == 0) {
     return 0.0;
@@ -300,16 +293,15 @@ static double orientation_score(const DiffusionMesh &mesh,
   return accum / static_cast<double>(n_verts);
 }
 
-static bool canonicalize_form_sign(const DiffusionMesh &mesh,
-                                   Eigen::Ref<Eigen::VectorXf> coeffs,
-                                   std::vector<core::Vec3> &ambient_field) {
+static bool canonicalize_form_sign(const DiffusionMesh& mesh, Eigen::Ref<Eigen::VectorXf> coeffs,
+                                   std::vector<core::Vec3>& ambient_field) {
   ambient_field = reconstruct_harmonic_ambient(mesh, coeffs);
   if (orientation_score(mesh, ambient_field) >= 0.0) {
     return false;
   }
 
   coeffs *= -1.0f;
-  for (auto &v : ambient_field) {
+  for (auto& v : ambient_field) {
     v.x *= -1.0f;
     v.y *= -1.0f;
     v.z *= -1.0f;
@@ -317,9 +309,8 @@ static bool canonicalize_form_sign(const DiffusionMesh &mesh,
   return true;
 }
 
-static void export_vector_field(const std::string &filename,
-                                const DiffusionMesh &mesh,
-                                const std::vector<core::Vec3> &vectors) {
+static void export_vector_field(const std::string& filename, const DiffusionMesh& mesh,
+                                const std::vector<core::Vec3>& vectors) {
   std::ofstream file(filename);
   const size_t n = mesh.num_points();
 
@@ -332,14 +323,12 @@ static void export_vector_field(const std::string &filename,
   for (size_t i = 0; i < n; ++i) {
     const auto p = mesh.get_vec3(i);
     const auto v = vectors[i];
-    file << p.x << " " << p.y << " " << p.z << " " << v.x << " " << v.y
-         << " " << v.z << "\n";
+    file << p.x << " " << p.y << " " << p.z << " " << v.x << " " << v.y << " " << v.z << "\n";
   }
 }
 
-static void write_harmonic_ambient_csv(const std::string &filename,
-                                       const DiffusionMesh &mesh,
-                                       const std::vector<std::vector<core::Vec3>> &fields) {
+static void write_harmonic_ambient_csv(const std::string& filename, const DiffusionMesh& mesh,
+                                       const std::vector<std::vector<core::Vec3>>& fields) {
   std::ofstream file(filename);
   file << "x,y,z";
   for (size_t form = 0; form < fields.size(); ++form) {
@@ -361,35 +350,30 @@ static void write_harmonic_ambient_csv(const std::string &filename,
   }
 }
 
-static void write_circular_csv(const std::string &filename,
-                               const DiffusionMesh &mesh,
-                               const Eigen::VectorXf &theta_0,
-                               const Eigen::VectorXf &theta_1) {
+static void write_circular_csv(const std::string& filename, const DiffusionMesh& mesh,
+                               const Eigen::VectorXf& theta_0, const Eigen::VectorXf& theta_1) {
   std::ofstream file(filename);
   file << "x,y,z,theta_0,theta_1\n";
   const size_t n = mesh.num_points();
   for (size_t i = 0; i < n; ++i) {
     const auto p = mesh.get_vec3(i);
     const int idx = static_cast<int>(i);
-    file << p.x << "," << p.y << "," << p.z << "," << theta_0[idx] << ","
-         << theta_1[idx] << "\n";
+    file << p.x << "," << p.y << "," << p.z << "," << theta_0[idx] << "," << theta_1[idx] << "\n";
   }
 }
 
-static void write_circular_modes_csv(const std::string &filename,
-                                     std::complex<float> eval_0,
-                                     std::complex<float> eval_1,
-                                     int mode_0, int mode_1,
+static void write_circular_modes_csv(const std::string& filename, std::complex<float> eval_0,
+                                     std::complex<float> eval_1, int mode_0, int mode_1,
                                      float circular_lambda) {
   std::ofstream file(filename);
   file << "name,mode,lambda,eigenvalue_real,eigenvalue_imag\n";
-  file << "theta_0," << mode_0 << "," << circular_lambda << "," << eval_0.real()
-       << "," << eval_0.imag() << "\n";
-  file << "theta_1," << mode_1 << "," << circular_lambda << "," << eval_1.real()
-       << "," << eval_1.imag() << "\n";
+  file << "theta_0," << mode_0 << "," << circular_lambda << "," << eval_0.real() << ","
+       << eval_0.imag() << "\n";
+  file << "theta_1," << mode_1 << "," << circular_lambda << "," << eval_1.real() << ","
+       << eval_1.imag() << "\n";
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   Config cfg;
   if (!parse_args(argc, argv, cfg)) {
     return 0;
@@ -409,14 +393,8 @@ int main(int argc, char **argv) {
     generate_torus(mesh, cfg.n_points, cfg.major_radius, cfg.minor_radius, cfg.seed);
   }
 
-  mesh.structure.build({mesh.x_span(),
-                       mesh.y_span(),
-                       mesh.z_span(),
-                       cfg.k_neighbors,
-                       cfg.knn_bandwidth,
-                       cfg.bandwidth_variability,
-                       cfg.c,
-                       true});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), cfg.k_neighbors,
+                        cfg.knn_bandwidth, cfg.bandwidth_variability, cfg.c, true});
 
   ops::diffusion::compute_eigenbasis(mesh, cfg.n_basis);
 
@@ -446,11 +424,9 @@ int main(int argc, char **argv) {
   std::complex<float> selected_eval_0(0.0f, 0.0f);
   std::complex<float> selected_eval_1(0.0f, 0.0f);
   const auto theta_0 = ops::diffusion::compute_circular_coordinates(
-      mesh, evecs.col(0), 0.0f, cfg.circular_lambda, cfg.circular_mode_0,
-      &selected_eval_0);
+      mesh, evecs.col(0), 0.0f, cfg.circular_lambda, cfg.circular_mode_0, &selected_eval_0);
   const auto theta_1 = ops::diffusion::compute_circular_coordinates(
-      mesh, evecs.col(1), 0.0f, cfg.circular_lambda, cfg.circular_mode_1,
-      &selected_eval_1);
+      mesh, evecs.col(1), 0.0f, cfg.circular_lambda, cfg.circular_mode_1, &selected_eval_1);
 
   std::cout << "HODGE SPECTRUM (first 12 modes)\n";
   for (int i = 0; i < 12 && i < evals.size(); ++i) {
@@ -460,16 +436,12 @@ int main(int argc, char **argv) {
   write_points_csv(cfg.output_dir + "/points.csv", mesh);
   write_spectrum_csv(cfg.output_dir + "/hodge_spectrum.csv", evals);
 
-  write_harmonic_coeffs_csv(cfg.output_dir + "/harmonic_coeffs.csv", evecs,
-                            export_forms);
-  write_harmonic_ambient_csv(cfg.output_dir + "/harmonic_ambient.csv", mesh,
-                             harmonic_fields);
+  write_harmonic_coeffs_csv(cfg.output_dir + "/harmonic_coeffs.csv", evecs, export_forms);
+  write_harmonic_ambient_csv(cfg.output_dir + "/harmonic_ambient.csv", mesh, harmonic_fields);
 
-  write_circular_csv(cfg.output_dir + "/circular_coordinates.csv", mesh, theta_0,
-                     theta_1);
-  write_circular_modes_csv(cfg.output_dir + "/circular_modes.csv", selected_eval_0,
-                           selected_eval_1, cfg.circular_mode_0,
-                           cfg.circular_mode_1, cfg.circular_lambda);
+  write_circular_csv(cfg.output_dir + "/circular_coordinates.csv", mesh, theta_0, theta_1);
+  write_circular_modes_csv(cfg.output_dir + "/circular_modes.csv", selected_eval_0, selected_eval_1,
+                           cfg.circular_mode_0, cfg.circular_mode_1, cfg.circular_lambda);
 
   if (export_ply) {
     std::vector<float> field_0(static_cast<size_t>(theta_0.size()));
@@ -479,14 +451,11 @@ int main(int argc, char **argv) {
       field_1[static_cast<size_t>(i)] = theta_1[i];
     }
 
-    io::export_ply_solid(mesh, field_0,
-                         cfg.output_dir + "/torus_angle_0.ply", 0.01);
-    io::export_ply_solid(mesh, field_1,
-                         cfg.output_dir + "/torus_angle_1.ply", 0.01);
+    io::export_ply_solid(mesh, field_0, cfg.output_dir + "/torus_angle_0.ply", 0.01);
+    io::export_ply_solid(mesh, field_1, cfg.output_dir + "/torus_angle_1.ply", 0.01);
 
     for (int i = 0; i < export_forms; ++i) {
-      const std::string fname =
-          std::format("{}/harmonic_form_{}.ply", cfg.output_dir, i);
+      const std::string fname = std::format("{}/harmonic_form_{}.ply", cfg.output_dir, i);
       export_vector_field(fname, mesh, harmonic_fields[static_cast<size_t>(i)]);
     }
   }

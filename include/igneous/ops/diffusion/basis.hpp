@@ -65,9 +65,8 @@ inline int binomial_coeff(int n, int k) {
  * \param current Current partial combination.
  * \param out Destination list of combinations.
  */
-inline void combinations_recursive(int n, int k, int start,
-                                   std::vector<int> &current,
-                                   std::vector<std::vector<int>> &out) {
+inline void combinations_recursive(int n, int k, int start, std::vector<int>& current,
+                                   std::vector<std::vector<int>>& out) {
   if (static_cast<int>(current.size()) == k) {
     out.push_back(current);
     return;
@@ -110,7 +109,7 @@ inline std::vector<std::vector<int>> get_wedge_basis_indices(int d, int k) {
  * \param d Ambient dimension.
  * \return Zero-based rank among all `k`-combinations.
  */
-inline int lex_rank_combination(const std::vector<int> &comb, int d) {
+inline int lex_rank_combination(const std::vector<int>& comb, int d) {
   const int k = static_cast<int>(comb.size());
   if (k == 0) {
     return 0;
@@ -149,7 +148,7 @@ inline Kp1ChildrenAndSignsData kp1_children_and_signs(int d, int k) {
 
   out.children.resize(out.idx_kp1.size(), std::vector<int>(static_cast<size_t>(k + 1), 0));
   for (size_t row = 0; row < out.idx_kp1.size(); ++row) {
-    const auto &parent = out.idx_kp1[row];
+    const auto& parent = out.idx_kp1[row];
     for (int r = 0; r < k + 1; ++r) {
       std::vector<int> child;
       child.reserve(static_cast<size_t>(k));
@@ -172,7 +171,7 @@ inline Kp1ChildrenAndSignsData kp1_children_and_signs(int d, int k) {
  * \param subset Sorted subset indices.
  * \return Sorted complement indices.
  */
-inline std::vector<int> complement_indices(int total, const std::vector<int> &subset) {
+inline std::vector<int> complement_indices(int total, const std::vector<int>& subset) {
   std::vector<int> out;
   out.reserve(static_cast<size_t>(total - static_cast<int>(subset.size())));
   int cursor = 0;
@@ -215,9 +214,9 @@ inline WedgeProductIndexData get_wedge_product_indices(int d, int k1, int k2) {
   out.signs.reserve(n_terms);
 
   for (int target_idx = 0; target_idx < out.n_targets; ++target_idx) {
-    const auto &target = targets[static_cast<size_t>(target_idx)];
+    const auto& target = targets[static_cast<size_t>(target_idx)];
     for (int split = 0; split < out.n_splits; ++split) {
-      const auto &local_left = local_I[static_cast<size_t>(split)];
+      const auto& local_left = local_I[static_cast<size_t>(split)];
       const auto local_right = complement_indices(k_total, local_left);
 
       std::vector<int> left;
@@ -233,9 +232,7 @@ inline WedgeProductIndexData get_wedge_product_indices(int d, int k1, int k2) {
       }
 
       const int parity =
-          (std::accumulate(local_left.begin(), local_left.end(), 0) -
-           (k1 * (k1 - 1) / 2)) &
-          1;
+          (std::accumulate(local_left.begin(), local_left.end(), 0) - (k1 * (k1 - 1) / 2)) & 1;
       const int sign = (parity == 0) ? 1 : -1;
 
       out.target_indices.push_back(target_idx);

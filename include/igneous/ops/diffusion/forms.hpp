@@ -49,7 +49,9 @@ struct CompoundDeterminantData {
  * \brief Ambient coordinate dimension used by current diffusion form operators.
  * \return Ambient dimension (`3`).
  */
-inline int ambient_dim_3d() { return 3; }
+inline int ambient_dim_3d() {
+  return 3;
+}
 
 /**
  * \brief Determinant of a tiny dense matrix packed row-major in `data`.
@@ -57,7 +59,7 @@ inline int ambient_dim_3d() { return 3; }
  * \param k Matrix dimension.
  * \return Determinant value.
  */
-inline float determinant_small(const float *data, int k) {
+inline float determinant_small(const float* data, int k) {
   if (k == 0) {
     return 1.0f;
   }
@@ -88,9 +90,9 @@ inline float determinant_small(const float *data, int k) {
  * \param cols Column-index subset.
  * \return Vector of determinant values per point.
  */
-inline Eigen::VectorXf build_minor_det_vector(
-    const std::array<std::array<Eigen::VectorXf, 3>, 3> &gamma_coords,
-    const std::vector<int> &rows, const std::vector<int> &cols) {
+inline Eigen::VectorXf
+build_minor_det_vector(const std::array<std::array<Eigen::VectorXf, 3>, 3>& gamma_coords,
+                       const std::vector<int>& rows, const std::vector<int>& cols) {
   const int n = gamma_coords[0][0].size();
   const int k = static_cast<int>(rows.size());
   Eigen::VectorXf out(n);
@@ -114,7 +116,7 @@ inline Eigen::VectorXf build_minor_det_vector(
  * \param workspace Scratch workspace to populate.
  */
 template <typename MeshT>
-void ensure_gamma_coords(const MeshT &mesh, DiffusionFormWorkspace<MeshT> &workspace) {
+void ensure_gamma_coords(const MeshT& mesh, DiffusionFormWorkspace<MeshT>& workspace) {
   if (workspace.gamma_coords_ready) {
     return;
   }
@@ -141,9 +143,9 @@ void ensure_gamma_coords(const MeshT &mesh, DiffusionFormWorkspace<MeshT> &works
  * \param workspace Scratch workspace to populate.
  */
 template <typename MeshT>
-void ensure_gamma_mixed(const MeshT &mesh, int n_coefficients,
-                        DiffusionFormWorkspace<MeshT> &workspace) {
-  const auto &U = mesh.structure.eigen_basis;
+void ensure_gamma_mixed(const MeshT& mesh, int n_coefficients,
+                        DiffusionFormWorkspace<MeshT>& workspace) {
+  const auto& U = mesh.structure.eigen_basis;
   const int n = static_cast<int>(mesh.num_points());
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
 
@@ -173,8 +175,8 @@ void ensure_gamma_mixed(const MeshT &mesh, int n_coefficients,
  * \return Precomputed compound determinant data.
  */
 template <typename MeshT>
-CompoundDeterminantData compute_compound_determinants(
-    const MeshT &mesh, int k, DiffusionFormWorkspace<MeshT> &workspace) {
+CompoundDeterminantData compute_compound_determinants(const MeshT& mesh, int k,
+                                                      DiffusionFormWorkspace<MeshT>& workspace) {
   ensure_gamma_coords(mesh, workspace);
 
   CompoundDeterminantData out;
@@ -190,8 +192,7 @@ CompoundDeterminantData compute_compound_determinants(
   for (int a = 0; a < out.n_components; ++a) {
     for (int b = 0; b < out.n_components; ++b) {
       out.values[static_cast<size_t>(a * out.n_components + b)] =
-          build_minor_det_vector(workspace.gamma_coords,
-                                 out.indices[static_cast<size_t>(a)],
+          build_minor_det_vector(workspace.gamma_coords, out.indices[static_cast<size_t>(a)],
                                  out.indices[static_cast<size_t>(b)]);
     }
   }
@@ -208,11 +209,10 @@ CompoundDeterminantData compute_compound_determinants(
  * \return Symmetric Gram matrix for k-forms.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
-                                          int n_coefficients,
-                                          DiffusionFormWorkspace<MeshT> &workspace) {
-  const auto &U = mesh.structure.eigen_basis;
-  const auto &mu = mesh.structure.mu;
+Eigen::MatrixXf compute_kform_gram_matrix(const MeshT& mesh, int k, int n_coefficients,
+                                          DiffusionFormWorkspace<MeshT>& workspace) {
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
   const auto compounds = compute_compound_determinants(mesh, k, workspace);
   const int Ck = std::max(1, compounds.n_components);
@@ -224,8 +224,7 @@ Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
   if (k == 0) {
     for (int i = 0; i < n1; ++i) {
       for (int l = i; l < n1; ++l) {
-        const float val =
-            (U.col(i).array() * U.col(l).array() * mu.array()).sum();
+        const float val = (U.col(i).array() * U.col(l).array() * mu.array()).sum();
         G(i, l) = val;
         if (i != l) {
           G(l, i) = val;
@@ -240,8 +239,7 @@ Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
       weights = U.col(i).array() * U.col(l).array() * mu.array();
       for (int a = 0; a < Ck; ++a) {
         for (int b = 0; b < Ck; ++b) {
-          const auto &compound =
-              compounds.values[static_cast<size_t>(a * Ck + b)];
+          const auto& compound = compounds.values[static_cast<size_t>(a * Ck + b)];
           const float val = (weights * compound.array()).sum();
           const int row = i * Ck + a;
           const int col = l * Ck + b;
@@ -265,8 +263,7 @@ Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
  * \return Symmetric Gram matrix for k-forms.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
-                                          int n_coefficients) {
+Eigen::MatrixXf compute_kform_gram_matrix(const MeshT& mesh, int k, int n_coefficients) {
   DiffusionFormWorkspace<MeshT> workspace;
   return compute_kform_gram_matrix(mesh, k, n_coefficients, workspace);
 }
@@ -280,15 +277,14 @@ Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
  * \return Weak derivative matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_weak_exterior_derivative(
-    const MeshT &mesh, int k, int n_coefficients,
-    DiffusionFormWorkspace<MeshT> &workspace) {
+Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, int k, int n_coefficients,
+                                                 DiffusionFormWorkspace<MeshT>& workspace) {
   if (k < 0 || k > 2) {
     return Eigen::MatrixXf();
   }
 
-  const auto &U = mesh.structure.eigen_basis;
-  const auto &mu = mesh.structure.mu;
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
   ensure_gamma_mixed(mesh, n1, workspace);
 
@@ -297,8 +293,7 @@ Eigen::MatrixXf compute_weak_exterior_derivative(
     Eigen::MatrixXf D = Eigen::MatrixXf::Zero(n1 * d, n1);
     Eigen::MatrixXf weighted_u = U.leftCols(n1).array().colwise() * mu.array();
     for (int a = 0; a < d; ++a) {
-      const Eigen::MatrixXf coupling =
-          weighted_u.transpose() * workspace.gamma_mixed[a];
+      const Eigen::MatrixXf coupling = weighted_u.transpose() * workspace.gamma_mixed[a];
       for (int i = 0; i < n1; ++i) {
         D.row(i * d + a) = coupling.row(i);
       }
@@ -322,15 +317,11 @@ Eigen::MatrixXf compute_weak_exterior_derivative(
           for (int p = 0; p < n; ++p) {
             float laplace_sum = 0.0f;
             for (int r = 0; r < k + 1; ++r) {
-              const int coord_dim =
-                  kp1.idx_kp1[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
-              const int child_idx =
-                  kp1.children[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
-              const auto &minor_det =
-                  compounds.values[static_cast<size_t>(child_idx * Ck + J)];
-              laplace_sum +=
-                  static_cast<float>(kp1.signs[static_cast<size_t>(r)]) *
-                  workspace.gamma_mixed[coord_dim](p, i) * minor_det[p];
+              const int coord_dim = kp1.idx_kp1[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
+              const int child_idx = kp1.children[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
+              const auto& minor_det = compounds.values[static_cast<size_t>(child_idx * Ck + J)];
+              laplace_sum += static_cast<float>(kp1.signs[static_cast<size_t>(r)]) *
+                             workspace.gamma_mixed[coord_dim](p, i) * minor_det[p];
             }
             accum += U(p, I) * laplace_sum * mu[p];
           }
@@ -351,8 +342,7 @@ Eigen::MatrixXf compute_weak_exterior_derivative(
  * \return Weak derivative matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh, int k,
-                                                 int n_coefficients) {
+Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, int k, int n_coefficients) {
   DiffusionFormWorkspace<MeshT> workspace;
   return compute_weak_exterior_derivative(mesh, k, n_coefficients, workspace);
 }
@@ -363,8 +353,7 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh, int k,
  * \param rcond Relative conditioning threshold.
  * \return Pseudo-inverse matrix.
  */
-inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf &matrix,
-                                                float rcond);
+inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf& matrix, float rcond);
 
 /**
  * \brief Assemble codifferential matrix `delta_k` from `d_{k-1}` and mass.
@@ -375,18 +364,15 @@ inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf &matrix,
  * \return Codifferential matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_codifferential_matrix(
-    const MeshT &mesh, int k, int n_coefficients,
-    DiffusionFormWorkspace<MeshT> &workspace) {
+Eigen::MatrixXf compute_codifferential_matrix(const MeshT& mesh, int k, int n_coefficients,
+                                              DiffusionFormWorkspace<MeshT>& workspace) {
   if (k <= 0) {
     return Eigen::MatrixXf();
   }
   const Eigen::MatrixXf D_prev =
       compute_weak_exterior_derivative(mesh, k - 1, n_coefficients, workspace);
-  const Eigen::MatrixXf G_prev =
-      compute_kform_gram_matrix(mesh, k - 1, n_coefficients, workspace);
-  const Eigen::MatrixXf G_prev_inv =
-      pseudo_inverse_symmetric(G_prev, 1e-5f);
+  const Eigen::MatrixXf G_prev = compute_kform_gram_matrix(mesh, k - 1, n_coefficients, workspace);
+  const Eigen::MatrixXf G_prev_inv = pseudo_inverse_symmetric(G_prev, 1e-5f);
   return G_prev_inv * D_prev.transpose();
 }
 
@@ -398,8 +384,7 @@ Eigen::MatrixXf compute_codifferential_matrix(
  * \return Codifferential matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_codifferential_matrix(const MeshT &mesh, int k,
-                                              int n_coefficients) {
+Eigen::MatrixXf compute_codifferential_matrix(const MeshT& mesh, int k, int n_coefficients) {
   DiffusionFormWorkspace<MeshT> workspace;
   return compute_codifferential_matrix(mesh, k, n_coefficients, workspace);
 }
@@ -410,8 +395,7 @@ Eigen::MatrixXf compute_codifferential_matrix(const MeshT &mesh, int k,
  * \param b Right-hand side vector.
  * \return Solution vector.
  */
-inline Eigen::Vector2f solve_stable_2x2(const Eigen::Matrix2f &A,
-                                        const Eigen::Vector2f &b) {
+inline Eigen::Vector2f solve_stable_2x2(const Eigen::Matrix2f& A, const Eigen::Vector2f& b) {
   const float det = A(0, 0) * A(1, 1) - A(0, 1) * A(1, 0);
   if (std::abs(det) > 1e-8f) {
     const float inv_det = 1.0f / det;
@@ -438,7 +422,7 @@ inline Eigen::Vector2f solve_stable_2x2(const Eigen::Matrix2f &A,
  * \param rcond Relative threshold for inverting eigenvalues.
  * \return Pseudo-inverse matrix.
  */
-inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf &matrix,
+inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf& matrix,
                                                 float rcond = 1e-5f) {
   if (matrix.rows() == 0 || matrix.cols() == 0) {
     return Eigen::MatrixXf(matrix.cols(), matrix.rows());
@@ -449,8 +433,8 @@ inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf &matrix,
     return Eigen::MatrixXf::Zero(matrix.cols(), matrix.rows());
   }
 
-  const auto &evals = solver.eigenvalues();
-  const auto &evecs = solver.eigenvectors();
+  const auto& evals = solver.eigenvalues();
+  const auto& evecs = solver.eigenvectors();
   Eigen::VectorXf inv = Eigen::VectorXf::Zero(evals.size());
 
   const float max_eval = evals.size() > 0 ? evals.cwiseAbs().maxCoeff() : 0.0f;
@@ -473,15 +457,14 @@ inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf &matrix,
  * \return Up-Laplacian matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT &mesh, int k,
-                                            int n_coefficients,
-                                            DiffusionFormWorkspace<MeshT> &workspace) {
+Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT& mesh, int k, int n_coefficients,
+                                            DiffusionFormWorkspace<MeshT>& workspace) {
   if (k < 0 || k > 2) {
     return Eigen::MatrixXf();
   }
 
-  const auto &U = mesh.structure.eigen_basis;
-  const auto &mu = mesh.structure.mu;
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
   const int n = static_cast<int>(mesh.num_points());
   ensure_gamma_coords(mesh, workspace);
@@ -516,15 +499,14 @@ Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT &mesh, int k,
         for (int K = 0; K < Ck; ++K) {
           float val = 0.0f;
           if (k == 1) {
-            const auto &gJK = workspace.gamma_coords[J][K];
+            const auto& gJK = workspace.gamma_coords[J][K];
             const Eigen::ArrayXf term =
                 (workspace.gamma_tmp.array() * gJK.array()) -
-                (workspace.gamma_mixed[K].col(i).array() *
-                 workspace.gamma_mixed[J].col(l).array());
+                (workspace.gamma_mixed[K].col(i).array() * workspace.gamma_mixed[J].col(l).array());
             val = (term * mu.array()).sum();
           } else {
-            const auto &row_combo = compounds.indices[static_cast<size_t>(J)];
-            const auto &col_combo = compounds.indices[static_cast<size_t>(K)];
+            const auto& row_combo = compounds.indices[static_cast<size_t>(J)];
+            const auto& col_combo = compounds.indices[static_cast<size_t>(K)];
             for (int p = 0; p < n; ++p) {
               Eigen::Matrix2f Dm;
               Dm(0, 0) = workspace.gamma_coords[row_combo[0]][col_combo[0]][p];
@@ -570,8 +552,7 @@ Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT &mesh, int k,
  * \return Up-Laplacian matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT &mesh, int k,
-                                            int n_coefficients) {
+Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT& mesh, int k, int n_coefficients) {
   DiffusionFormWorkspace<MeshT> workspace;
   return compute_up_laplacian_matrix(mesh, k, n_coefficients, workspace);
 }
@@ -585,21 +566,19 @@ Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT &mesh, int k,
  * \return Down-Laplacian matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_down_laplacian_matrix(
-    const MeshT &mesh, int k, int n_coefficients,
-    DiffusionFormWorkspace<MeshT> &workspace) {
+Eigen::MatrixXf compute_down_laplacian_matrix(const MeshT& mesh, int k, int n_coefficients,
+                                              DiffusionFormWorkspace<MeshT>& workspace) {
   if (k <= 0) {
     const int Ck = std::max(1, binomial_coeff(ambient_dim_3d(), std::max(0, k)));
-    const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(mesh.structure.eigen_basis.cols())));
+    const int n1 =
+        std::max(1, std::min(n_coefficients, static_cast<int>(mesh.structure.eigen_basis.cols())));
     return Eigen::MatrixXf::Zero(n1 * Ck, n1 * Ck);
   }
 
   const Eigen::MatrixXf D_prev =
       compute_weak_exterior_derivative(mesh, k - 1, n_coefficients, workspace);
-  const Eigen::MatrixXf G_prev =
-      compute_kform_gram_matrix(mesh, k - 1, n_coefficients, workspace);
-  const Eigen::MatrixXf G_prev_inv =
-      pseudo_inverse_symmetric(G_prev, 1e-5f);
+  const Eigen::MatrixXf G_prev = compute_kform_gram_matrix(mesh, k - 1, n_coefficients, workspace);
+  const Eigen::MatrixXf G_prev_inv = pseudo_inverse_symmetric(G_prev, 1e-5f);
   return D_prev * G_prev_inv * D_prev.transpose();
 }
 
@@ -611,8 +590,7 @@ Eigen::MatrixXf compute_down_laplacian_matrix(
  * \return Down-Laplacian matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_down_laplacian_matrix(const MeshT &mesh, int k,
-                                              int n_coefficients) {
+Eigen::MatrixXf compute_down_laplacian_matrix(const MeshT& mesh, int k, int n_coefficients) {
   DiffusionFormWorkspace<MeshT> workspace;
   return compute_down_laplacian_matrix(mesh, k, n_coefficients, workspace);
 }
@@ -623,9 +601,8 @@ Eigen::MatrixXf compute_down_laplacian_matrix(const MeshT &mesh, int k,
  * \param down Down-Laplacian contribution.
  * \return Combined Hodge Laplacian.
  */
-inline Eigen::MatrixXf
-assemble_hodge_laplacian_matrix(const Eigen::MatrixXf &up,
-                                const Eigen::MatrixXf &down) {
+inline Eigen::MatrixXf assemble_hodge_laplacian_matrix(const Eigen::MatrixXf& up,
+                                                       const Eigen::MatrixXf& down) {
   return up + down;
 }
 
@@ -637,16 +614,15 @@ assemble_hodge_laplacian_matrix(const Eigen::MatrixXf &up,
  * \return Pair `(eigenvalues, eigenvectors)`.
  */
 inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
-compute_form_spectrum(const Eigen::MatrixXf &laplacian,
-                      const Eigen::MatrixXf &mass_matrix,
+compute_form_spectrum(const Eigen::MatrixXf& laplacian, const Eigen::MatrixXf& mass_matrix,
                       float rcond = 1e-5f) {
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> mass_solver(mass_matrix);
   if (mass_solver.info() != Eigen::Success) {
     return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
   }
 
-  const auto &mass_evals = mass_solver.eigenvalues();
-  const auto &mass_evecs = mass_solver.eigenvectors();
+  const auto& mass_evals = mass_solver.eigenvalues();
+  const auto& mass_evecs = mass_solver.eigenvectors();
   std::vector<int> keep_indices;
   keep_indices.reserve(static_cast<size_t>(mass_evals.size()));
   for (int i = 0; i < mass_evals.size(); ++i) {
@@ -683,9 +659,8 @@ compute_form_spectrum(const Eigen::MatrixXf &laplacian,
  * \param max_modes Maximum number of modes to return.
  * \return Harmonic mode indices.
  */
-inline std::vector<int> extract_harmonic_mode_indices(const Eigen::VectorXf &evals,
-                                                      float tolerance = 1e-3f,
-                                                      int max_modes = 3) {
+inline std::vector<int> extract_harmonic_mode_indices(const Eigen::VectorXf& evals,
+                                                      float tolerance = 1e-3f, int max_modes = 3) {
   std::vector<int> out;
   for (int i = 0; i < evals.size(); ++i) {
     if (std::abs(evals[i]) <= tolerance) {
@@ -713,10 +688,9 @@ inline std::vector<int> extract_harmonic_mode_indices(const Eigen::VectorXf &eva
  * \return Pointwise matrix (`n_points x C(k)`).
  */
 template <typename MeshT>
-Eigen::MatrixXf coefficients_to_pointwise(const MeshT &mesh,
-                                          const Eigen::VectorXf &coeffs, int k,
+Eigen::MatrixXf coefficients_to_pointwise(const MeshT& mesh, const Eigen::VectorXf& coeffs, int k,
                                           int n_coefficients) {
-  const auto &U = mesh.structure.eigen_basis;
+  const auto& U = mesh.structure.eigen_basis;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
   const int Ck = std::max(1, binomial_coeff(ambient_dim_3d(), k));
   if (coeffs.size() != n1 * Ck) {
@@ -736,11 +710,11 @@ Eigen::MatrixXf coefficients_to_pointwise(const MeshT &mesh,
  * \return Flattened coefficient vector.
  */
 template <typename MeshT>
-Eigen::VectorXf project_pointwise_to_coefficients(const MeshT &mesh,
-                                                  const Eigen::MatrixXf &pointwise,
+Eigen::VectorXf project_pointwise_to_coefficients(const MeshT& mesh,
+                                                  const Eigen::MatrixXf& pointwise,
                                                   int n_coefficients) {
-  const auto &U = mesh.structure.eigen_basis;
-  const auto &mu = mesh.structure.mu;
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
 
   if (pointwise.rows() != U.rows()) {
@@ -748,14 +722,12 @@ Eigen::VectorXf project_pointwise_to_coefficients(const MeshT &mesh,
   }
 
   const Eigen::MatrixXf U1 = U.leftCols(n1);
-  const Eigen::MatrixXf gram =
-      U1.transpose() * (U1.array().colwise() * mu.array()).matrix();
+  const Eigen::MatrixXf gram = U1.transpose() * (U1.array().colwise() * mu.array()).matrix();
   Eigen::LDLT<Eigen::MatrixXf> solver(gram);
 
   Eigen::MatrixXf coeffs(pointwise.cols(), n1);
   for (int c = 0; c < pointwise.cols(); ++c) {
-    const Eigen::VectorXf rhs =
-        U1.transpose() * (pointwise.col(c).array() * mu.array()).matrix();
+    const Eigen::VectorXf rhs = U1.transpose() * (pointwise.col(c).array() * mu.array()).matrix();
     coeffs.row(c) = solver.solve(rhs).transpose();
   }
 
@@ -771,9 +743,8 @@ Eigen::VectorXf project_pointwise_to_coefficients(const MeshT &mesh,
  * \return Per-point dual vector field.
  */
 inline std::vector<core::Vec3>
-pointwise_2form_to_dual_vectors(const Eigen::MatrixXf &pointwise_2form) {
-  std::vector<core::Vec3> out(static_cast<size_t>(pointwise_2form.rows()),
-                              {0.0f, 0.0f, 0.0f});
+pointwise_2form_to_dual_vectors(const Eigen::MatrixXf& pointwise_2form) {
+  std::vector<core::Vec3> out(static_cast<size_t>(pointwise_2form.rows()), {0.0f, 0.0f, 0.0f});
   if (pointwise_2form.cols() < 3) {
     return out;
   }

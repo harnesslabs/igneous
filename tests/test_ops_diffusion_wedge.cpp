@@ -9,10 +9,8 @@
 #include <igneous/ops/diffusion/products.hpp>
 #include <igneous/ops/diffusion/spectral.hpp>
 
-static igneous::data::Space<igneous::data::DiffusionGeometry>
-make_cloud(size_t n_points) {
-  using Mesh =
-      igneous::data::Space<igneous::data::DiffusionGeometry>;
+static igneous::data::Space<igneous::data::DiffusionGeometry> make_cloud(size_t n_points) {
+  using Mesh = igneous::data::Space<igneous::data::DiffusionGeometry>;
   Mesh mesh;
   mesh.reserve(n_points);
 
@@ -21,12 +19,10 @@ make_cloud(size_t n_points) {
     const float a = t * 6.283185f;
     const float b = (t * 7.0f) * 6.283185f;
     mesh.push_point({(2.0f + 0.7f * std::cos(b)) * std::cos(a),
-                              (2.0f + 0.7f * std::cos(b)) * std::sin(a),
-                              0.7f * std::sin(b)});
+                     (2.0f + 0.7f * std::cos(b)) * std::sin(a), 0.7f * std::sin(b)});
   }
 
-  mesh.structure.build({mesh.x_span(), mesh.y_span(),
-                       mesh.z_span(), 24});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), 24});
   return mesh;
 }
 
@@ -47,11 +43,9 @@ TEST_CASE("Wedge product for 1-forms is anti-commutative") {
 
   igneous::ops::diffusion::DiffusionFormWorkspace<decltype(mesh)> ws;
   const Eigen::VectorXf ab =
-      igneous::ops::diffusion::compute_wedge_product_coeffs(mesh, alpha, 1, beta, 1,
-                                                 n_coeff, ws);
+      igneous::ops::diffusion::compute_wedge_product_coeffs(mesh, alpha, 1, beta, 1, n_coeff, ws);
   const Eigen::VectorXf ba =
-      igneous::ops::diffusion::compute_wedge_product_coeffs(mesh, beta, 1, alpha, 1,
-                                                 n_coeff, ws);
+      igneous::ops::diffusion::compute_wedge_product_coeffs(mesh, beta, 1, alpha, 1, n_coeff, ws);
 
   REQUIRE(ab.size() == n_coeff * 3);
   REQUIRE(ba.size() == n_coeff * 3);
@@ -80,8 +74,7 @@ TEST_CASE("Linearized wedge operator matches direct wedge product") {
   const Eigen::MatrixXf op =
       igneous::ops::diffusion::compute_wedge_operator_matrix(mesh, alpha, 1, 1, n_coeff, ws);
   const Eigen::VectorXf direct =
-      igneous::ops::diffusion::compute_wedge_product_coeffs(mesh, alpha, 1, beta, 1,
-                                                 n_coeff, ws);
+      igneous::ops::diffusion::compute_wedge_product_coeffs(mesh, alpha, 1, beta, 1, n_coeff, ws);
 
   REQUIRE(op.cols() == beta.size());
   REQUIRE(op.rows() == direct.size());

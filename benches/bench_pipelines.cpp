@@ -24,14 +24,16 @@ using DiffusionMesh = igneous::data::Space<igneous::data::DiffusionGeometry>;
 
 namespace {
 struct BenchEnvSetup {
-  BenchEnvSetup() { setenv("IGNEOUS_BENCH_MODE", "1", 1); }
+  BenchEnvSetup() {
+    setenv("IGNEOUS_BENCH_MODE", "1", 1);
+  }
 } kBenchEnvSetup;
 
 std::filesystem::path resolve_bunny_path() {
-  static const std::array<const char *, 4> kCandidates = {
-      "assets/bunny.obj", "../assets/bunny.obj", "../../assets/bunny.obj",
-      "../../../assets/bunny.obj"};
-  for (const char *candidate : kCandidates) {
+  static const std::array<const char*, 4> kCandidates = {"assets/bunny.obj", "../assets/bunny.obj",
+                                                         "../../assets/bunny.obj",
+                                                         "../../../assets/bunny.obj"};
+  for (const char* candidate : kCandidates) {
     const std::filesystem::path path(candidate);
     if (std::filesystem::exists(path)) {
       return path;
@@ -52,7 +54,7 @@ DiffusionMesh make_bunny_geometry() {
   return mesh;
 }
 
-void generate_torus(DiffusionMesh &mesh, size_t n_points, float R, float r) {
+void generate_torus(DiffusionMesh& mesh, size_t n_points, float R, float r) {
   mesh.clear();
   mesh.reserve(n_points);
 
@@ -70,7 +72,7 @@ void generate_torus(DiffusionMesh &mesh, size_t n_points, float R, float r) {
   }
 }
 
-int compute_max_y_vertex(const DiffusionMesh &mesh) {
+int compute_max_y_vertex(const DiffusionMesh& mesh) {
   float max_y = -std::numeric_limits<float>::infinity();
   int max_y_idx = 0;
   for (size_t i = 0; i < mesh.num_points(); ++i) {
@@ -83,13 +85,11 @@ int compute_max_y_vertex(const DiffusionMesh &mesh) {
   return max_y_idx;
 }
 
-void build_diffusion_geometry(DiffusionMesh &mesh, float /*bandwidth*/,
-                              int k_neighbors) {
-  mesh.structure.build({mesh.x_span(), mesh.y_span(),
-                       mesh.z_span(), k_neighbors});
+void build_diffusion_geometry(DiffusionMesh& mesh, float /*bandwidth*/, int k_neighbors) {
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), k_neighbors});
 }
 
-void bench_pipeline_diffusion_main(benchmark::State &state) {
+void bench_pipeline_diffusion_main(benchmark::State& state) {
   static DiffusionMesh base_mesh = make_bunny_geometry();
   if (!base_mesh.is_valid()) {
     state.SkipWithError("Failed to load assets/bunny.obj");
@@ -117,7 +117,7 @@ void bench_pipeline_diffusion_main(benchmark::State &state) {
   }
 }
 
-void bench_pipeline_spectral_main(benchmark::State &state) {
+void bench_pipeline_spectral_main(benchmark::State& state) {
   static DiffusionMesh base_mesh = make_bunny_geometry();
   if (!base_mesh.is_valid()) {
     state.SkipWithError("Failed to load assets/bunny.obj");
@@ -141,7 +141,7 @@ void bench_pipeline_spectral_main(benchmark::State &state) {
   }
 }
 
-void bench_pipeline_hodge_main(benchmark::State &state) {
+void bench_pipeline_hodge_main(benchmark::State& state) {
   constexpr float kBandwidth = 0.05f;
   constexpr int kNeighbors = 32;
   constexpr int kBasis = 64;
@@ -176,7 +176,7 @@ void bench_pipeline_hodge_main(benchmark::State &state) {
   }
 }
 
-void bench_hodge_phase_structure_build(benchmark::State &state) {
+void bench_hodge_phase_structure_build(benchmark::State& state) {
   constexpr float kBandwidth = 0.05f;
   constexpr int kNeighbors = 32;
   DiffusionMesh mesh;
@@ -188,7 +188,7 @@ void bench_hodge_phase_structure_build(benchmark::State &state) {
   }
 }
 
-void bench_hodge_phase_eigenbasis(benchmark::State &state) {
+void bench_hodge_phase_eigenbasis(benchmark::State& state) {
   constexpr float kBandwidth = 0.05f;
   constexpr int kNeighbors = 32;
   constexpr int kBasis = 64;
@@ -202,7 +202,7 @@ void bench_hodge_phase_eigenbasis(benchmark::State &state) {
   }
 }
 
-void bench_hodge_phase_gram(benchmark::State &state) {
+void bench_hodge_phase_gram(benchmark::State& state) {
   constexpr float kBandwidth = 0.05f;
   constexpr int kNeighbors = 32;
   constexpr int kBasis = 64;
@@ -219,7 +219,7 @@ void bench_hodge_phase_gram(benchmark::State &state) {
   }
 }
 
-void bench_hodge_phase_weak_derivative(benchmark::State &state) {
+void bench_hodge_phase_weak_derivative(benchmark::State& state) {
   constexpr float kBandwidth = 0.05f;
   constexpr int kNeighbors = 32;
   constexpr int kBasis = 64;
@@ -236,7 +236,7 @@ void bench_hodge_phase_weak_derivative(benchmark::State &state) {
   }
 }
 
-void bench_hodge_phase_curl_energy(benchmark::State &state) {
+void bench_hodge_phase_curl_energy(benchmark::State& state) {
   constexpr float kBandwidth = 0.05f;
   constexpr int kNeighbors = 32;
   constexpr int kBasis = 64;
@@ -253,7 +253,7 @@ void bench_hodge_phase_curl_energy(benchmark::State &state) {
   }
 }
 
-void bench_hodge_phase_solve(benchmark::State &state) {
+void bench_hodge_phase_solve(benchmark::State& state) {
   constexpr float kBandwidth = 0.05f;
   constexpr int kNeighbors = 32;
   constexpr int kBasis = 64;
@@ -279,7 +279,7 @@ void bench_hodge_phase_solve(benchmark::State &state) {
   }
 }
 
-void bench_hodge_phase_circular(benchmark::State &state) {
+void bench_hodge_phase_circular(benchmark::State& state) {
   constexpr float kBandwidth = 0.05f;
   constexpr int kNeighbors = 32;
   constexpr int kBasis = 64;

@@ -26,8 +26,7 @@ TEST_CASE("OBJ import is load-only and structures build explicitly") {
   CHECK(surface_mesh.structure.num_faces() > 0);
   CHECK(surface_mesh.structure.vertex_face_offsets.empty());
   surface_mesh.structure.build({surface_mesh.num_points(), true});
-  CHECK(surface_mesh.structure.vertex_face_offsets.size() ==
-        surface_mesh.num_points() + 1);
+  CHECK(surface_mesh.structure.vertex_face_offsets.size() == surface_mesh.num_points() + 1);
 
   igneous::data::Space<igneous::data::DiffusionGeometry> point_mesh;
   igneous::io::load_obj(point_mesh, path);
@@ -41,8 +40,7 @@ TEST_CASE("OBJ import is load-only and structures build explicitly") {
   CHECK(diffusion_mesh.structure.markov_row_offsets.empty());
   diffusion_mesh.structure.build(
       {diffusion_mesh.x_span(), diffusion_mesh.y_span(), diffusion_mesh.z_span(), 32});
-  CHECK(diffusion_mesh.structure.markov_row_offsets.size() ==
-        diffusion_mesh.num_points() + 1);
+  CHECK(diffusion_mesh.structure.markov_row_offsets.size() == diffusion_mesh.num_points() + 1);
   CHECK(diffusion_mesh.structure.markov_values.size() > 0);
   CHECK(diffusion_mesh.structure.mu.sum() == doctest::Approx(1.0f).epsilon(1e-3f));
 }

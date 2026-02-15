@@ -25,7 +25,7 @@ TEST_CASE("kp1 children and signs follow Laplace expansion semantics") {
   CHECK(info.signs[2] == 1);
 
   for (size_t row = 0; row < info.idx_kp1.size(); ++row) {
-    const auto &parent = info.idx_kp1[row];
+    const auto& parent = info.idx_kp1[row];
     for (int r = 0; r < 3; ++r) {
       std::vector<int> child;
       child.reserve(2);

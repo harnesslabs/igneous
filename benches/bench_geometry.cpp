@@ -101,10 +101,8 @@ static BenchResult run_workload(int grid_size) {
   const auto t5 = Clock::now();
 
   const double ms_topo = std::chrono::duration<double, std::milli>(t1 - t0).count();
-  const double ms_curv =
-      std::chrono::duration<double, std::milli>(t3 - t2).count() / iterations;
-  const double ms_flow =
-      std::chrono::duration<double, std::milli>(t5 - t4).count() / iterations;
+  const double ms_curv = std::chrono::duration<double, std::milli>(t3 - t2).count() / iterations;
+  const double ms_flow = std::chrono::duration<double, std::milli>(t5 - t4).count() / iterations;
 
   return {
       "Grid " + std::to_string(grid_size) + "x" + std::to_string(grid_size),
@@ -123,18 +121,16 @@ int main() {
   std::cout << "\n==========================================================================\n";
   std::cout << " IGNEOUS GEOMETRY ENGINE BENCHMARK\n";
   std::cout << "==========================================================================\n";
-  std::cout << std::left << std::setw(15) << "Mesh" << std::setw(12) << "Verts"
-            << std::setw(12) << "Faces" << std::setw(15) << "Struct (ms)"
-            << std::setw(15) << "Curv (ms)" << std::setw(15) << "Flow (ms)"
-            << std::setw(10) << "Sim FPS" << "\n";
+  std::cout << std::left << std::setw(15) << "Mesh" << std::setw(12) << "Verts" << std::setw(12)
+            << "Faces" << std::setw(15) << "Struct (ms)" << std::setw(15) << "Curv (ms)"
+            << std::setw(15) << "Flow (ms)" << std::setw(10) << "Sim FPS" << "\n";
   std::cout << "--------------------------------------------------------------------------\n";
 
   for (int size : sizes) {
     const auto res = run_workload(size);
-    std::cout << std::left << std::setw(15) << res.name << std::setw(12)
-              << res.verts << std::setw(12) << res.faces << std::fixed
-              << std::setprecision(3) << std::setw(15) << res.t_structure_ms
-              << std::setw(15) << res.t_curvature_ms << std::setw(15)
+    std::cout << std::left << std::setw(15) << res.name << std::setw(12) << res.verts
+              << std::setw(12) << res.faces << std::fixed << std::setprecision(3) << std::setw(15)
+              << res.t_structure_ms << std::setw(15) << res.t_curvature_ms << std::setw(15)
               << res.t_flow_ms << std::setw(10) << res.fps << "\n";
   }
 

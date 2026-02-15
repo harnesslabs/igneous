@@ -46,32 +46,31 @@ struct Config {
 };
 
 static void print_usage() {
-  std::cout
-      << "Usage: ./build/igneous-diffusion-geometry [options]\n"
-      << "  --input-csv <path>\n"
-      << "  --output-dir <path>\n"
-      << "  --n-points <int>\n"
-      << "  --major-radius <float>\n"
-      << "  --minor-radius <float>\n"
-      << "  --sphere-radius <float>\n"
-      << "  --generate-sphere\n"
-      << "  --seed <int>\n"
-      << "  --n-basis <int>\n"
-      << "  --n-coefficients <int>\n"
-      << "  --k-neighbors <int>\n"
-      << "  --knn-bandwidth <int>\n"
-      << "  --bandwidth-variability <float>\n"
-      << "  --c <float>\n"
-      << "  --harmonic-tolerance <float>\n"
-      << "  --circular-lambda <float>\n"
-      << "  --circular-mode-0 <int>\n"
-      << "  --circular-mode-1 <int>\n";
+  std::cout << "Usage: ./build/igneous-diffusion-geometry [options]\n"
+            << "  --input-csv <path>\n"
+            << "  --output-dir <path>\n"
+            << "  --n-points <int>\n"
+            << "  --major-radius <float>\n"
+            << "  --minor-radius <float>\n"
+            << "  --sphere-radius <float>\n"
+            << "  --generate-sphere\n"
+            << "  --seed <int>\n"
+            << "  --n-basis <int>\n"
+            << "  --n-coefficients <int>\n"
+            << "  --k-neighbors <int>\n"
+            << "  --knn-bandwidth <int>\n"
+            << "  --bandwidth-variability <float>\n"
+            << "  --c <float>\n"
+            << "  --harmonic-tolerance <float>\n"
+            << "  --circular-lambda <float>\n"
+            << "  --circular-mode-0 <int>\n"
+            << "  --circular-mode-1 <int>\n";
 }
 
-static bool parse_args(int argc, char **argv, Config &cfg) {
+static bool parse_args(int argc, char** argv, Config& cfg) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
-    auto require_value = [&](const char *name) -> const char * {
+    auto require_value = [&](const char* name) -> const char* {
       if (i + 1 >= argc) {
         std::cerr << "Missing value for " << name << "\n";
         std::exit(1);
@@ -164,7 +163,7 @@ static bool parse_args(int argc, char **argv, Config &cfg) {
   return true;
 }
 
-static void generate_torus(DiffusionMesh &mesh, size_t n_points, float major_radius,
+static void generate_torus(DiffusionMesh& mesh, size_t n_points, float major_radius,
                            float minor_radius, uint32_t seed) {
   mesh.clear();
   mesh.reserve(n_points);
@@ -182,8 +181,7 @@ static void generate_torus(DiffusionMesh &mesh, size_t n_points, float major_rad
   }
 }
 
-static void generate_sphere(DiffusionMesh &mesh, size_t n_points, float radius,
-                            uint32_t seed) {
+static void generate_sphere(DiffusionMesh& mesh, size_t n_points, float radius, uint32_t seed) {
   mesh.clear();
   mesh.reserve(n_points);
 
@@ -196,13 +194,12 @@ static void generate_sphere(DiffusionMesh &mesh, size_t n_points, float radius,
     const float theta = 2.0f * 3.14159265358979323846f * u;
     const float phi = std::acos(2.0f * v - 1.0f);
     const float sin_phi = std::sin(phi);
-    mesh.push_point({radius * sin_phi * std::cos(theta),
-                              radius * sin_phi * std::sin(theta),
-                              radius * std::cos(phi)});
+    mesh.push_point({radius * sin_phi * std::cos(theta), radius * sin_phi * std::sin(theta),
+                     radius * std::cos(phi)});
   }
 }
 
-static bool load_point_cloud_csv(const std::string &filename, DiffusionMesh &mesh) {
+static bool load_point_cloud_csv(const std::string& filename, DiffusionMesh& mesh) {
   std::ifstream file(filename);
   if (!file.is_open()) {
     std::cerr << "Failed to open input CSV: " << filename << "\n";
@@ -216,7 +213,7 @@ static bool load_point_cloud_csv(const std::string &filename, DiffusionMesh &mes
       continue;
     }
 
-    for (char &c : line) {
+    for (char& c : line) {
       if (c == ',') {
         c = ' ';
       }
@@ -235,7 +232,7 @@ static bool load_point_cloud_csv(const std::string &filename, DiffusionMesh &mes
   return mesh.num_points() > 0;
 }
 
-static std::vector<float> to_scalar_field(const Eigen::VectorXf &values) {
+static std::vector<float> to_scalar_field(const Eigen::VectorXf& values) {
   std::vector<float> out(static_cast<size_t>(values.size()));
   for (int i = 0; i < values.size(); ++i) {
     out[static_cast<size_t>(i)] = values[i];
@@ -243,9 +240,8 @@ static std::vector<float> to_scalar_field(const Eigen::VectorXf &values) {
   return out;
 }
 
-static void export_vector_field(const std::string &filename,
-                                const DiffusionMesh &mesh,
-                                const std::vector<core::Vec3> &vectors) {
+static void export_vector_field(const std::string& filename, const DiffusionMesh& mesh,
+                                const std::vector<core::Vec3>& vectors) {
   std::ofstream file(filename);
   if (!file.is_open()) {
     return;
@@ -266,13 +262,12 @@ static void export_vector_field(const std::string &filename,
   for (size_t i = 0; i < n; ++i) {
     const auto p = mesh.get_vec3(i);
     const auto v = vectors[i];
-    file << p.x << " " << p.y << " " << p.z << " " << v.x << " " << v.y
-         << " " << v.z << "\n";
+    file << p.x << " " << p.y << " " << p.z << " " << v.x << " " << v.y << " " << v.z << "\n";
   }
 }
 
 static std::array<std::array<Eigen::VectorXf, 3>, 3>
-build_gamma_data_immersion(const DiffusionMesh &mesh) {
+build_gamma_data_immersion(const DiffusionMesh& mesh) {
   std::array<Eigen::VectorXf, 3> data_coords;
   std::array<Eigen::VectorXf, 3> immersion_coords;
   ops::diffusion::fill_data_coordinate_vectors(mesh, data_coords);
@@ -282,16 +277,15 @@ build_gamma_data_immersion(const DiffusionMesh &mesh) {
   for (int a = 0; a < 3; ++a) {
     for (int b = 0; b < 3; ++b) {
       gamma[a][b].resize(static_cast<int>(mesh.num_points()));
-      ops::diffusion::carre_du_champ(mesh, data_coords[a], immersion_coords[b], 0.0f,
-                          gamma[a][b]);
+      ops::diffusion::carre_du_champ(mesh, data_coords[a], immersion_coords[b], 0.0f, gamma[a][b]);
     }
   }
   return gamma;
 }
 
 static std::vector<core::Vec3> reconstruct_1form_ambient(
-    const DiffusionMesh &mesh, const Eigen::VectorXf &coeffs, int n_coefficients,
-    const std::array<std::array<Eigen::VectorXf, 3>, 3> &gamma_data_immersion) {
+    const DiffusionMesh& mesh, const Eigen::VectorXf& coeffs, int n_coefficients,
+    const std::array<std::array<Eigen::VectorXf, 3>, 3>& gamma_data_immersion) {
   const Eigen::MatrixXf pointwise =
       ops::diffusion::coefficients_to_pointwise(mesh, coeffs, 1, n_coefficients);
   std::vector<core::Vec3> field(mesh.num_points(), {0.0f, 0.0f, 0.0f});
@@ -316,8 +310,8 @@ static std::vector<core::Vec3> reconstruct_1form_ambient(
 }
 
 static std::vector<core::Vec3> reconstruct_2form_dual_ambient(
-    const DiffusionMesh &mesh, const Eigen::VectorXf &coeffs, int n_coefficients,
-    const std::array<std::array<Eigen::VectorXf, 3>, 3> &gamma_data_immersion) {
+    const DiffusionMesh& mesh, const Eigen::VectorXf& coeffs, int n_coefficients,
+    const std::array<std::array<Eigen::VectorXf, 3>, 3>& gamma_data_immersion) {
   const Eigen::MatrixXf pointwise =
       ops::diffusion::coefficients_to_pointwise(mesh, coeffs, 2, n_coefficients);
   std::vector<core::Vec3> field(mesh.num_points(), {0.0f, 0.0f, 0.0f});
@@ -352,7 +346,7 @@ static std::vector<core::Vec3> reconstruct_2form_dual_ambient(
   return field;
 }
 
-static Eigen::VectorXf pad_1form_coeffs(const Eigen::VectorXf &coeffs, int n_basis,
+static Eigen::VectorXf pad_1form_coeffs(const Eigen::VectorXf& coeffs, int n_basis,
                                         int n_coefficients) {
   Eigen::VectorXf padded = Eigen::VectorXf::Zero(n_basis * 3);
   const int copy_n = std::min(n_basis, n_coefficients);
@@ -364,7 +358,7 @@ static Eigen::VectorXf pad_1form_coeffs(const Eigen::VectorXf &coeffs, int n_bas
   return padded;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   Config cfg;
   if (!parse_args(argc, argv, cfg)) {
     return 0;
@@ -383,19 +377,12 @@ int main(int argc, char **argv) {
     generate_torus(mesh, cfg.n_points, cfg.major_radius, cfg.minor_radius, cfg.seed);
   }
 
-  mesh.structure.build({mesh.x_span(),
-                       mesh.y_span(),
-                       mesh.z_span(),
-                       cfg.k_neighbors,
-                       cfg.knn_bandwidth,
-                       cfg.bandwidth_variability,
-                       cfg.c,
-                       true});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), cfg.k_neighbors,
+                        cfg.knn_bandwidth, cfg.bandwidth_variability, cfg.c, true});
 
   ops::diffusion::compute_eigenbasis(mesh, cfg.n_basis);
-  const int n_coeff =
-      std::max(1, std::min(cfg.n_coefficients,
-                           static_cast<int>(mesh.structure.eigen_basis.cols())));
+  const int n_coeff = std::max(
+      1, std::min(cfg.n_coefficients, static_cast<int>(mesh.structure.eigen_basis.cols())));
 
   ops::diffusion::DiffusionFormWorkspace<DiffusionMesh> forms_ws;
 
@@ -403,7 +390,8 @@ int main(int argc, char **argv) {
   const Eigen::MatrixXf G1 = ops::diffusion::compute_kform_gram_matrix(mesh, 1, n_coeff, forms_ws);
   const Eigen::MatrixXf down1 =
       ops::diffusion::compute_down_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
-  const Eigen::MatrixXf up1 = ops::diffusion::compute_up_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
+  const Eigen::MatrixXf up1 =
+      ops::diffusion::compute_up_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
   const Eigen::MatrixXf L1 = ops::diffusion::assemble_hodge_laplacian_matrix(up1, down1);
   auto [evals1, evecs1] = ops::diffusion::compute_form_spectrum(L1, G1);
 
@@ -414,8 +402,7 @@ int main(int argc, char **argv) {
 
   const auto harmonic1_idx =
       ops::diffusion::extract_harmonic_mode_indices(evals1, cfg.harmonic_tolerance, 3);
-  Eigen::MatrixXf harmonic1_coeffs(evecs1.rows(),
-                                   static_cast<int>(harmonic1_idx.size()));
+  Eigen::MatrixXf harmonic1_coeffs(evecs1.rows(), static_cast<int>(harmonic1_idx.size()));
   for (int c = 0; c < static_cast<int>(harmonic1_idx.size()); ++c) {
     harmonic1_coeffs.col(c) = evecs1.col(harmonic1_idx[static_cast<size_t>(c)]);
   }
@@ -425,24 +412,24 @@ int main(int argc, char **argv) {
   std::vector<std::vector<core::Vec3>> harmonic1_fields;
   for (int c = 0; c < harmonic1_coeffs.cols(); ++c) {
     harmonic1_fields.push_back(
-        reconstruct_1form_ambient(mesh, harmonic1_coeffs.col(c), n_coeff,
-                                  gamma_data_immersion));
+        reconstruct_1form_ambient(mesh, harmonic1_coeffs.col(c), n_coeff, gamma_data_immersion));
   }
 
   const int idx0 = harmonic1_idx.empty() ? 0 : harmonic1_idx[0];
   const int idx1 = harmonic1_idx.size() > 1 ? harmonic1_idx[1] : idx0;
   const Eigen::VectorXf theta_0 = ops::diffusion::compute_circular_coordinates(
-      mesh, pad_1form_coeffs(evecs1.col(idx0), mesh.structure.eigen_basis.cols(), n_coeff),
-      0.0f, cfg.circular_lambda, cfg.circular_mode_0, nullptr);
+      mesh, pad_1form_coeffs(evecs1.col(idx0), mesh.structure.eigen_basis.cols(), n_coeff), 0.0f,
+      cfg.circular_lambda, cfg.circular_mode_0, nullptr);
   const Eigen::VectorXf theta_1 = ops::diffusion::compute_circular_coordinates(
-      mesh, pad_1form_coeffs(evecs1.col(idx1), mesh.structure.eigen_basis.cols(), n_coeff),
-      0.0f, cfg.circular_lambda, cfg.circular_mode_1, nullptr);
+      mesh, pad_1form_coeffs(evecs1.col(idx1), mesh.structure.eigen_basis.cols(), n_coeff), 0.0f,
+      cfg.circular_lambda, cfg.circular_mode_1, nullptr);
 
   // 2-forms
   const Eigen::MatrixXf G2 = ops::diffusion::compute_kform_gram_matrix(mesh, 2, n_coeff, forms_ws);
   const Eigen::MatrixXf down2 =
       ops::diffusion::compute_down_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
-  const Eigen::MatrixXf up2 = ops::diffusion::compute_up_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
+  const Eigen::MatrixXf up2 =
+      ops::diffusion::compute_up_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
   const Eigen::MatrixXf L2 = ops::diffusion::assemble_hodge_laplacian_matrix(up2, down2);
   auto [evals2, evecs2] = ops::diffusion::compute_form_spectrum(L2, G2);
 
@@ -453,16 +440,15 @@ int main(int argc, char **argv) {
 
   const auto harmonic2_idx =
       ops::diffusion::extract_harmonic_mode_indices(evals2, cfg.harmonic_tolerance, 3);
-  Eigen::MatrixXf harmonic2_coeffs(evecs2.rows(),
-                                   static_cast<int>(harmonic2_idx.size()));
+  Eigen::MatrixXf harmonic2_coeffs(evecs2.rows(), static_cast<int>(harmonic2_idx.size()));
   for (int c = 0; c < static_cast<int>(harmonic2_idx.size()); ++c) {
     harmonic2_coeffs.col(c) = evecs2.col(harmonic2_idx[static_cast<size_t>(c)]);
   }
 
   std::vector<std::vector<core::Vec3>> harmonic2_fields;
   for (int c = 0; c < harmonic2_coeffs.cols(); ++c) {
-    harmonic2_fields.push_back(reconstruct_2form_dual_ambient(
-        mesh, harmonic2_coeffs.col(c), n_coeff, gamma_data_immersion));
+    harmonic2_fields.push_back(reconstruct_2form_dual_ambient(mesh, harmonic2_coeffs.col(c),
+                                                              n_coeff, gamma_data_immersion));
   }
 
   // wedge(h1_0, h1_1)
@@ -470,35 +456,31 @@ int main(int argc, char **argv) {
   if (harmonic1_coeffs.cols() >= 1) {
     const int rhs_col = harmonic1_coeffs.cols() >= 2 ? 1 : 0;
     wedge_coeffs = ops::diffusion::compute_wedge_product_coeffs(
-        mesh, harmonic1_coeffs.col(0), 1, harmonic1_coeffs.col(rhs_col), 1, n_coeff,
-        forms_ws);
+        mesh, harmonic1_coeffs.col(0), 1, harmonic1_coeffs.col(rhs_col), 1, n_coeff, forms_ws);
   } else {
     wedge_coeffs = Eigen::VectorXf::Zero(n_coeff * 3);
   }
 
-  const auto wedge_field = reconstruct_2form_dual_ambient(
-      mesh, wedge_coeffs, n_coeff, gamma_data_immersion);
+  const auto wedge_field =
+      reconstruct_2form_dual_ambient(mesh, wedge_coeffs, n_coeff, gamma_data_immersion);
 
-  io::export_ply_solid(mesh, to_scalar_field(theta_0),
-                       cfg.output_dir + "/circular_theta_0.ply", 0.01);
-  io::export_ply_solid(mesh, to_scalar_field(theta_1),
-                       cfg.output_dir + "/circular_theta_1.ply", 0.01);
+  io::export_ply_solid(mesh, to_scalar_field(theta_0), cfg.output_dir + "/circular_theta_0.ply",
+                       0.01);
+  io::export_ply_solid(mesh, to_scalar_field(theta_1), cfg.output_dir + "/circular_theta_1.ply",
+                       0.01);
 
   for (size_t i = 0; i < harmonic1_fields.size(); ++i) {
-    export_vector_field(cfg.output_dir + "/harmonic1_form_" + std::to_string(i) +
-                            ".ply",
-                        mesh, harmonic1_fields[i]);
+    export_vector_field(cfg.output_dir + "/harmonic1_form_" + std::to_string(i) + ".ply", mesh,
+                        harmonic1_fields[i]);
   }
 
   for (size_t i = 0; i < harmonic2_fields.size(); ++i) {
-    export_vector_field(cfg.output_dir + "/harmonic2_form_" + std::to_string(i) +
-                            ".ply",
-                        mesh, harmonic2_fields[i]);
+    export_vector_field(cfg.output_dir + "/harmonic2_form_" + std::to_string(i) + ".ply", mesh,
+                        harmonic2_fields[i]);
   }
 
   export_vector_field(cfg.output_dir + "/wedge_h1h1_dual.ply", mesh, wedge_field);
 
-  std::cout << "Computed form spectra and wedge outputs in: " << cfg.output_dir
-            << "\n";
+  std::cout << "Computed form spectra and wedge outputs in: " << cfg.output_dir << "\n";
   return 0;
 }

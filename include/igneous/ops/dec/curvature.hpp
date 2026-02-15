@@ -29,11 +29,9 @@ template <data::SurfaceStructure StructureT> struct CurvatureWorkspace {
  * \param workspace Reused temporary buffers.
  */
 template <data::SurfaceStructure StructureT>
-void compute_curvature_measures(const data::Space<StructureT> &space,
-                                std::vector<float> &H,
-                                std::vector<float> &K,
-                                CurvatureWorkspace<StructureT> &workspace) {
-  const auto &structure = space.structure;
+void compute_curvature_measures(const data::Space<StructureT>& space, std::vector<float>& H,
+                                std::vector<float>& K, CurvatureWorkspace<StructureT>& workspace) {
+  const auto& structure = space.structure;
 
   const size_t num_verts = space.num_points();
   const size_t num_faces = structure.num_faces();
@@ -129,9 +127,8 @@ void compute_curvature_measures(const data::Space<StructureT> &space,
         }
 
         if (area_sum > 1e-12f) {
-          K[i] = static_cast<float>(
-              (2.0 * std::numbers::pi_v<double> - angle_sum) /
-              (static_cast<double>(area_sum) / 3.0));
+          K[i] = static_cast<float>((2.0 * std::numbers::pi_v<double> - angle_sum) /
+                                    (static_cast<double>(area_sum) / 3.0));
         }
 
         const float n_mag_sq = n_xy * n_xy + n_yz * n_yz + n_zx * n_zx;

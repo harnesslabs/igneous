@@ -14,24 +14,20 @@
 namespace igneous::core {
 
 /// \brief Runtime compute backend choice.
-enum class ComputeBackend {
-  Cpu,
-  CpuParallel,
-  Gpu
-};
+enum class ComputeBackend { Cpu, CpuParallel, Gpu };
 
 /**
  * \brief Parse compute backend from `IGNEOUS_BACKEND`.
  * \return Selected backend enum value.
  */
 inline ComputeBackend compute_backend_from_env() {
-  const char *raw = std::getenv("IGNEOUS_BACKEND");
+  const char* raw = std::getenv("IGNEOUS_BACKEND");
   if (raw == nullptr) {
     return ComputeBackend::CpuParallel;
   }
 
   std::string value(raw);
-  for (char &c : value) {
+  for (char& c : value) {
     c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
   }
 
@@ -49,7 +45,7 @@ inline ComputeBackend compute_backend_from_env() {
  * \return Worker count used by parallel loops.
  */
 inline int compute_thread_count() {
-  const char *raw = std::getenv("IGNEOUS_NUM_THREADS");
+  const char* raw = std::getenv("IGNEOUS_NUM_THREADS");
   if (raw != nullptr) {
     const int requested = std::atoi(raw);
     if (requested > 0) {
@@ -88,8 +84,7 @@ public:
    * \brief Construct pool with up to `max_workers - 1` background threads.
    * \param max_workers Total participants including caller thread.
    */
-  explicit ParallelWorkerPool(int max_workers)
-      : max_workers_(std::max(0, max_workers - 1)) {
+  explicit ParallelWorkerPool(int max_workers) : max_workers_(std::max(0, max_workers - 1)) {
     workers_.reserve(static_cast<size_t>(max_workers_));
     for (int worker_idx = 0; worker_idx < max_workers_; ++worker_idx) {
       workers_.emplace_back([this, worker_idx]() { worker_loop(worker_idx); });
@@ -104,13 +99,13 @@ public:
       ++generation_;
     }
     cv_work_.notify_all();
-    for (auto &worker : workers_) {
+    for (auto& worker : workers_) {
       worker.join();
     }
   }
 
-  ParallelWorkerPool(const ParallelWorkerPool &) = delete;
-  ParallelWorkerPool &operator=(const ParallelWorkerPool &) = delete;
+  ParallelWorkerPool(const ParallelWorkerPool&) = delete;
+  ParallelWorkerPool& operator=(const ParallelWorkerPool&) = delete;
 
   /**
    * \brief Execute `[begin, end)` with up to `requested_workers` participants.
@@ -119,15 +114,13 @@ public:
    * \param requested_workers Requested total participants.
    * \param fn Loop body receiving index `i`.
    */
-  template <typename Fn>
-  void run(int begin, int end, int requested_workers, Fn &&fn) {
+  template <typename Fn> void run(int begin, int end, int requested_workers, Fn&& fn) {
     if (end <= begin) {
       return;
     }
 
     const int total = end - begin;
-    const int participants =
-        std::max(1, std::min({requested_workers, total, max_workers_ + 1}));
+    const int participants = std::max(1, std::min({requested_workers, total, max_workers_ + 1}));
     if (participants <= 1) {
       for (int i = begin; i < end; ++i) {
         fn(i);
@@ -236,7 +229,7 @@ private:
  * \brief Singleton worker pool used by `parallel_for_index`.
  * \return Process-wide worker pool instance.
  */
-inline ParallelWorkerPool &parallel_worker_pool() {
+inline ParallelWorkerPool& parallel_worker_pool() {
   static ParallelWorkerPool pool(hardware_thread_count());
   return pool;
 }
@@ -251,7 +244,7 @@ inline ParallelWorkerPool &parallel_worker_pool() {
  * \param min_parallel_range Minimum range length to enable parallel execution.
  */
 template <typename Fn>
-void parallel_for_index(int begin, int end, Fn &&fn, int min_parallel_range = 32) {
+void parallel_for_index(int begin, int end, Fn&& fn, int min_parallel_range = 32) {
   if (end <= begin) {
     return;
   }

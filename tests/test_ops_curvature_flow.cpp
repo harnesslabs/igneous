@@ -7,8 +7,7 @@
 #include <igneous/ops/dec/curvature.hpp>
 #include <igneous/ops/dec/flow.hpp>
 
-static igneous::data::Space<igneous::data::DiscreteExteriorCalculus>
-make_grid(int side) {
+static igneous::data::Space<igneous::data::DiscreteExteriorCalculus> make_grid(int side) {
   using Mesh = igneous::data::Space<igneous::data::DiscreteExteriorCalculus>;
   Mesh mesh;
   mesh.reserve(static_cast<size_t>(side * side));
@@ -28,7 +27,8 @@ make_grid(int side) {
       const uint32_t i2 = static_cast<uint32_t>((y + 1) * side + x);
       const uint32_t i3 = static_cast<uint32_t>((y + 1) * side + x + 1);
 
-      mesh.structure.faces_to_vertices.insert(mesh.structure.faces_to_vertices.end(), {i0, i1, i2, i1, i3, i2});
+      mesh.structure.faces_to_vertices.insert(mesh.structure.faces_to_vertices.end(),
+                                              {i0, i1, i2, i1, i3, i2});
     }
   }
 
@@ -63,7 +63,6 @@ TEST_CASE("Curvature and flow kernels produce finite values") {
   CHECK(std::isfinite(p_after.x));
   CHECK(std::isfinite(p_after.y));
   CHECK(std::isfinite(p_after.z));
-  CHECK((p_before.x != doctest::Approx(p_after.x) ||
-         p_before.y != doctest::Approx(p_after.y) ||
+  CHECK((p_before.x != doctest::Approx(p_after.x) || p_before.y != doctest::Approx(p_after.y) ||
          p_before.z != doctest::Approx(p_after.z)));
 }

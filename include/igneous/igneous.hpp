@@ -9,8 +9,8 @@
 
 #include <igneous/data/space.hpp>
 #include <igneous/data/structure.hpp>
-#include <igneous/data/structures/discrete_exterior_calculus.hpp>
 #include <igneous/data/structures/diffusion_geometry.hpp>
+#include <igneous/data/structures/discrete_exterior_calculus.hpp>
 
 #include <igneous/io/exporter.hpp>
 #include <igneous/io/importer.hpp>

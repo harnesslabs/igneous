@@ -46,11 +46,10 @@ template <typename MeshT> struct HodgeWorkspace {
  * \return Weak derivative matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
-                                                 float bandwidth,
-                                                 HodgeWorkspace<MeshT> &workspace) {
-  const auto &U = mesh.structure.eigen_basis;
-  const auto &mu = mesh.structure.mu;
+Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, float bandwidth,
+                                                 HodgeWorkspace<MeshT>& workspace) {
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
   const int n0 = U.cols();
   const int n_verts = static_cast<int>(mesh.num_points());
 
@@ -72,8 +71,7 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
         8);
   }
 
-  if (workspace.weighted_u.rows() != n_verts ||
-      workspace.weighted_u.cols() != n0) {
+  if (workspace.weighted_u.rows() != n_verts || workspace.weighted_u.cols() != n0) {
     workspace.weighted_u.resize(n_verts, n0);
   }
   workspace.weighted_u = U.array().colwise() * mu.array();
@@ -96,8 +94,7 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
  * \return Weak derivative matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
-                                                 float bandwidth) {
+Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, float bandwidth) {
   HodgeWorkspace<MeshT> workspace;
   return compute_weak_exterior_derivative(mesh, bandwidth, workspace);
 }
@@ -110,10 +107,10 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
  * \return Curl-energy matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
-                                           HodgeWorkspace<MeshT> &workspace) {
-  const auto &U = mesh.structure.eigen_basis;
-  const auto &mu = mesh.structure.mu;
+Eigen::MatrixXf compute_curl_energy_matrix(const MeshT& mesh, float bandwidth,
+                                           HodgeWorkspace<MeshT>& workspace) {
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
   const auto mu_arr = mu.array();
   const int n0 = U.cols();
   const int n_basis = 3 * n0;
@@ -149,16 +146,13 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
         Eigen::VectorXf gamma_phi_phi_local(n_verts);
 
         for (int l = k; l < n0; ++l) {
-          carre_du_champ(mesh, U.col(k), U.col(l), bandwidth,
-                         gamma_phi_phi_local);
+          carre_du_champ(mesh, U.col(k), U.col(l), bandwidth, gamma_phi_phi_local);
 
           for (int a = 0; a < 3; ++a) {
             for (int b = 0; b < 3; ++b) {
               const float val =
-                  (((gamma_phi_phi_local.array() *
-                     workspace.gamma_xx[a][b].array()) -
-                    (workspace.gamma_phi_x[k][b].array() *
-                     workspace.gamma_phi_x[l][a].array())) *
+                  (((gamma_phi_phi_local.array() * workspace.gamma_xx[a][b].array()) -
+                    (workspace.gamma_phi_x[k][b].array() * workspace.gamma_phi_x[l][a].array())) *
                    mu_arr)
                       .sum();
 
@@ -185,7 +179,7 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
  * \return Curl-energy matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth) {
+Eigen::MatrixXf compute_curl_energy_matrix(const MeshT& mesh, float bandwidth) {
   HodgeWorkspace<MeshT> workspace;
   return compute_curl_energy_matrix(mesh, bandwidth, workspace);
 }
@@ -196,8 +190,8 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth) {
  * \param E_up Curl-energy matrix.
  * \return Hodge Laplacian matrix.
  */
-inline Eigen::MatrixXf compute_hodge_laplacian_matrix(
-    const Eigen::MatrixXf &D_weak, const Eigen::MatrixXf &E_up) {
+inline Eigen::MatrixXf compute_hodge_laplacian_matrix(const Eigen::MatrixXf& D_weak,
+                                                      const Eigen::MatrixXf& E_up) {
   const Eigen::MatrixXf L_down = D_weak * D_weak.transpose();
   return L_down + E_up;
 }
@@ -210,16 +204,15 @@ inline Eigen::MatrixXf compute_hodge_laplacian_matrix(
  * \return Pair `(eigenvalues, eigenvectors)`.
  */
 inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
-compute_hodge_spectrum(const Eigen::MatrixXf &laplacian,
-                       const Eigen::MatrixXf &mass_matrix,
+compute_hodge_spectrum(const Eigen::MatrixXf& laplacian, const Eigen::MatrixXf& mass_matrix,
                        float rcond = 1e-5f) {
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> mass_solver(mass_matrix);
   if (mass_solver.info() != Eigen::Success) {
     return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
   }
 
-  const auto &mass_evals = mass_solver.eigenvalues();
-  const auto &mass_evecs = mass_solver.eigenvectors();
+  const auto& mass_evals = mass_solver.eigenvalues();
+  const auto& mass_evecs = mass_solver.eigenvectors();
   std::vector<int> keep_indices;
   keep_indices.reserve(static_cast<size_t>(mass_evals.size()));
   for (int i = 0; i < mass_evals.size(); ++i) {
@@ -265,14 +258,12 @@ compute_hodge_spectrum(const Eigen::MatrixXf &laplacian,
  * \return Angle field in `[0, 2*pi)`.
  */
 template <typename MeshT>
-Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
-                                             const Eigen::VectorXf &alpha_coeffs,
-                                             float bandwidth,
-                                             float lambda = 1.0f,
+Eigen::VectorXf compute_circular_coordinates(const MeshT& mesh, const Eigen::VectorXf& alpha_coeffs,
+                                             float bandwidth, float lambda = 1.0f,
                                              int positive_imag_mode = 0,
-                                             std::complex<float> *selected_eval = nullptr) {
-  const auto &U = mesh.structure.eigen_basis;
-  const auto &mu = mesh.structure.mu;
+                                             std::complex<float>* selected_eval = nullptr) {
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
 
   const int n0 = U.cols();
   const size_t n_verts = mesh.num_points();
@@ -308,10 +299,9 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
       [&](int t) {
         Eigen::VectorXf weight_local(n_verts_i);
         weight_local =
-            mu.array() *
-            ((workspace.gamma_x_phi_mat[0].col(t).array() * q.col(0).array()) +
-             (workspace.gamma_x_phi_mat[1].col(t).array() * q.col(1).array()) +
-             (workspace.gamma_x_phi_mat[2].col(t).array() * q.col(2).array()));
+            mu.array() * ((workspace.gamma_x_phi_mat[0].col(t).array() * q.col(0).array()) +
+                          (workspace.gamma_x_phi_mat[1].col(t).array() * q.col(1).array()) +
+                          (workspace.gamma_x_phi_mat[2].col(t).array() * q.col(2).array()));
         X_op.col(t).noalias() = U_t * weight_local;
       },
       8);
@@ -374,8 +364,7 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
   }
 
   const int mode =
-      std::clamp(positive_imag_mode, 0,
-                 static_cast<int>(positive_imag_indices.size()) - 1);
+      std::clamp(positive_imag_mode, 0, static_cast<int>(positive_imag_indices.size()) - 1);
   const int best_idx = positive_imag_indices[static_cast<size_t>(mode)];
   if (selected_eval != nullptr) {
     *selected_eval = sorted_evals[best_idx];

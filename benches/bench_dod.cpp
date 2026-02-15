@@ -20,7 +20,9 @@ using DiffusionMesh = igneous::data::Space<igneous::data::DiffusionGeometry>;
 
 namespace {
 struct BenchEnvSetup {
-  BenchEnvSetup() { setenv("IGNEOUS_BENCH_MODE", "1", 1); }
+  BenchEnvSetup() {
+    setenv("IGNEOUS_BENCH_MODE", "1", 1);
+  }
 } kBenchEnvSetup;
 } // namespace
 
@@ -82,12 +84,11 @@ static DiffusionMesh make_diffusion_cloud(size_t n_points) {
     mesh.push_point({x, y, z});
   }
 
-  mesh.structure.build({mesh.x_span(), mesh.y_span(),
-                       mesh.z_span(), 32});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), 32});
   return mesh;
 }
 
-static void bench_mesh_structure_build(benchmark::State &state) {
+static void bench_mesh_structure_build(benchmark::State& state) {
   SurfaceMesh mesh = make_grid_mesh(static_cast<int>(state.range(0)));
   for (auto _ : state) {
     mesh.structure.vertex_face_offsets.clear();
@@ -99,7 +100,7 @@ static void bench_mesh_structure_build(benchmark::State &state) {
   }
 }
 
-static void bench_curvature_kernel(benchmark::State &state) {
+static void bench_curvature_kernel(benchmark::State& state) {
   SurfaceMesh mesh = make_grid_mesh(static_cast<int>(state.range(0)));
   std::vector<float> H;
   std::vector<float> K;
@@ -112,7 +113,7 @@ static void bench_curvature_kernel(benchmark::State &state) {
   }
 }
 
-static void bench_flow_kernel(benchmark::State &state) {
+static void bench_flow_kernel(benchmark::State& state) {
   SurfaceMesh mesh = make_grid_mesh(static_cast<int>(state.range(0)));
   igneous::ops::dec::FlowWorkspace<igneous::data::DiscreteExteriorCalculus> ws;
 
@@ -122,21 +123,19 @@ static void bench_flow_kernel(benchmark::State &state) {
   }
 }
 
-static void bench_diffusion_build(benchmark::State &state) {
+static void bench_diffusion_build(benchmark::State& state) {
   DiffusionMesh mesh = make_diffusion_cloud(static_cast<size_t>(state.range(0)));
 
   for (auto _ : state) {
-    mesh.structure.build({mesh.x_span(), mesh.y_span(),
-                         mesh.z_span(), 32});
+    mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), 32});
     benchmark::DoNotOptimize(mesh.structure.markov_values.size());
   }
 }
 
-static void bench_markov_step(benchmark::State &state) {
+static void bench_markov_step(benchmark::State& state) {
   DiffusionMesh mesh = make_diffusion_cloud(static_cast<size_t>(state.range(0)));
   Eigen::VectorXf u = Eigen::VectorXf::Ones(static_cast<int>(mesh.num_points()));
-  Eigen::VectorXf u_next =
-      Eigen::VectorXf::Zero(static_cast<int>(mesh.num_points()));
+  Eigen::VectorXf u_next = Eigen::VectorXf::Zero(static_cast<int>(mesh.num_points()));
 
   for (auto _ : state) {
     igneous::ops::diffusion::apply_markov_transition(mesh, u, u_next);
@@ -145,13 +144,12 @@ static void bench_markov_step(benchmark::State &state) {
   }
 }
 
-static void bench_markov_multi_step(benchmark::State &state) {
+static void bench_markov_multi_step(benchmark::State& state) {
   const size_t n_points = static_cast<size_t>(state.range(0));
   const int steps = static_cast<int>(state.range(1));
   DiffusionMesh mesh = make_diffusion_cloud(n_points);
   Eigen::VectorXf u = Eigen::VectorXf::Ones(static_cast<int>(mesh.num_points()));
-  Eigen::VectorXf u_next =
-      Eigen::VectorXf::Zero(static_cast<int>(mesh.num_points()));
+  Eigen::VectorXf u_next = Eigen::VectorXf::Zero(static_cast<int>(mesh.num_points()));
   igneous::ops::diffusion::DiffusionWorkspace<DiffusionMesh> ws;
 
   for (auto _ : state) {
@@ -161,7 +159,7 @@ static void bench_markov_multi_step(benchmark::State &state) {
   }
 }
 
-static void bench_eigenbasis(benchmark::State &state) {
+static void bench_eigenbasis(benchmark::State& state) {
   DiffusionMesh mesh = make_diffusion_cloud(static_cast<size_t>(state.range(0)));
   const int basis = static_cast<int>(state.range(1));
 
@@ -171,7 +169,7 @@ static void bench_eigenbasis(benchmark::State &state) {
   }
 }
 
-static void bench_1form_gram(benchmark::State &state) {
+static void bench_1form_gram(benchmark::State& state) {
   DiffusionMesh mesh = make_diffusion_cloud(static_cast<size_t>(state.range(0)));
   igneous::ops::diffusion::compute_eigenbasis(mesh, static_cast<int>(state.range(1)));
   igneous::ops::diffusion::GeometryWorkspace<DiffusionMesh> ws;
@@ -182,7 +180,7 @@ static void bench_1form_gram(benchmark::State &state) {
   }
 }
 
-static void bench_weak_derivative(benchmark::State &state) {
+static void bench_weak_derivative(benchmark::State& state) {
   DiffusionMesh mesh = make_diffusion_cloud(static_cast<size_t>(state.range(0)));
   igneous::ops::diffusion::compute_eigenbasis(mesh, static_cast<int>(state.range(1)));
   igneous::ops::diffusion::HodgeWorkspace<DiffusionMesh> ws;
@@ -193,7 +191,7 @@ static void bench_weak_derivative(benchmark::State &state) {
   }
 }
 
-static void bench_curl_energy(benchmark::State &state) {
+static void bench_curl_energy(benchmark::State& state) {
   DiffusionMesh mesh = make_diffusion_cloud(static_cast<size_t>(state.range(0)));
   igneous::ops::diffusion::compute_eigenbasis(mesh, static_cast<int>(state.range(1)));
   igneous::ops::diffusion::HodgeWorkspace<DiffusionMesh> ws;
@@ -204,7 +202,7 @@ static void bench_curl_energy(benchmark::State &state) {
   }
 }
 
-static void bench_hodge_solve(benchmark::State &state) {
+static void bench_hodge_solve(benchmark::State& state) {
   DiffusionMesh mesh = make_diffusion_cloud(static_cast<size_t>(state.range(0)));
   igneous::ops::diffusion::compute_eigenbasis(mesh, static_cast<int>(state.range(1)));
 

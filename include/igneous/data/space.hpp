@@ -7,8 +7,8 @@
 
 #include <igneous/core/blades.hpp>
 #include <igneous/data/structure.hpp>
-#include <igneous/data/structures/discrete_exterior_calculus.hpp>
 #include <igneous/data/structures/diffusion_geometry.hpp>
+#include <igneous/data/structures/discrete_exterior_calculus.hpp>
 
 namespace igneous::data {
 
@@ -42,7 +42,9 @@ template <Structure StructureT = DiscreteExteriorCalculus> struct Space {
    * \brief Number of stored points.
    * \return Number of points in the geometry arrays.
    */
-  [[nodiscard]] size_t num_points() const { return x.size(); }
+  [[nodiscard]] size_t num_points() const {
+    return x.size();
+  }
 
   /**
    * \brief Reserve geometry capacity for `vertices` points.
@@ -69,14 +71,16 @@ template <Structure StructureT = DiscreteExteriorCalculus> struct Space {
    * \param i Point index.
    * \return Point coordinates at index `i`.
    */
-  [[nodiscard]] core::Vec3 get_vec3(size_t i) const { return {x[i], y[i], z[i]}; }
+  [[nodiscard]] core::Vec3 get_vec3(size_t i) const {
+    return {x[i], y[i], z[i]};
+  }
 
   /**
    * \brief Overwrite a 3D point from `core::Vec3`.
    * \param i Point index.
    * \param v Replacement coordinate value.
    */
-  void set_vec3(size_t i, const core::Vec3 &v) {
+  void set_vec3(size_t i, const core::Vec3& v) {
     x[i] = v.x;
     y[i] = v.y;
     z[i] = v.z;
@@ -86,7 +90,7 @@ template <Structure StructureT = DiscreteExteriorCalculus> struct Space {
    * \brief Append a new point to all coordinate channels.
    * \param v Point to append.
    */
-  void push_point(const core::Vec3 &v) {
+  void push_point(const core::Vec3& v) {
     x.push_back(v.x);
     y.push_back(v.y);
     z.push_back(v.z);
@@ -96,33 +100,45 @@ template <Structure StructureT = DiscreteExteriorCalculus> struct Space {
    * \brief Immutable view of X coordinates.
    * \return Span over `x`.
    */
-  [[nodiscard]] std::span<const float> x_span() const { return x; }
+  [[nodiscard]] std::span<const float> x_span() const {
+    return x;
+  }
   /**
    * \brief Immutable view of Y coordinates.
    * \return Span over `y`.
    */
-  [[nodiscard]] std::span<const float> y_span() const { return y; }
+  [[nodiscard]] std::span<const float> y_span() const {
+    return y;
+  }
   /**
    * \brief Immutable view of Z coordinates.
    * \return Span over `z`.
    */
-  [[nodiscard]] std::span<const float> z_span() const { return z; }
+  [[nodiscard]] std::span<const float> z_span() const {
+    return z;
+  }
 
   /**
    * \brief Mutable view of X coordinates.
    * \return Mutable span over `x`.
    */
-  [[nodiscard]] std::span<float> x_span() { return x; }
+  [[nodiscard]] std::span<float> x_span() {
+    return x;
+  }
   /**
    * \brief Mutable view of Y coordinates.
    * \return Mutable span over `y`.
    */
-  [[nodiscard]] std::span<float> y_span() { return y; }
+  [[nodiscard]] std::span<float> y_span() {
+    return y;
+  }
   /**
    * \brief Mutable view of Z coordinates.
    * \return Mutable span over `z`.
    */
-  [[nodiscard]] std::span<float> z_span() { return z; }
+  [[nodiscard]] std::span<float> z_span() {
+    return z;
+  }
 
   /**
    * \brief Immutable grouped axis spans in X/Y/Z order.

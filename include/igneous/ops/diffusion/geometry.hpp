@@ -40,15 +40,14 @@ template <typename MeshT> struct DiffusionWorkspace {
  * \param coords Output coordinate vectors (`x,y,z`).
  */
 template <typename MeshT>
-void fill_coordinate_vectors(const MeshT &mesh,
-                             std::array<Eigen::VectorXf, 3> &coords) {
+void fill_coordinate_vectors(const MeshT& mesh, std::array<Eigen::VectorXf, 3>& coords) {
   const size_t n_verts = mesh.num_points();
   for (int d = 0; d < 3; ++d) {
     coords[d].resize(static_cast<int>(n_verts));
   }
 
   if constexpr (requires { mesh.structure.immersion_coords; }) {
-    const auto &immersion = mesh.structure.immersion_coords;
+    const auto& immersion = mesh.structure.immersion_coords;
     if (immersion.rows() == static_cast<int>(n_verts) && immersion.cols() >= 3) {
       for (size_t i = 0; i < n_verts; ++i) {
         const int idx = static_cast<int>(i);
@@ -75,8 +74,7 @@ void fill_coordinate_vectors(const MeshT &mesh,
  * \param coords Output coordinate vectors (`x,y,z`).
  */
 template <typename MeshT>
-void fill_data_coordinate_vectors(const MeshT &mesh,
-                                  std::array<Eigen::VectorXf, 3> &coords) {
+void fill_data_coordinate_vectors(const MeshT& mesh, std::array<Eigen::VectorXf, 3>& coords) {
   const size_t n_verts = mesh.num_points();
   for (int d = 0; d < 3; ++d) {
     coords[d].resize(static_cast<int>(n_verts));
@@ -102,29 +100,28 @@ void fill_data_coordinate_vectors(const MeshT &mesh,
  * \param gamma_out Output vector of pointwise gamma values.
  */
 template <typename MeshT>
-void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
+void carre_du_champ(const MeshT& mesh, Eigen::Ref<const Eigen::VectorXf> f,
                     Eigen::Ref<const Eigen::VectorXf> h, [[maybe_unused]] float bandwidth,
                     Eigen::Ref<Eigen::VectorXf> gamma_out) {
-  [[maybe_unused]] const int expected_size =
-      static_cast<int>(mesh.num_points());
+  [[maybe_unused]] const int expected_size = static_cast<int>(mesh.num_points());
   assert(gamma_out.size() == expected_size);
   gamma_out.setZero();
 
-  static_assert(requires {
-                  mesh.structure.markov_row_offsets;
-                  mesh.structure.markov_col_indices;
-                  mesh.structure.markov_values;
-                },
-                "carre_du_champ requires diffusion CSR storage.");
+  static_assert(
+      requires {
+        mesh.structure.markov_row_offsets;
+        mesh.structure.markov_col_indices;
+        mesh.structure.markov_values;
+      }, "carre_du_champ requires diffusion CSR storage.");
 
-  const auto &row_offsets = mesh.structure.markov_row_offsets;
-  const auto &col_indices = mesh.structure.markov_col_indices;
-  const auto &weights = mesh.structure.markov_values;
+  const auto& row_offsets = mesh.structure.markov_row_offsets;
+  const auto& col_indices = mesh.structure.markov_col_indices;
+  const auto& weights = mesh.structure.markov_values;
 
   assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
 
-  const float *f_data = f.data();
-  const float *h_data = h.data();
+  const float* f_data = f.data();
+  const float* h_data = h.data();
   Eigen::VectorXf means_f = Eigen::VectorXf::Zero(expected_size);
   Eigen::VectorXf means_h = Eigen::VectorXf::Zero(expected_size);
   const bool use_mean_centres = [&]() {
@@ -138,8 +135,8 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
     for (int i = 0; i < expected_size; ++i) {
       const int begin = row_offsets[static_cast<size_t>(i)];
       const int end = row_offsets[static_cast<size_t>(i) + 1];
-      const int *cols = col_indices.data() + begin;
-      const float *w = weights.data() + begin;
+      const int* cols = col_indices.data() + begin;
+      const float* w = weights.data() + begin;
       float mean_f = 0.0f;
       float mean_h = 0.0f;
       for (int idx = 0; idx < (end - begin); ++idx) {
@@ -155,8 +152,8 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
     const int begin = row_offsets[static_cast<size_t>(i)];
     const int end = row_offsets[static_cast<size_t>(i) + 1];
     const int count = end - begin;
-    const int *cols = col_indices.data() + begin;
-    const float *w = weights.data() + begin;
+    const int* cols = col_indices.data() + begin;
+    const float* w = weights.data() + begin;
     const float center_f = use_mean_centres ? means_f[i] : f_data[i];
     const float center_h = use_mean_centres ? means_h[i] : h_data[i];
 
@@ -194,23 +191,22 @@ void carre_du_champ(const MeshT &mesh, Eigen::Ref<const Eigen::VectorXf> f,
  * \param output Output scalar vector.
  */
 template <typename MeshT>
-void apply_markov_transition(const MeshT &mesh,
-                             Eigen::Ref<const Eigen::VectorXf> input,
+void apply_markov_transition(const MeshT& mesh, Eigen::Ref<const Eigen::VectorXf> input,
                              Eigen::Ref<Eigen::VectorXf> output) {
   const int expected_size = static_cast<int>(mesh.num_points());
   assert(input.size() == expected_size);
   assert(output.size() == expected_size);
 
-  static_assert(requires {
-                  mesh.structure.markov_row_offsets;
-                  mesh.structure.markov_col_indices;
-                  mesh.structure.markov_values;
-                },
-                "apply_markov_transition requires diffusion CSR storage.");
+  static_assert(
+      requires {
+        mesh.structure.markov_row_offsets;
+        mesh.structure.markov_col_indices;
+        mesh.structure.markov_values;
+      }, "apply_markov_transition requires diffusion CSR storage.");
 
-  const auto &row_offsets = mesh.structure.markov_row_offsets;
-  const auto &col_indices = mesh.structure.markov_col_indices;
-  const auto &weights = mesh.structure.markov_values;
+  const auto& row_offsets = mesh.structure.markov_row_offsets;
+  const auto& col_indices = mesh.structure.markov_col_indices;
+  const auto& weights = mesh.structure.markov_values;
 
   assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
   assert(input.data() != output.data());
@@ -220,7 +216,7 @@ void apply_markov_transition(const MeshT &mesh,
       (core::gpu::gpu_force_enabled() || expected_size >= core::gpu::gpu_min_rows());
   if (use_gpu) {
     if (core::gpu::apply_markov_transition(
-            static_cast<const void *>(&mesh.structure),
+            static_cast<const void*>(&mesh.structure),
             std::span<const int>(row_offsets.data(), row_offsets.size()),
             std::span<const int>(col_indices.data(), col_indices.size()),
             std::span<const float>(weights.data(), weights.size()),
@@ -230,15 +226,15 @@ void apply_markov_transition(const MeshT &mesh,
     }
   }
 
-  const float *input_data = input.data();
-  float *output_data = output.data();
+  const float* input_data = input.data();
+  float* output_data = output.data();
 
   for (int i = 0; i < expected_size; ++i) {
     const int begin = row_offsets[static_cast<size_t>(i)];
     const int end = row_offsets[static_cast<size_t>(i) + 1];
     const int count = end - begin;
-    const int *cols = col_indices.data() + begin;
-    const float *w = weights.data() + begin;
+    const int* cols = col_indices.data() + begin;
+    const float* w = weights.data() + begin;
 
     float acc = 0.0f;
     int idx = 0;
@@ -266,11 +262,9 @@ void apply_markov_transition(const MeshT &mesh,
  * \param workspace Scratch buffers reused across calls.
  */
 template <typename MeshT>
-void apply_markov_transition_steps(const MeshT &mesh,
-                                   Eigen::Ref<const Eigen::VectorXf> input,
-                                   int steps,
-                                   Eigen::Ref<Eigen::VectorXf> output,
-                                   DiffusionWorkspace<MeshT> &workspace) {
+void apply_markov_transition_steps(const MeshT& mesh, Eigen::Ref<const Eigen::VectorXf> input,
+                                   int steps, Eigen::Ref<Eigen::VectorXf> output,
+                                   DiffusionWorkspace<MeshT>& workspace) {
   const int expected_size = static_cast<int>(mesh.num_points());
   assert(input.size() == expected_size);
   assert(output.size() == expected_size);
@@ -285,26 +279,24 @@ void apply_markov_transition_steps(const MeshT &mesh,
                   mesh.structure.markov_col_indices;
                   mesh.structure.markov_values;
                 }) {
-    const auto &row_offsets = mesh.structure.markov_row_offsets;
-    const auto &col_indices = mesh.structure.markov_col_indices;
-    const auto &weights = mesh.structure.markov_values;
+    const auto& row_offsets = mesh.structure.markov_row_offsets;
+    const auto& col_indices = mesh.structure.markov_col_indices;
+    const auto& weights = mesh.structure.markov_values;
 
     assert(row_offsets.size() == static_cast<size_t>(expected_size) + 1);
     const long long row_step_work =
         static_cast<long long>(expected_size) * static_cast<long long>(steps);
     const bool use_gpu =
         core::compute_backend_from_env() == core::ComputeBackend::Gpu &&
-        (core::gpu::gpu_force_enabled() ||
-         expected_size >= core::gpu::gpu_min_rows() ||
+        (core::gpu::gpu_force_enabled() || expected_size >= core::gpu::gpu_min_rows() ||
          row_step_work >= core::gpu::gpu_min_row_steps());
     if (use_gpu) {
       if (core::gpu::apply_markov_transition_steps(
-              static_cast<const void *>(&mesh.structure),
+              static_cast<const void*>(&mesh.structure),
               std::span<const int>(row_offsets.data(), row_offsets.size()),
               std::span<const int>(col_indices.data(), col_indices.size()),
               std::span<const float>(weights.data(), weights.size()),
-              std::span<const float>(input.data(), static_cast<size_t>(expected_size)),
-              steps,
+              std::span<const float>(input.data(), static_cast<size_t>(expected_size)), steps,
               std::span<float>(output.data(), static_cast<size_t>(expected_size)))) {
         return;
       }
@@ -319,8 +311,8 @@ void apply_markov_transition_steps(const MeshT &mesh,
   workspace.ping = input;
   workspace.pong.resize(expected_size);
 
-  Eigen::VectorXf *src = &workspace.ping;
-  Eigen::VectorXf *dst = &workspace.pong;
+  Eigen::VectorXf* src = &workspace.ping;
+  Eigen::VectorXf* dst = &workspace.pong;
   for (int step = 0; step < steps; ++step) {
     apply_markov_transition(mesh, *src, *dst);
     std::swap(src, dst);
@@ -337,10 +329,8 @@ void apply_markov_transition_steps(const MeshT &mesh,
  * \param output Output scalar vector.
  */
 template <typename MeshT>
-void apply_markov_transition_steps(const MeshT &mesh,
-                                   Eigen::Ref<const Eigen::VectorXf> input,
-                                   int steps,
-                                   Eigen::Ref<Eigen::VectorXf> output) {
+void apply_markov_transition_steps(const MeshT& mesh, Eigen::Ref<const Eigen::VectorXf> input,
+                                   int steps, Eigen::Ref<Eigen::VectorXf> output) {
   DiffusionWorkspace<MeshT> workspace;
   apply_markov_transition_steps(mesh, input, steps, output, workspace);
 }
@@ -353,8 +343,8 @@ void apply_markov_transition_steps(const MeshT &mesh,
  * \return Symmetric 1-form Gram matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_1form_gram_matrix(const MeshT &mesh, float bandwidth,
-                                          GeometryWorkspace<MeshT> &workspace) {
+Eigen::MatrixXf compute_1form_gram_matrix(const MeshT& mesh, float bandwidth,
+                                          GeometryWorkspace<MeshT>& workspace) {
   const int n_basis = mesh.structure.eigen_basis.cols();
   const int n_total = n_basis * 3;
 
@@ -374,8 +364,8 @@ Eigen::MatrixXf compute_1form_gram_matrix(const MeshT &mesh, float bandwidth,
     }
   }
 
-  const auto &U = mesh.structure.eigen_basis;
-  const auto &mu = mesh.structure.mu;
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
 
   core::parallel_for_index(
       0, n_basis,
@@ -412,7 +402,7 @@ Eigen::MatrixXf compute_1form_gram_matrix(const MeshT &mesh, float bandwidth,
  * \return Symmetric 1-form Gram matrix.
  */
 template <typename MeshT>
-Eigen::MatrixXf compute_1form_gram_matrix(const MeshT &mesh, float bandwidth) {
+Eigen::MatrixXf compute_1form_gram_matrix(const MeshT& mesh, float bandwidth) {
   GeometryWorkspace<MeshT> workspace;
   return compute_1form_gram_matrix(mesh, bandwidth, workspace);
 }

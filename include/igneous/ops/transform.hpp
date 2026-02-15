@@ -13,7 +13,7 @@ namespace igneous::ops {
  * The largest axis extent is mapped to length `2.0`.
  * \param mesh Input/output space geometry.
  */
-template <typename StructureT> void normalize(data::Space<StructureT> &mesh) {
+template <typename StructureT> void normalize(data::Space<StructureT>& mesh) {
   const size_t n_verts = mesh.num_points();
   if (n_verts == 0) {
     return;

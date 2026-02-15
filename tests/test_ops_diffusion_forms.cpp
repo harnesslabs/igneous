@@ -8,26 +8,21 @@
 #include <igneous/ops/diffusion/forms.hpp>
 #include <igneous/ops/diffusion/spectral.hpp>
 
-static igneous::data::Space<igneous::data::DiffusionGeometry>
-make_torus_cloud(size_t n_points) {
-  using Mesh =
-      igneous::data::Space<igneous::data::DiffusionGeometry>;
+static igneous::data::Space<igneous::data::DiffusionGeometry> make_torus_cloud(size_t n_points) {
+  using Mesh = igneous::data::Space<igneous::data::DiffusionGeometry>;
   Mesh mesh;
   mesh.reserve(n_points);
 
   for (size_t i = 0; i < n_points; ++i) {
     const float u = static_cast<float>(i % 32) / 32.0f * 6.283185f;
-    const float v =
-        static_cast<float>(i / 32) / std::max<size_t>(1, n_points / 32) * 6.283185f;
+    const float v = static_cast<float>(i / 32) / std::max<size_t>(1, n_points / 32) * 6.283185f;
     const float R = 2.0f;
     const float r = 0.8f;
-    mesh.push_point(
-        {(R + r * std::cos(v)) * std::cos(u), (R + r * std::cos(v)) * std::sin(u),
-         r * std::sin(v)});
+    mesh.push_point({(R + r * std::cos(v)) * std::cos(u), (R + r * std::cos(v)) * std::sin(u),
+                     r * std::sin(v)});
   }
 
-  mesh.structure.build({mesh.x_span(), mesh.y_span(),
-                       mesh.z_span(), 24});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), 24});
   return mesh;
 }
 
@@ -72,7 +67,8 @@ TEST_CASE("Generic diffusion form operators are finite and shape-consistent") {
     CHECK(std::isfinite(evals2[i]));
   }
 
-  const auto harmonic_idx = igneous::ops::diffusion::extract_harmonic_mode_indices(evals2, 1e-2f, 3);
+  const auto harmonic_idx =
+      igneous::ops::diffusion::extract_harmonic_mode_indices(evals2, 1e-2f, 3);
   CHECK(!harmonic_idx.empty());
 }
 
@@ -84,8 +80,8 @@ TEST_CASE("Up-Laplacian(2) entry matches manual Schur-determinant assembly") {
   igneous::ops::diffusion::DiffusionFormWorkspace<decltype(mesh)> ws;
   const auto up2 = igneous::ops::diffusion::compute_up_laplacian_matrix(mesh, 2, n_coeff, ws);
 
-  const auto &U = mesh.structure.eigen_basis;
-  const auto &mu = mesh.structure.mu;
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
 
   igneous::ops::diffusion::ensure_gamma_coords(mesh, ws);
   igneous::ops::diffusion::ensure_gamma_mixed(mesh, n_coeff, ws);
@@ -96,8 +92,8 @@ TEST_CASE("Up-Laplacian(2) entry matches manual Schur-determinant assembly") {
   Eigen::VectorXf gamma_phi_phi(mesh.num_points());
   igneous::ops::diffusion::carre_du_champ(mesh, U.col(0), U.col(0), 0.0f, gamma_phi_phi);
 
-  const auto &row_combo = idx2[0];
-  const auto &col_combo = idx2[0];
+  const auto& row_combo = idx2[0];
+  const auto& col_combo = idx2[0];
   for (int p = 0; p < gamma_phi_phi.size(); ++p) {
     Eigen::Matrix2f Dm;
     Dm(0, 0) = ws.gamma_coords[row_combo[0]][col_combo[0]][p];

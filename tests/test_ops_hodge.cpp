@@ -8,8 +8,7 @@
 #include <igneous/ops/diffusion/hodge.hpp>
 #include <igneous/ops/diffusion/spectral.hpp>
 
-static igneous::data::Space<igneous::data::DiffusionGeometry>
-make_torus_cloud(size_t n_points) {
+static igneous::data::Space<igneous::data::DiffusionGeometry> make_torus_cloud(size_t n_points) {
   using Mesh = igneous::data::Space<igneous::data::DiffusionGeometry>;
   Mesh mesh;
   mesh.reserve(n_points);
@@ -25,8 +24,7 @@ make_torus_cloud(size_t n_points) {
     mesh.push_point({x, y, z});
   }
 
-  mesh.structure.build({mesh.x_span(), mesh.y_span(),
-                       mesh.z_span(), 24});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), 24});
   return mesh;
 }
 
@@ -59,12 +57,12 @@ TEST_CASE("Hodge operators produce finite spectrum and circular coordinates") {
     CHECK(std::isfinite(evals[i]));
   }
 
-  const auto theta_0 = igneous::ops::diffusion::compute_circular_coordinates(
-      mesh, evecs.col(0), 0.0f, 1.0f, 0);
-  const auto theta_1 = igneous::ops::diffusion::compute_circular_coordinates(
-      mesh, evecs.col(1), 0.0f, 1.0f, 1);
+  const auto theta_0 =
+      igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(0), 0.0f, 1.0f, 0);
+  const auto theta_1 =
+      igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(1), 0.0f, 1.0f, 1);
 
-  const auto check_theta = [&](const Eigen::VectorXf &theta) {
+  const auto check_theta = [&](const Eigen::VectorXf& theta) {
     CHECK(theta.size() == static_cast<int>(mesh.num_points()));
 
     float mean = 0.0f;

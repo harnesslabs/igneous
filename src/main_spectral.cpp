@@ -17,7 +17,7 @@
 using namespace igneous;
 using DiffusionMesh = data::Space<data::DiffusionGeometry>;
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   if (argc < 2) {
     return 1;
   }
@@ -29,8 +29,7 @@ int main(int argc, char **argv) {
   ops::normalize(mesh);
 
   const float bandwidth = 0.005f;
-  mesh.structure.build({mesh.x_span(), mesh.y_span(),
-                       mesh.z_span(), 32});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), 32});
 
   const int n_basis = 16;
   ops::diffusion::compute_eigenbasis(mesh, n_basis);
@@ -50,8 +49,7 @@ int main(int argc, char **argv) {
     const std::string out_dir = "output_spectral";
     std::filesystem::create_directory(out_dir);
 
-    const int to_export =
-        std::min(4, static_cast<int>(mesh.structure.eigen_basis.cols()));
+    const int to_export = std::min(4, static_cast<int>(mesh.structure.eigen_basis.cols()));
     for (int i = 0; i < to_export; ++i) {
       const Eigen::VectorXf phi = mesh.structure.eigen_basis.col(i);
       std::vector<float> field(static_cast<size_t>(phi.size()));

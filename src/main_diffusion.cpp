@@ -15,7 +15,7 @@
 using namespace igneous;
 using DiffusionMesh = data::Space<data::DiffusionGeometry>;
 
-static std::vector<float> to_std_vector(const Eigen::VectorXf &v) {
+static std::vector<float> to_std_vector(const Eigen::VectorXf& v) {
   std::vector<float> out(static_cast<size_t>(v.size()));
   for (int i = 0; i < v.size(); ++i) {
     out[static_cast<size_t>(i)] = v[i];
@@ -23,7 +23,7 @@ static std::vector<float> to_std_vector(const Eigen::VectorXf &v) {
   return out;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   if (argc < 2) {
     std::cout << "Usage: ./igneous-diffusion <obj_file>\n";
     return 1;
@@ -41,12 +41,11 @@ int main(int argc, char **argv) {
   io::load_obj(mesh, input_path);
   ops::normalize(mesh);
 
-  mesh.structure.build({mesh.x_span(), mesh.y_span(),
-                       mesh.z_span(), 32});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), 32});
 
   const int n = static_cast<int>(mesh.num_points());
-  std::cout << "Markov Chain P: " << n << "x" << n << " ("
-            << mesh.structure.markov_values.size() << " nnz)\n";
+  std::cout << "Markov Chain P: " << n << "x" << n << " (" << mesh.structure.markov_values.size()
+            << " nnz)\n";
 
   auto density_field = to_std_vector(mesh.structure.mu);
   if (!bench_mode) {

@@ -246,7 +246,7 @@ struct DiscreteExteriorCalculus {
       return;
     }
 
-    const auto gather_unique_neighbors = [&](uint32_t v, std::vector<uint32_t> &neighbors) {
+    const auto gather_unique_neighbors = [&](uint32_t v, std::vector<uint32_t>& neighbors) {
       neighbors.clear();
       const uint32_t face_begin = vertex_face_offsets[v];
       const uint32_t face_end = vertex_face_offsets[v + 1];

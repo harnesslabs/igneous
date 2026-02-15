@@ -23,8 +23,7 @@ using igneous::data::Space;
  * \param mesh Destination space to overwrite.
  * \param filename OBJ file path.
  */
-template <typename StructureT>
-void load_obj(Space<StructureT> &mesh, const std::string &filename) {
+template <typename StructureT> void load_obj(Space<StructureT>& mesh, const std::string& filename) {
   std::ifstream file(filename);
   if (!file.is_open()) {
     std::cerr << "Failed to open " << filename << "\n";
@@ -63,8 +62,7 @@ void load_obj(Space<StructureT> &mesh, const std::string &filename) {
       }
     }
   }
-  std::cout << "[IO] Loaded " << filename << " (" << mesh.num_points()
-            << " verts)\n";
+  std::cout << "[IO] Loaded " << filename << " (" << mesh.num_points() << " verts)\n";
 }
 
 } // namespace igneous::io

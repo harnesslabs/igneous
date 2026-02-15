@@ -7,9 +7,8 @@
 #include <igneous/data/structures/diffusion_geometry.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>
 
-static Eigen::VectorXf csr_markov_reference(
-    const igneous::data::DiffusionGeometry &topo,
-    Eigen::Ref<const Eigen::VectorXf> input) {
+static Eigen::VectorXf csr_markov_reference(const igneous::data::DiffusionGeometry& topo,
+                                            Eigen::Ref<const Eigen::VectorXf> input) {
   const int n = static_cast<int>(topo.markov_row_offsets.size()) - 1;
   Eigen::VectorXf output = Eigen::VectorXf::Zero(n);
 
@@ -69,19 +68,16 @@ TEST_CASE("DiffusionGeometry produces stochastic Markov matrix and valid measure
 }
 
 TEST_CASE("Diffusion CSR markov step matches sparse matrix product") {
-  using DiffusionMesh =
-      igneous::data::Space<igneous::data::DiffusionGeometry>;
+  using DiffusionMesh = igneous::data::Space<igneous::data::DiffusionGeometry>;
 
   DiffusionMesh mesh;
   mesh.reserve(24);
   for (int i = 0; i < 24; ++i) {
     const float t = static_cast<float>(i) / 24.0f;
-    mesh.push_point(
-        {std::cos(t * 6.283185f), std::sin(t * 6.283185f), 0.5f * t});
+    mesh.push_point({std::cos(t * 6.283185f), std::sin(t * 6.283185f), 0.5f * t});
   }
 
-  mesh.structure.build({mesh.x_span(), mesh.y_span(),
-                       mesh.z_span(), 8});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), 8});
 
   const int n = static_cast<int>(mesh.num_points());
   Eigen::VectorXf u = Eigen::VectorXf::LinSpaced(n, -1.0f, 1.0f);
@@ -96,19 +92,16 @@ TEST_CASE("Diffusion CSR markov step matches sparse matrix product") {
 }
 
 TEST_CASE("Diffusion multi-step markov matches repeated single steps") {
-  using DiffusionMesh =
-      igneous::data::Space<igneous::data::DiffusionGeometry>;
+  using DiffusionMesh = igneous::data::Space<igneous::data::DiffusionGeometry>;
 
   DiffusionMesh mesh;
   mesh.reserve(24);
   for (int i = 0; i < 24; ++i) {
     const float t = static_cast<float>(i) / 24.0f;
-    mesh.push_point(
-        {std::cos(t * 6.283185f), std::sin(t * 6.283185f), 0.5f * t});
+    mesh.push_point({std::cos(t * 6.283185f), std::sin(t * 6.283185f), 0.5f * t});
   }
 
-  mesh.structure.build({mesh.x_span(), mesh.y_span(),
-                       mesh.z_span(), 8});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), 8});
 
   const int n = static_cast<int>(mesh.num_points());
   Eigen::VectorXf u0 = Eigen::VectorXf::LinSpaced(n, -1.0f, 1.0f);
