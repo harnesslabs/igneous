@@ -15,7 +15,7 @@
 #include <igneous/ops/diffusion/basis.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>
 
-namespace igneous::ops {
+namespace igneous::ops::diffusion {
 
 template <typename MeshT> struct DiffusionFormWorkspace {
   std::array<Eigen::VectorXf, 3> coords;
@@ -86,7 +86,7 @@ void ensure_gamma_coords(const MeshT &mesh, DiffusionFormWorkspace<MeshT> &works
   }
 
   fill_coordinate_vectors(mesh, workspace.coords);
-  const int n = static_cast<int>(mesh.geometry.num_points());
+  const int n = static_cast<int>(mesh.num_points());
   for (int a = 0; a < 3; ++a) {
     for (int b = a; b < 3; ++b) {
       workspace.gamma_coords[a][b].resize(n);
@@ -103,8 +103,8 @@ void ensure_gamma_coords(const MeshT &mesh, DiffusionFormWorkspace<MeshT> &works
 template <typename MeshT>
 void ensure_gamma_mixed(const MeshT &mesh, int n_coefficients,
                         DiffusionFormWorkspace<MeshT> &workspace) {
-  const auto &U = mesh.topology.eigen_basis;
-  const int n = static_cast<int>(mesh.geometry.num_points());
+  const auto &U = mesh.structure.eigen_basis;
+  const int n = static_cast<int>(mesh.num_points());
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
 
   if (workspace.gamma_mixed_cols >= n1 && workspace.gamma_mixed[0].rows() == n) {
@@ -156,14 +156,14 @@ template <typename MeshT>
 Eigen::MatrixXf compute_kform_gram_matrix(const MeshT &mesh, int k,
                                           int n_coefficients,
                                           DiffusionFormWorkspace<MeshT> &workspace) {
-  const auto &U = mesh.topology.eigen_basis;
-  const auto &mu = mesh.topology.mu;
+  const auto &U = mesh.structure.eigen_basis;
+  const auto &mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
   const auto compounds = compute_compound_determinants(mesh, k, workspace);
   const int Ck = std::max(1, compounds.n_components);
   Eigen::MatrixXf G = Eigen::MatrixXf::Zero(n1 * Ck, n1 * Ck);
 
-  const int n = static_cast<int>(mesh.geometry.num_points());
+  const int n = static_cast<int>(mesh.num_points());
   Eigen::ArrayXf weights(n);
 
   if (k == 0) {
@@ -217,8 +217,8 @@ Eigen::MatrixXf compute_weak_exterior_derivative(
     return Eigen::MatrixXf();
   }
 
-  const auto &U = mesh.topology.eigen_basis;
-  const auto &mu = mesh.topology.mu;
+  const auto &U = mesh.structure.eigen_basis;
+  const auto &mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
   ensure_gamma_mixed(mesh, n1, workspace);
 
@@ -242,7 +242,7 @@ Eigen::MatrixXf compute_weak_exterior_derivative(
   const int Ckp1 = static_cast<int>(kp1.idx_kp1.size());
 
   Eigen::MatrixXf D = Eigen::MatrixXf::Zero(n1 * Ckp1, n1 * Ck);
-  const int n = static_cast<int>(mesh.geometry.num_points());
+  const int n = static_cast<int>(mesh.num_points());
 
   for (int I = 0; I < n1; ++I) {
     for (int i = 0; i < n1; ++i) {
@@ -362,10 +362,10 @@ Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT &mesh, int k,
     return Eigen::MatrixXf();
   }
 
-  const auto &U = mesh.topology.eigen_basis;
-  const auto &mu = mesh.topology.mu;
+  const auto &U = mesh.structure.eigen_basis;
+  const auto &mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
-  const int n = static_cast<int>(mesh.geometry.num_points());
+  const int n = static_cast<int>(mesh.num_points());
   ensure_gamma_coords(mesh, workspace);
   ensure_gamma_mixed(mesh, n1, workspace);
 
@@ -457,7 +457,7 @@ Eigen::MatrixXf compute_down_laplacian_matrix(
     DiffusionFormWorkspace<MeshT> &workspace) {
   if (k <= 0) {
     const int Ck = std::max(1, binomial_coeff(ambient_dim_3d(), std::max(0, k)));
-    const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(mesh.topology.eigen_basis.cols())));
+    const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(mesh.structure.eigen_basis.cols())));
     return Eigen::MatrixXf::Zero(n1 * Ck, n1 * Ck);
   }
 
@@ -548,7 +548,7 @@ template <typename MeshT>
 Eigen::MatrixXf coefficients_to_pointwise(const MeshT &mesh,
                                           const Eigen::VectorXf &coeffs, int k,
                                           int n_coefficients) {
-  const auto &U = mesh.topology.eigen_basis;
+  const auto &U = mesh.structure.eigen_basis;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
   const int Ck = std::max(1, binomial_coeff(ambient_dim_3d(), k));
   if (coeffs.size() != n1 * Ck) {
@@ -564,8 +564,8 @@ template <typename MeshT>
 Eigen::VectorXf project_pointwise_to_coefficients(const MeshT &mesh,
                                                   const Eigen::MatrixXf &pointwise,
                                                   int n_coefficients) {
-  const auto &U = mesh.topology.eigen_basis;
-  const auto &mu = mesh.topology.mu;
+  const auto &U = mesh.structure.eigen_basis;
+  const auto &mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
 
   if (pointwise.rows() != U.rows()) {
@@ -607,4 +607,4 @@ pointwise_2form_to_dual_vectors(const Eigen::MatrixXf &pointwise_2form) {
   return out;
 }
 
-} // namespace igneous::ops
+} // namespace igneous::ops::diffusion

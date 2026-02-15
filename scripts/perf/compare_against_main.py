@@ -118,7 +118,7 @@ def parse_benchmark_text(path: Path) -> Dict[str, float]:
             flow_ms = float(g.group(4))
             frame_ms = topo_ms + curv_ms + flow_ms
 
-            rows.setdefault(f"bench_geometry_topology_ms/{grid}", []).append(to_ns(topo_ms, "ms"))
+            rows.setdefault(f"bench_geometry_structure_ms/{grid}", []).append(to_ns(topo_ms, "ms"))
             rows.setdefault(f"bench_geometry_curvature_ms/{grid}", []).append(to_ns(curv_ms, "ms"))
             rows.setdefault(f"bench_geometry_flow_ms/{grid}", []).append(to_ns(flow_ms, "ms"))
             rows.setdefault(f"bench_geometry_frame_ms/{grid}", []).append(to_ns(frame_ms, "ms"))

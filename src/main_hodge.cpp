@@ -11,14 +11,14 @@
 #include <vector>
 
 #include <igneous/core/algebra.hpp>
-#include <igneous/data/mesh.hpp>
+#include <igneous/data/space.hpp>
 #include <igneous/io/exporter.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>
 #include <igneous/ops/diffusion/hodge.hpp>
 #include <igneous/ops/diffusion/spectral.hpp>
 
 using namespace igneous;
-using DiffusionMesh = data::Mesh<core::Euclidean3D, data::DiffusionTopology>;
+using DiffusionMesh = data::Space<data::DiffusionGeometry>;
 
 struct Config {
   std::string input_csv;
@@ -148,7 +148,7 @@ static bool parse_args(int argc, char **argv, Config &cfg) {
 static void generate_torus(DiffusionMesh &mesh, size_t n_points, float major_radius,
                            float minor_radius, uint32_t seed) {
   mesh.clear();
-  mesh.geometry.reserve(n_points);
+  mesh.reserve(n_points);
 
   std::mt19937 gen(seed);
   std::uniform_real_distribution<float> dist(0.0f, 6.28318530718f);
@@ -159,7 +159,7 @@ static void generate_torus(DiffusionMesh &mesh, size_t n_points, float major_rad
     const float x = (major_radius + minor_radius * std::cos(v)) * std::cos(u);
     const float y = (major_radius + minor_radius * std::cos(v)) * std::sin(u);
     const float z = minor_radius * std::sin(v);
-    mesh.geometry.push_point({x, y, z});
+    mesh.push_point({x, y, z});
   }
 }
 
@@ -190,18 +190,18 @@ static bool load_point_cloud_csv(const std::string &filename, DiffusionMesh &mes
     if (!(iss >> x >> y >> z)) {
       continue;
     }
-    mesh.geometry.push_point({x, y, z});
+    mesh.push_point({x, y, z});
   }
 
-  return mesh.geometry.num_points() > 0;
+  return mesh.num_points() > 0;
 }
 
 static void write_points_csv(const std::string &filename, const DiffusionMesh &mesh) {
   std::ofstream file(filename);
   file << "x,y,z\n";
-  const size_t n = mesh.geometry.num_points();
+  const size_t n = mesh.num_points();
   for (size_t i = 0; i < n; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     file << p.x << "," << p.y << "," << p.z << "\n";
   }
 }
@@ -237,20 +237,20 @@ static void write_harmonic_coeffs_csv(const std::string &filename,
 static std::vector<core::Vec3>
 reconstruct_harmonic_ambient(const DiffusionMesh &mesh,
                              const Eigen::VectorXf &coeffs) {
-  const size_t n_verts = mesh.geometry.num_points();
-  const int n_basis = mesh.topology.eigen_basis.cols();
-  const auto &U = mesh.topology.eigen_basis;
+  const size_t n_verts = mesh.num_points();
+  const int n_basis = mesh.structure.eigen_basis.cols();
+  const auto &U = mesh.structure.eigen_basis;
 
   std::array<Eigen::VectorXf, 3> data_coords;
   std::array<Eigen::VectorXf, 3> immersion_coords;
-  ops::fill_data_coordinate_vectors(mesh, data_coords);
-  ops::fill_coordinate_vectors(mesh, immersion_coords);
+  ops::diffusion::fill_data_coordinate_vectors(mesh, data_coords);
+  ops::diffusion::fill_coordinate_vectors(mesh, immersion_coords);
 
   std::array<std::array<Eigen::VectorXf, 3>, 3> gamma_data_imm{};
   for (int a = 0; a < 3; ++a) {
     for (int b = 0; b < 3; ++b) {
       gamma_data_imm[a][b].resize(static_cast<int>(n_verts));
-      ops::carre_du_champ(mesh, data_coords[a], immersion_coords[b], 0.0f,
+      ops::diffusion::carre_du_champ(mesh, data_coords[a], immersion_coords[b], 0.0f,
                           gamma_data_imm[a][b]);
     }
   }
@@ -283,14 +283,14 @@ reconstruct_harmonic_ambient(const DiffusionMesh &mesh,
 
 static double orientation_score(const DiffusionMesh &mesh,
                                 const std::vector<core::Vec3> &field) {
-  const size_t n_verts = mesh.geometry.num_points();
+  const size_t n_verts = mesh.num_points();
   if (n_verts == 0) {
     return 0.0;
   }
 
   double accum = 0.0;
   for (size_t i = 0; i < n_verts; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     const auto v = field[i];
     accum += static_cast<double>(p.x) * static_cast<double>(v.x) +
              static_cast<double>(p.y) * static_cast<double>(v.y) +
@@ -321,7 +321,7 @@ static void export_vector_field(const std::string &filename,
                                 const DiffusionMesh &mesh,
                                 const std::vector<core::Vec3> &vectors) {
   std::ofstream file(filename);
-  const size_t n = mesh.geometry.num_points();
+  const size_t n = mesh.num_points();
 
   file << "ply\nformat ascii 1.0\n";
   file << "element vertex " << n << "\n";
@@ -330,7 +330,7 @@ static void export_vector_field(const std::string &filename,
   file << "end_header\n";
 
   for (size_t i = 0; i < n; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     const auto v = vectors[i];
     file << p.x << " " << p.y << " " << p.z << " " << v.x << " " << v.y
          << " " << v.z << "\n";
@@ -349,9 +349,9 @@ static void write_harmonic_ambient_csv(const std::string &filename,
   }
   file << "\n";
 
-  const size_t n = mesh.geometry.num_points();
+  const size_t n = mesh.num_points();
   for (size_t i = 0; i < n; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     file << p.x << "," << p.y << "," << p.z;
     for (size_t form = 0; form < fields.size(); ++form) {
       const auto v = fields[form][i];
@@ -367,9 +367,9 @@ static void write_circular_csv(const std::string &filename,
                                const Eigen::VectorXf &theta_1) {
   std::ofstream file(filename);
   file << "x,y,z,theta_0,theta_1\n";
-  const size_t n = mesh.geometry.num_points();
+  const size_t n = mesh.num_points();
   for (size_t i = 0; i < n; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     const int idx = static_cast<int>(i);
     file << p.x << "," << p.y << "," << p.z << "," << theta_0[idx] << ","
          << theta_1[idx] << "\n";
@@ -409,26 +409,26 @@ int main(int argc, char **argv) {
     generate_torus(mesh, cfg.n_points, cfg.major_radius, cfg.minor_radius, cfg.seed);
   }
 
-  mesh.topology.build({mesh.geometry.x_span(),
-                       mesh.geometry.y_span(),
-                       mesh.geometry.z_span(),
+  mesh.structure.build({mesh.x_span(),
+                       mesh.y_span(),
+                       mesh.z_span(),
                        cfg.k_neighbors,
                        cfg.knn_bandwidth,
                        cfg.bandwidth_variability,
                        cfg.c,
                        true});
 
-  ops::compute_eigenbasis(mesh, cfg.n_basis);
+  ops::diffusion::compute_eigenbasis(mesh, cfg.n_basis);
 
-  ops::GeometryWorkspace<DiffusionMesh> geom_ws;
-  const auto G = ops::compute_1form_gram_matrix(mesh, 0.0f, geom_ws);
+  ops::diffusion::GeometryWorkspace<DiffusionMesh> geom_ws;
+  const auto G = ops::diffusion::compute_1form_gram_matrix(mesh, 0.0f, geom_ws);
 
-  ops::HodgeWorkspace<DiffusionMesh> hodge_ws;
-  const auto D_weak = ops::compute_weak_exterior_derivative(mesh, 0.0f, hodge_ws);
-  const auto E_up = ops::compute_curl_energy_matrix(mesh, 0.0f, hodge_ws);
+  ops::diffusion::HodgeWorkspace<DiffusionMesh> hodge_ws;
+  const auto D_weak = ops::diffusion::compute_weak_exterior_derivative(mesh, 0.0f, hodge_ws);
+  const auto E_up = ops::diffusion::compute_curl_energy_matrix(mesh, 0.0f, hodge_ws);
 
-  const auto laplacian = ops::compute_hodge_laplacian_matrix(D_weak, E_up);
-  auto [evals, evecs] = ops::compute_hodge_spectrum(laplacian, G);
+  const auto laplacian = ops::diffusion::compute_hodge_laplacian_matrix(D_weak, E_up);
+  auto [evals, evecs] = ops::diffusion::compute_hodge_spectrum(laplacian, G);
   if (evals.size() == 0 || evecs.cols() < 2) {
     std::cerr << "Hodge spectrum solve failed.\n";
     return 1;
@@ -445,10 +445,10 @@ int main(int argc, char **argv) {
 
   std::complex<float> selected_eval_0(0.0f, 0.0f);
   std::complex<float> selected_eval_1(0.0f, 0.0f);
-  const auto theta_0 = ops::compute_circular_coordinates(
+  const auto theta_0 = ops::diffusion::compute_circular_coordinates(
       mesh, evecs.col(0), 0.0f, cfg.circular_lambda, cfg.circular_mode_0,
       &selected_eval_0);
-  const auto theta_1 = ops::compute_circular_coordinates(
+  const auto theta_1 = ops::diffusion::compute_circular_coordinates(
       mesh, evecs.col(1), 0.0f, cfg.circular_lambda, cfg.circular_mode_1,
       &selected_eval_1);
 

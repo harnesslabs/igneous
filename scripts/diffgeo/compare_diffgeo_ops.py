@@ -314,13 +314,13 @@ def render_markdown(payload: dict[str, Any]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Compare diffusion topology parity outputs")
+    parser = argparse.ArgumentParser(description="Compare diffusion geometry parity outputs")
     parser.add_argument("--reference-root", required=True)
     parser.add_argument("--cpp-root", required=True)
     parser.add_argument("--datasets", default="torus,sphere")
     parser.add_argument("--output-markdown", required=True)
     parser.add_argument("--output-json", required=True)
-    parser.add_argument("--label", default="Diffusion topology parity")
+    parser.add_argument("--label", default="Diffusion geometry parity")
     parser.add_argument("--previous-json", default="")
     parser.add_argument("--gate-improvement", type=float, default=0.20)
     parser.add_argument("--rcond", type=float, default=1e-10)

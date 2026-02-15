@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-  echo "usage: $0 <path-to-igneous-diffusion-topology>" >&2
+  echo "usage: $0 <path-to-igneous-diffusion-geometry>" >&2
   exit 2
 fi
 

@@ -6,11 +6,11 @@
 #include <cmath>
 #include <cstdlib>
 #include <igneous/core/parallel.hpp>
-#include <igneous/data/mesh.hpp>
+#include <igneous/data/space.hpp>
 #include <iostream>
 #include <type_traits>
 
-namespace igneous::ops {
+namespace igneous::ops::diffusion {
 
 class MarkovCsrMatProd {
 public:
@@ -226,18 +226,16 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
               << " eigenfunctions...\n";
   }
 
-  const int n = [&]() {
-    if constexpr (requires { mesh.topology.markov_row_offsets; }) {
-      if (mesh.topology.markov_row_offsets.empty()) {
-        return 0;
-      }
-      return static_cast<int>(mesh.topology.markov_row_offsets.size() - 1);
-    } else if constexpr (requires { mesh.topology.P; }) {
-      return static_cast<int>(mesh.topology.P.rows());
-    } else {
-      return 0;
-    }
-  }();
+  static_assert(requires {
+                  mesh.structure.markov_row_offsets;
+                  mesh.structure.markov_col_indices;
+                  mesh.structure.markov_values;
+                },
+                "compute_eigenbasis requires markov CSR arrays.");
+
+  const int n = mesh.structure.markov_row_offsets.empty()
+                    ? 0
+                    : static_cast<int>(mesh.structure.markov_row_offsets.size() - 1);
 
   const auto solve_with_op = [&](auto &op) {
     using OpType = std::decay_t<decltype(op)>;
@@ -260,25 +258,25 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
       nconv = fallback.compute(Spectra::SortRule::LargestReal);
 
       if (fallback.info() == Spectra::CompInfo::Successful) {
-        mesh.topology.eigen_basis = fallback.eigenvectors(nconv).real();
+        mesh.structure.eigen_basis = fallback.eigenvectors(nconv).real();
         if (verbose) {
           std::cout << "[Spectral] Converged! Found " << nconv
                     << " eigenvectors. Basis shape: "
-                    << mesh.topology.eigen_basis.rows() << "x"
-                    << mesh.topology.eigen_basis.cols() << "\n";
+                    << mesh.structure.eigen_basis.rows() << "x"
+                    << mesh.structure.eigen_basis.cols() << "\n";
         }
         return;
       }
     }
 
     if (eigs.info() == Spectra::CompInfo::Successful) {
-      mesh.topology.eigen_basis = eigs.eigenvectors(nconv).real();
+      mesh.structure.eigen_basis = eigs.eigenvectors(nconv).real();
 
       if (verbose) {
         std::cout << "[Spectral] Converged! Found " << nconv
                   << " eigenvectors. Basis shape: "
-                  << mesh.topology.eigen_basis.rows() << "x"
-                  << mesh.topology.eigen_basis.cols() << "\n";
+                  << mesh.structure.eigen_basis.rows() << "x"
+                  << mesh.structure.eigen_basis.cols() << "\n";
       }
       return;
     }
@@ -289,93 +287,79 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
   };
 
   if (n <= 1) {
-    mesh.topology.eigen_basis =
+    mesh.structure.eigen_basis =
         Eigen::MatrixXf::Ones(std::max(1, n), std::max(1, n));
     return;
   }
 
   if constexpr (requires {
-                  mesh.topology.markov_row_offsets;
-                  mesh.topology.markov_col_indices;
-                  mesh.topology.markov_values;
+                  mesh.structure.symmetric_row_offsets;
+                  mesh.structure.symmetric_col_indices;
+                  mesh.structure.symmetric_values;
+                  mesh.structure.symmetric_row_sums;
                 }) {
-    if constexpr (requires {
-                    mesh.topology.symmetric_row_offsets;
-                    mesh.topology.symmetric_col_indices;
-                    mesh.topology.symmetric_values;
-                    mesh.topology.symmetric_row_sums;
-                  }) {
-      const auto &sym_row_offsets = mesh.topology.symmetric_row_offsets;
-      const auto &sym_col_indices = mesh.topology.symmetric_col_indices;
-      const auto &sym_values = mesh.topology.symmetric_values;
-      const auto &row_sums = mesh.topology.symmetric_row_sums;
-      if (!sym_row_offsets.empty() &&
-          static_cast<int>(sym_row_offsets.size()) == n + 1 &&
-          row_sums.size() == n) {
-        const int k_eval = std::max(1, std::min(n_eigenvectors, std::max(1, n - 1)));
-        const int full_ncv = std::min(n, std::max(2 * k_eval + 1, 20));
-        const bool try_compact = k_eval >= 32;
-        const int compact_ncv =
-            try_compact ? std::min(n, std::max(k_eval + 16, 20)) : full_ncv;
+    const auto &sym_row_offsets = mesh.structure.symmetric_row_offsets;
+    const auto &sym_col_indices = mesh.structure.symmetric_col_indices;
+    const auto &sym_values = mesh.structure.symmetric_values;
+    const auto &row_sums = mesh.structure.symmetric_row_sums;
+    if (!sym_row_offsets.empty() &&
+        static_cast<int>(sym_row_offsets.size()) == n + 1 &&
+        row_sums.size() == n) {
+      const int k_eval = std::max(1, std::min(n_eigenvectors, std::max(1, n - 1)));
+      const int full_ncv = std::min(n, std::max(2 * k_eval + 1, 20));
+      const bool try_compact = k_eval >= 32;
+      const int compact_ncv =
+          try_compact ? std::min(n, std::max(k_eval + 16, 20)) : full_ncv;
 
-        Eigen::VectorXf inv_sqrt_rows(n);
-        for (int i = 0; i < n; ++i) {
-          inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
+      Eigen::VectorXf inv_sqrt_rows(n);
+      for (int i = 0; i < n; ++i) {
+        inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
+      }
+
+      NormalizedSymmetricKernelCsrMatProd op(sym_row_offsets, sym_col_indices,
+                                             sym_values, inv_sqrt_rows, n);
+      const auto solve_symmetric = [&](int ncv) -> bool {
+        Spectra::SymEigsSolver<NormalizedSymmetricKernelCsrMatProd> eigs(op,
+                                                                          k_eval,
+                                                                          ncv);
+        eigs.init();
+        const int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
+        if (eigs.info() != Spectra::CompInfo::Successful || nconv <= 0) {
+          return false;
         }
 
-        NormalizedSymmetricKernelCsrMatProd op(sym_row_offsets, sym_col_indices,
-                                               sym_values, inv_sqrt_rows, n);
-        const auto solve_symmetric = [&](int ncv) -> bool {
-          Spectra::SymEigsSolver<NormalizedSymmetricKernelCsrMatProd> eigs(op,
-                                                                            k_eval,
-                                                                            ncv);
-          eigs.init();
-          const int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
-          if (eigs.info() != Spectra::CompInfo::Successful || nconv <= 0) {
-            return false;
-          }
-
-          Eigen::MatrixXf basis = eigs.eigenvectors(nconv);
-          basis = basis.array().colwise() * inv_sqrt_rows.array();
-          if (std::abs(basis(0, 0)) > 1e-12f) {
-            basis /= basis(0, 0);
-          }
-          mesh.topology.eigen_basis = basis;
-
-          if (verbose) {
-            std::cout << "[Spectral] Converged! Found " << nconv
-                      << " eigenvectors. Basis shape: "
-                      << mesh.topology.eigen_basis.rows() << "x"
-                      << mesh.topology.eigen_basis.cols() << "\n";
-          }
-          return true;
-        };
-
-        if ((try_compact && solve_symmetric(compact_ncv)) ||
-            solve_symmetric(full_ncv)) {
-          return;
+        Eigen::MatrixXf basis = eigs.eigenvectors(nconv);
+        basis = basis.array().colwise() * inv_sqrt_rows.array();
+        if (std::abs(basis(0, 0)) > 1e-12f) {
+          basis /= basis(0, 0);
         }
+        mesh.structure.eigen_basis = basis;
 
         if (verbose) {
-          std::cerr << "[Spectral] Symmetric-kernel solve failed, falling back to "
-                       "generic solver.\n";
+          std::cout << "[Spectral] Converged! Found " << nconv
+                    << " eigenvectors. Basis shape: "
+                    << mesh.structure.eigen_basis.rows() << "x"
+                    << mesh.structure.eigen_basis.cols() << "\n";
         }
+        return true;
+      };
+
+      if ((try_compact && solve_symmetric(compact_ncv)) ||
+          solve_symmetric(full_ncv)) {
+        return;
+      }
+
+      if (verbose) {
+        std::cerr << "[Spectral] Symmetric-kernel solve failed, falling back to "
+                     "generic solver.\n";
       }
     }
-
-    MarkovCsrMatProd fallback_op(mesh.topology.markov_row_offsets,
-                                 mesh.topology.markov_col_indices,
-                                 mesh.topology.markov_values, n);
-    solve_with_op(fallback_op);
-  } else if constexpr (requires { mesh.topology.P; }) {
-    const auto &P = mesh.topology.P;
-    Spectra::SparseGenMatProd<float> op(P);
-    solve_with_op(op);
-  } else {
-    static_assert(
-        requires { mesh.topology.P; },
-        "compute_eigenbasis requires markov CSR arrays or sparse matrix P.");
   }
+
+  MarkovCsrMatProd fallback_op(mesh.structure.markov_row_offsets,
+                               mesh.structure.markov_col_indices,
+                               mesh.structure.markov_values, n);
+  solve_with_op(fallback_op);
 }
 
-} // namespace igneous::ops
+} // namespace igneous::ops::diffusion

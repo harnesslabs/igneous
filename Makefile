@@ -1,4 +1,4 @@
-.PHONY: all debug release build clean test test-all test-algebra test-topology test-ops bench bench-memory bench-geometry bench-dod bench-deep run-mesh run-diffusion run-spectral run-hodge
+.PHONY: all debug release build clean test test-all test-algebra test-structure test-ops bench bench-memory bench-geometry bench-dod bench-deep run-mesh run-diffusion run-spectral run-hodge
 
 all: build
 
@@ -15,7 +15,7 @@ clean:
 	rm -rf build
 
 test: debug
-	cmake --build build --target test_algebra test_topology_triangle test_topology_diffusion test_ops_curvature_flow test_ops_spectral_geometry test_ops_hodge test_io_meshes
+	cmake --build build --target test_algebra test_structure_dec test_structure_diffusion_geometry test_ops_curvature_flow test_ops_spectral_geometry test_ops_hodge test_io_meshes
 	ctest --test-dir build --output-on-failure --verbose
 
 test-all: test
@@ -24,10 +24,10 @@ test-algebra: debug
 	cmake --build build --target test_algebra
 	./build/test_algebra
 
-test-topology: debug
-	cmake --build build --target test_topology_triangle test_topology_diffusion
-	./build/test_topology_triangle
-	./build/test_topology_diffusion
+test-structure: debug
+	cmake --build build --target test_structure_dec test_structure_diffusion_geometry
+	./build/test_structure_dec
+	./build/test_structure_diffusion_geometry
 
 test-ops: debug
 	cmake --build build --target test_ops_curvature_flow test_ops_spectral_geometry test_ops_hodge

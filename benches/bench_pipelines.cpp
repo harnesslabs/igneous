@@ -12,7 +12,7 @@
 #include <vector>
 
 #include <igneous/core/algebra.hpp>
-#include <igneous/data/mesh.hpp>
+#include <igneous/data/space.hpp>
 #include <igneous/io/importer.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>
 #include <igneous/ops/diffusion/hodge.hpp>
@@ -20,7 +20,7 @@
 #include <igneous/ops/transform.hpp>
 
 using MeshSig = igneous::core::Euclidean3D;
-using DiffusionMesh = igneous::data::Mesh<MeshSig, igneous::data::DiffusionTopology>;
+using DiffusionMesh = igneous::data::Space<igneous::data::DiffusionGeometry>;
 
 namespace {
 struct BenchEnvSetup {
@@ -48,13 +48,13 @@ DiffusionMesh make_bunny_geometry() {
   }
   igneous::io::load_obj(mesh, bunny.string());
   igneous::ops::normalize(mesh);
-  mesh.topology.clear();
+  mesh.structure.clear();
   return mesh;
 }
 
 void generate_torus(DiffusionMesh &mesh, size_t n_points, float R, float r) {
   mesh.clear();
-  mesh.geometry.reserve(n_points);
+  mesh.reserve(n_points);
 
   std::mt19937 gen(42);
   std::uniform_real_distribution<float> dist(0.0f, 6.283185f);
@@ -66,15 +66,15 @@ void generate_torus(DiffusionMesh &mesh, size_t n_points, float R, float r) {
     const float x = (R + r * std::cos(v)) * std::cos(u);
     const float y = (R + r * std::cos(v)) * std::sin(u);
     const float z = r * std::sin(v);
-    mesh.geometry.push_point({x, y, z});
+    mesh.push_point({x, y, z});
   }
 }
 
 int compute_max_y_vertex(const DiffusionMesh &mesh) {
   float max_y = -std::numeric_limits<float>::infinity();
   int max_y_idx = 0;
-  for (size_t i = 0; i < mesh.geometry.num_points(); ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+  for (size_t i = 0; i < mesh.num_points(); ++i) {
+    const auto p = mesh.get_vec3(i);
     if (p.y > max_y) {
       max_y = p.y;
       max_y_idx = static_cast<int>(i);
@@ -83,10 +83,10 @@ int compute_max_y_vertex(const DiffusionMesh &mesh) {
   return max_y_idx;
 }
 
-void build_diffusion_topology(DiffusionMesh &mesh, float /*bandwidth*/,
+void build_diffusion_geometry(DiffusionMesh &mesh, float /*bandwidth*/,
                               int k_neighbors) {
-  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
-                       mesh.geometry.z_span(), k_neighbors});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(),
+                       mesh.z_span(), k_neighbors});
 }
 
 void bench_pipeline_diffusion_main(benchmark::State &state) {
@@ -102,15 +102,15 @@ void bench_pipeline_diffusion_main(benchmark::State &state) {
   DiffusionMesh mesh = base_mesh;
   const int max_y_idx = compute_max_y_vertex(mesh);
   const int steps = static_cast<int>(state.range(0));
-  Eigen::VectorXf u = Eigen::VectorXf::Zero(static_cast<int>(mesh.geometry.num_points()));
-  Eigen::VectorXf u_next = Eigen::VectorXf::Zero(static_cast<int>(mesh.geometry.num_points()));
-  igneous::ops::DiffusionWorkspace<DiffusionMesh> diffusion_ws;
+  Eigen::VectorXf u = Eigen::VectorXf::Zero(static_cast<int>(mesh.num_points()));
+  Eigen::VectorXf u_next = Eigen::VectorXf::Zero(static_cast<int>(mesh.num_points()));
+  igneous::ops::diffusion::DiffusionWorkspace<DiffusionMesh> diffusion_ws;
 
   for (auto _ : state) {
-    build_diffusion_topology(mesh, kBandwidth, kNeighbors);
+    build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
     u.setZero();
     u[max_y_idx] = 1000.0f;
-    igneous::ops::apply_markov_transition_steps(mesh, u, steps, u_next, diffusion_ws);
+    igneous::ops::diffusion::apply_markov_transition_steps(mesh, u, steps, u_next, diffusion_ws);
     u.swap(u_next);
 
     benchmark::DoNotOptimize(u.data());
@@ -129,13 +129,13 @@ void bench_pipeline_spectral_main(benchmark::State &state) {
   constexpr int kBasis = 16;
 
   DiffusionMesh mesh = base_mesh;
-  igneous::ops::GeometryWorkspace<DiffusionMesh> geometry_ws;
+  igneous::ops::diffusion::GeometryWorkspace<DiffusionMesh> geometry_ws;
 
   for (auto _ : state) {
-    build_diffusion_topology(mesh, kBandwidth, kNeighbors);
-    igneous::ops::compute_eigenbasis(mesh, kBasis);
+    build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
+    igneous::ops::diffusion::compute_eigenbasis(mesh, kBasis);
     const Eigen::MatrixXf G =
-        igneous::ops::compute_1form_gram_matrix(mesh, kBandwidth, geometry_ws);
+        igneous::ops::diffusion::compute_1form_gram_matrix(mesh, kBandwidth, geometry_ws);
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> solver(G);
     benchmark::DoNotOptimize(solver.eigenvalues().data());
   }
@@ -149,26 +149,26 @@ void bench_pipeline_hodge_main(benchmark::State &state) {
   DiffusionMesh mesh;
   generate_torus(mesh, 4000, 2.0f, 0.8f);
 
-  igneous::ops::GeometryWorkspace<DiffusionMesh> geom_ws;
-  igneous::ops::HodgeWorkspace<DiffusionMesh> hodge_ws;
+  igneous::ops::diffusion::GeometryWorkspace<DiffusionMesh> geom_ws;
+  igneous::ops::diffusion::HodgeWorkspace<DiffusionMesh> hodge_ws;
 
   for (auto _ : state) {
-    build_diffusion_topology(mesh, kBandwidth, kNeighbors);
-    igneous::ops::compute_eigenbasis(mesh, kBasis);
+    build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
+    igneous::ops::diffusion::compute_eigenbasis(mesh, kBasis);
 
     const Eigen::MatrixXf G =
-        igneous::ops::compute_1form_gram_matrix(mesh, kBandwidth, geom_ws);
+        igneous::ops::diffusion::compute_1form_gram_matrix(mesh, kBandwidth, geom_ws);
     const Eigen::MatrixXf D =
-        igneous::ops::compute_weak_exterior_derivative(mesh, kBandwidth, hodge_ws);
+        igneous::ops::diffusion::compute_weak_exterior_derivative(mesh, kBandwidth, hodge_ws);
     const Eigen::MatrixXf E =
-        igneous::ops::compute_curl_energy_matrix(mesh, kBandwidth, hodge_ws);
-    const Eigen::MatrixXf L = igneous::ops::compute_hodge_laplacian_matrix(D, E);
-    auto [evals, evecs] = igneous::ops::compute_hodge_spectrum(L, G);
+        igneous::ops::diffusion::compute_curl_energy_matrix(mesh, kBandwidth, hodge_ws);
+    const Eigen::MatrixXf L = igneous::ops::diffusion::compute_hodge_laplacian_matrix(D, E);
+    auto [evals, evecs] = igneous::ops::diffusion::compute_hodge_spectrum(L, G);
 
     const Eigen::VectorXf theta_0 =
-        igneous::ops::compute_circular_coordinates(mesh, evecs.col(0), kBandwidth);
+        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(0), kBandwidth);
     const Eigen::VectorXf theta_1 =
-        igneous::ops::compute_circular_coordinates(mesh, evecs.col(1), kBandwidth);
+        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(1), kBandwidth);
 
     benchmark::DoNotOptimize(evals.data());
     benchmark::DoNotOptimize(theta_0.data());
@@ -176,15 +176,15 @@ void bench_pipeline_hodge_main(benchmark::State &state) {
   }
 }
 
-void bench_hodge_phase_topology(benchmark::State &state) {
+void bench_hodge_phase_structure_build(benchmark::State &state) {
   constexpr float kBandwidth = 0.05f;
   constexpr int kNeighbors = 32;
   DiffusionMesh mesh;
   generate_torus(mesh, 4000, 2.0f, 0.8f);
 
   for (auto _ : state) {
-    build_diffusion_topology(mesh, kBandwidth, kNeighbors);
-    benchmark::DoNotOptimize(mesh.topology.markov_values.size());
+    build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
+    benchmark::DoNotOptimize(mesh.structure.markov_values.size());
   }
 }
 
@@ -194,11 +194,11 @@ void bench_hodge_phase_eigenbasis(benchmark::State &state) {
   constexpr int kBasis = 64;
   DiffusionMesh mesh;
   generate_torus(mesh, 4000, 2.0f, 0.8f);
-  build_diffusion_topology(mesh, kBandwidth, kNeighbors);
+  build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
 
   for (auto _ : state) {
-    igneous::ops::compute_eigenbasis(mesh, kBasis);
-    benchmark::DoNotOptimize(mesh.topology.eigen_basis.data());
+    igneous::ops::diffusion::compute_eigenbasis(mesh, kBasis);
+    benchmark::DoNotOptimize(mesh.structure.eigen_basis.data());
   }
 }
 
@@ -208,13 +208,13 @@ void bench_hodge_phase_gram(benchmark::State &state) {
   constexpr int kBasis = 64;
   DiffusionMesh mesh;
   generate_torus(mesh, 4000, 2.0f, 0.8f);
-  build_diffusion_topology(mesh, kBandwidth, kNeighbors);
-  igneous::ops::compute_eigenbasis(mesh, kBasis);
-  igneous::ops::GeometryWorkspace<DiffusionMesh> geom_ws;
+  build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
+  igneous::ops::diffusion::compute_eigenbasis(mesh, kBasis);
+  igneous::ops::diffusion::GeometryWorkspace<DiffusionMesh> geom_ws;
 
   for (auto _ : state) {
     const Eigen::MatrixXf G =
-        igneous::ops::compute_1form_gram_matrix(mesh, kBandwidth, geom_ws);
+        igneous::ops::diffusion::compute_1form_gram_matrix(mesh, kBandwidth, geom_ws);
     benchmark::DoNotOptimize(G.data());
   }
 }
@@ -225,13 +225,13 @@ void bench_hodge_phase_weak_derivative(benchmark::State &state) {
   constexpr int kBasis = 64;
   DiffusionMesh mesh;
   generate_torus(mesh, 4000, 2.0f, 0.8f);
-  build_diffusion_topology(mesh, kBandwidth, kNeighbors);
-  igneous::ops::compute_eigenbasis(mesh, kBasis);
-  igneous::ops::HodgeWorkspace<DiffusionMesh> hodge_ws;
+  build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
+  igneous::ops::diffusion::compute_eigenbasis(mesh, kBasis);
+  igneous::ops::diffusion::HodgeWorkspace<DiffusionMesh> hodge_ws;
 
   for (auto _ : state) {
     const Eigen::MatrixXf D =
-        igneous::ops::compute_weak_exterior_derivative(mesh, kBandwidth, hodge_ws);
+        igneous::ops::diffusion::compute_weak_exterior_derivative(mesh, kBandwidth, hodge_ws);
     benchmark::DoNotOptimize(D.data());
   }
 }
@@ -242,13 +242,13 @@ void bench_hodge_phase_curl_energy(benchmark::State &state) {
   constexpr int kBasis = 64;
   DiffusionMesh mesh;
   generate_torus(mesh, 4000, 2.0f, 0.8f);
-  build_diffusion_topology(mesh, kBandwidth, kNeighbors);
-  igneous::ops::compute_eigenbasis(mesh, kBasis);
-  igneous::ops::HodgeWorkspace<DiffusionMesh> hodge_ws;
+  build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
+  igneous::ops::diffusion::compute_eigenbasis(mesh, kBasis);
+  igneous::ops::diffusion::HodgeWorkspace<DiffusionMesh> hodge_ws;
 
   for (auto _ : state) {
     const Eigen::MatrixXf E =
-        igneous::ops::compute_curl_energy_matrix(mesh, kBandwidth, hodge_ws);
+        igneous::ops::diffusion::compute_curl_energy_matrix(mesh, kBandwidth, hodge_ws);
     benchmark::DoNotOptimize(E.data());
   }
 }
@@ -259,21 +259,21 @@ void bench_hodge_phase_solve(benchmark::State &state) {
   constexpr int kBasis = 64;
   DiffusionMesh mesh;
   generate_torus(mesh, 4000, 2.0f, 0.8f);
-  build_diffusion_topology(mesh, kBandwidth, kNeighbors);
-  igneous::ops::compute_eigenbasis(mesh, kBasis);
+  build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
+  igneous::ops::diffusion::compute_eigenbasis(mesh, kBasis);
 
-  igneous::ops::GeometryWorkspace<DiffusionMesh> geom_ws;
-  igneous::ops::HodgeWorkspace<DiffusionMesh> hodge_ws;
+  igneous::ops::diffusion::GeometryWorkspace<DiffusionMesh> geom_ws;
+  igneous::ops::diffusion::HodgeWorkspace<DiffusionMesh> hodge_ws;
   const Eigen::MatrixXf G =
-      igneous::ops::compute_1form_gram_matrix(mesh, kBandwidth, geom_ws);
+      igneous::ops::diffusion::compute_1form_gram_matrix(mesh, kBandwidth, geom_ws);
   const Eigen::MatrixXf D =
-      igneous::ops::compute_weak_exterior_derivative(mesh, kBandwidth, hodge_ws);
+      igneous::ops::diffusion::compute_weak_exterior_derivative(mesh, kBandwidth, hodge_ws);
   const Eigen::MatrixXf E =
-      igneous::ops::compute_curl_energy_matrix(mesh, kBandwidth, hodge_ws);
-  const Eigen::MatrixXf L = igneous::ops::compute_hodge_laplacian_matrix(D, E);
+      igneous::ops::diffusion::compute_curl_energy_matrix(mesh, kBandwidth, hodge_ws);
+  const Eigen::MatrixXf L = igneous::ops::diffusion::compute_hodge_laplacian_matrix(D, E);
 
   for (auto _ : state) {
-    auto [evals, evecs] = igneous::ops::compute_hodge_spectrum(L, G);
+    auto [evals, evecs] = igneous::ops::diffusion::compute_hodge_spectrum(L, G);
     benchmark::DoNotOptimize(evals.data());
     benchmark::DoNotOptimize(evecs.data());
   }
@@ -285,25 +285,25 @@ void bench_hodge_phase_circular(benchmark::State &state) {
   constexpr int kBasis = 64;
   DiffusionMesh mesh;
   generate_torus(mesh, 4000, 2.0f, 0.8f);
-  build_diffusion_topology(mesh, kBandwidth, kNeighbors);
-  igneous::ops::compute_eigenbasis(mesh, kBasis);
+  build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
+  igneous::ops::diffusion::compute_eigenbasis(mesh, kBasis);
 
-  igneous::ops::GeometryWorkspace<DiffusionMesh> geom_ws;
-  igneous::ops::HodgeWorkspace<DiffusionMesh> hodge_ws;
+  igneous::ops::diffusion::GeometryWorkspace<DiffusionMesh> geom_ws;
+  igneous::ops::diffusion::HodgeWorkspace<DiffusionMesh> hodge_ws;
   const Eigen::MatrixXf G =
-      igneous::ops::compute_1form_gram_matrix(mesh, kBandwidth, geom_ws);
+      igneous::ops::diffusion::compute_1form_gram_matrix(mesh, kBandwidth, geom_ws);
   const Eigen::MatrixXf D =
-      igneous::ops::compute_weak_exterior_derivative(mesh, kBandwidth, hodge_ws);
+      igneous::ops::diffusion::compute_weak_exterior_derivative(mesh, kBandwidth, hodge_ws);
   const Eigen::MatrixXf E =
-      igneous::ops::compute_curl_energy_matrix(mesh, kBandwidth, hodge_ws);
-  const Eigen::MatrixXf L = igneous::ops::compute_hodge_laplacian_matrix(D, E);
-  auto [evals, evecs] = igneous::ops::compute_hodge_spectrum(L, G);
+      igneous::ops::diffusion::compute_curl_energy_matrix(mesh, kBandwidth, hodge_ws);
+  const Eigen::MatrixXf L = igneous::ops::diffusion::compute_hodge_laplacian_matrix(D, E);
+  auto [evals, evecs] = igneous::ops::diffusion::compute_hodge_spectrum(L, G);
 
   for (auto _ : state) {
     const Eigen::VectorXf theta_0 =
-        igneous::ops::compute_circular_coordinates(mesh, evecs.col(0), kBandwidth);
+        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(0), kBandwidth);
     const Eigen::VectorXf theta_1 =
-        igneous::ops::compute_circular_coordinates(mesh, evecs.col(1), kBandwidth);
+        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(1), kBandwidth);
     benchmark::DoNotOptimize(theta_0.data());
     benchmark::DoNotOptimize(theta_1.data());
     benchmark::DoNotOptimize(evals.data());
@@ -315,7 +315,7 @@ BENCHMARK(bench_pipeline_diffusion_main)->Arg(20)->Arg(100);
 BENCHMARK(bench_pipeline_spectral_main);
 BENCHMARK(bench_pipeline_hodge_main);
 
-BENCHMARK(bench_hodge_phase_topology);
+BENCHMARK(bench_hodge_phase_structure_build);
 BENCHMARK(bench_hodge_phase_eigenbasis);
 BENCHMARK(bench_hodge_phase_gram);
 BENCHMARK(bench_hodge_phase_weak_derivative);

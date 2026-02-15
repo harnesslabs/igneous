@@ -52,8 +52,9 @@ function(add_igneous_test name source)
 endfunction()
 
 add_igneous_test(test_algebra tests/test_algebra.cpp)
-add_igneous_test(test_topology_triangle tests/test_topology_triangle.cpp)
-add_igneous_test(test_topology_diffusion tests/test_topology_diffusion.cpp)
+add_igneous_test(test_structure_dec tests/test_structure_dec.cpp)
+add_igneous_test(test_structure_diffusion_geometry
+                 tests/test_structure_diffusion_geometry.cpp)
 add_igneous_test(test_ops_curvature_flow tests/test_ops_curvature_flow.cpp)
 add_igneous_test(test_ops_spectral_geometry tests/test_ops_spectral_geometry.cpp)
 add_igneous_test(test_ops_hodge tests/test_ops_hodge.cpp)
@@ -89,8 +90,8 @@ target_link_libraries(igneous-spectral PRIVATE igneous fmt::fmt)
 add_executable(igneous-hodge src/main_hodge.cpp)
 target_link_libraries(igneous-hodge PRIVATE igneous fmt::fmt)
 
-add_executable(igneous-diffusion-topology src/main_diffusion_topology.cpp)
-target_link_libraries(igneous-diffusion-topology PRIVATE igneous fmt::fmt)
+add_executable(igneous-diffusion-geometry src/main_diffusion_geometry.cpp)
+target_link_libraries(igneous-diffusion-geometry PRIVATE igneous fmt::fmt)
 
 add_test(
   NAME test_hodge_cli_outputs
@@ -106,7 +107,7 @@ set_tests_properties(test_hodge_parity_optional PROPERTIES LABELS "hodge;parity"
 add_test(
   NAME test_diffgeo_cli_outputs
   COMMAND bash ${CMAKE_SOURCE_DIR}/tests/test_diffgeo_cli_outputs.sh
-          $<TARGET_FILE:igneous-diffusion-topology>)
+          $<TARGET_FILE:igneous-diffusion-geometry>)
 set_tests_properties(test_diffgeo_cli_outputs PROPERTIES LABELS "diffgeo;cli")
 
 add_test(

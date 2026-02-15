@@ -10,12 +10,12 @@
 #include <tuple>
 #include <vector>
 
-#include <igneous/data/mesh.hpp>
-#include <igneous/data/topology.hpp>
+#include <igneous/data/space.hpp>
+#include <igneous/data/structure.hpp>
 
 namespace igneous::io {
 
-using igneous::data::Mesh;
+using igneous::data::Space;
 
 inline std::tuple<uint8_t, uint8_t, uint8_t> get_heatmap_color_bytes(double t) {
   t = std::clamp(t, 0.0, 1.0);
@@ -65,8 +65,8 @@ inline std::pair<double, double> compute_field_bounds(std::span<const Field> fie
   return {mean - (sigma_clip * std_dev), mean + (sigma_clip * std_dev)};
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_ply(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
+template <typename StructureT, typename Field>
+void export_ply(const Space<StructureT> &mesh, std::span<const Field> field,
                 const std::string &filename, double sigma_clip = 2.0) {
   const auto [min_v, max_v] = compute_field_bounds(field, sigma_clip);
 
@@ -75,7 +75,7 @@ void export_ply(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
     return;
   }
 
-  const size_t n_verts = mesh.geometry.num_points();
+  const size_t n_verts = mesh.num_points();
 
   file << "ply\n";
   file << "format ascii 1.0\n";
@@ -90,7 +90,7 @@ void export_ply(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
 
   const double denom = std::max(1e-12, max_v - min_v);
   for (size_t i = 0; i < n_verts; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     const double val = (i < field.size()) ? static_cast<double>(field[i]) : 0.0;
     const double t = (val - min_v) / denom;
     const auto [r, g, b] = get_heatmap_color_bytes(t);
@@ -102,15 +102,15 @@ void export_ply(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
   std::cout << "[IO] Exported PLY " << filename << "\n";
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_ply(const Mesh<Sig, Topo> &mesh, const std::vector<Field> &field,
+template <typename StructureT, typename Field>
+void export_ply(const Space<StructureT> &mesh, const std::vector<Field> &field,
                 const std::string &filename, double sigma_clip = 2.0) {
   export_ply(mesh, std::span<const Field>(field.data(), field.size()), filename,
              sigma_clip);
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_heatmap(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
+template <typename StructureT, typename Field>
+void export_heatmap(const Space<StructureT> &mesh, std::span<const Field> field,
                     const std::string &filename, double sigma_clip = 2.0) {
   const auto [min_v, max_v] = compute_field_bounds(field, sigma_clip);
 
@@ -119,11 +119,11 @@ void export_heatmap(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
     return;
   }
 
-  const size_t n_verts = mesh.geometry.num_points();
+  const size_t n_verts = mesh.num_points();
   const double denom = std::max(1e-12, max_v - min_v);
 
   for (size_t i = 0; i < n_verts; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     const double val = (i < field.size()) ? static_cast<double>(field[i]) : 0.0;
     const double t = (val - min_v) / denom;
     const auto [r, g, b] = get_heatmap_color_bytes(t);
@@ -132,12 +132,12 @@ void export_heatmap(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
          << (b / 255.0f) << "\n";
   }
 
-  if constexpr (igneous::data::SurfaceTopology<Topo>) {
-    const size_t n_faces = mesh.topology.num_faces();
+  if constexpr (igneous::data::SurfaceStructure<StructureT>) {
+    const size_t n_faces = mesh.structure.num_faces();
     for (size_t i = 0; i < n_faces; ++i) {
-      file << "f " << mesh.topology.get_vertex_for_face(i, 0) + 1 << " "
-           << mesh.topology.get_vertex_for_face(i, 1) + 1 << " "
-           << mesh.topology.get_vertex_for_face(i, 2) + 1 << "\n";
+      file << "f " << mesh.structure.get_vertex_for_face(i, 0) + 1 << " "
+           << mesh.structure.get_vertex_for_face(i, 1) + 1 << " "
+           << mesh.structure.get_vertex_for_face(i, 2) + 1 << "\n";
     }
   } else {
     file << "p";
@@ -153,16 +153,16 @@ void export_heatmap(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
   std::cout << "[IO] Exported OBJ " << filename << "\n";
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_heatmap(const Mesh<Sig, Topo> &mesh,
+template <typename StructureT, typename Field>
+void export_heatmap(const Space<StructureT> &mesh,
                     const std::vector<Field> &field,
                     const std::string &filename, double sigma_clip = 2.0) {
   export_heatmap(mesh, std::span<const Field>(field.data(), field.size()),
                  filename, sigma_clip);
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_ply_solid(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
+template <typename StructureT, typename Field>
+void export_ply_solid(const Space<StructureT> &mesh, std::span<const Field> field,
                       const std::string &filename, double radius = 0.01,
                       double sigma_clip = 2.0) {
   const auto [min_v, max_v] = compute_field_bounds(field, sigma_clip);
@@ -172,7 +172,7 @@ void export_ply_solid(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
     return;
   }
 
-  const size_t n_points = mesh.geometry.num_points();
+  const size_t n_points = mesh.num_points();
   const size_t n_verts = n_points * 4;
   const size_t n_faces = n_points * 4;
 
@@ -194,7 +194,7 @@ void export_ply_solid(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
   const double denom = std::max(1e-12, max_v - min_v);
 
   for (size_t i = 0; i < n_points; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     const double val = (i < field.size()) ? static_cast<double>(field[i]) : 0.0;
     const double t = (val - min_v) / denom;
     const auto [r, g, b] = get_heatmap_color_bytes(t);
@@ -220,8 +220,8 @@ void export_ply_solid(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
   std::cout << "[IO] Exported Solid PLY " << filename << "\n";
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_ply_solid(const Mesh<Sig, Topo> &mesh,
+template <typename StructureT, typename Field>
+void export_ply_solid(const Space<StructureT> &mesh,
                       const std::vector<Field> &field,
                       const std::string &filename, double radius = 0.01,
                       double sigma_clip = 2.0) {

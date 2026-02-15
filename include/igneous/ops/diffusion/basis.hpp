@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace igneous::ops {
+namespace igneous::ops::diffusion {
 
 struct WedgeProductIndexData {
   std::vector<int> target_indices;
@@ -193,4 +193,4 @@ inline WedgeProductIndexData get_wedge_product_indices(int d, int k1, int k2) {
   return out;
 }
 
-} // namespace igneous::ops
+} // namespace igneous::ops::diffusion

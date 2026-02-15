@@ -6,14 +6,14 @@
 #include <vector>
 
 #include <igneous/core/algebra.hpp>
-#include <igneous/data/mesh.hpp>
+#include <igneous/data/space.hpp>
 #include <igneous/io/exporter.hpp>
 #include <igneous/io/importer.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>
 #include <igneous/ops/transform.hpp>
 
 using namespace igneous;
-using DiffusionMesh = data::Mesh<core::Euclidean3D, data::DiffusionTopology>;
+using DiffusionMesh = data::Space<data::DiffusionGeometry>;
 
 static std::vector<float> to_std_vector(const Eigen::VectorXf &v) {
   std::vector<float> out(static_cast<size_t>(v.size()));
@@ -41,27 +41,27 @@ int main(int argc, char **argv) {
   io::load_obj(mesh, input_path);
   ops::normalize(mesh);
 
-  mesh.topology.build({mesh.geometry.x_span(), mesh.geometry.y_span(),
-                       mesh.geometry.z_span(), 32});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(),
+                       mesh.z_span(), 32});
 
-  const int n = static_cast<int>(mesh.geometry.num_points());
+  const int n = static_cast<int>(mesh.num_points());
   std::cout << "Markov Chain P: " << n << "x" << n << " ("
-            << mesh.topology.markov_values.size() << " nnz)\n";
+            << mesh.structure.markov_values.size() << " nnz)\n";
 
-  auto density_field = to_std_vector(mesh.topology.mu);
+  auto density_field = to_std_vector(mesh.structure.mu);
   if (!bench_mode) {
     io::export_ply_solid(mesh, density_field, output_dir + "/00_density.ply", 0.01);
   }
 
-  const size_t n_verts = mesh.geometry.num_points();
+  const size_t n_verts = mesh.num_points();
   Eigen::VectorXf u = Eigen::VectorXf::Zero(static_cast<int>(n_verts));
   Eigen::VectorXf u_next = Eigen::VectorXf::Zero(static_cast<int>(n_verts));
-  ops::DiffusionWorkspace<DiffusionMesh> diffusion_ws;
+  ops::diffusion::DiffusionWorkspace<DiffusionMesh> diffusion_ws;
 
   int max_y_idx = 0;
   float max_y = -1e9f;
   for (size_t i = 0; i < n_verts; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     if (p.y > max_y) {
       max_y = p.y;
       max_y_idx = static_cast<int>(i);
@@ -75,11 +75,11 @@ int main(int argc, char **argv) {
 
   const int steps = bench_mode ? 20 : 100;
   if (bench_mode) {
-    ops::apply_markov_transition_steps(mesh, u, steps, u_next, diffusion_ws);
+    ops::diffusion::apply_markov_transition_steps(mesh, u, steps, u_next, diffusion_ws);
     u.swap(u_next);
   } else {
     for (int t = 1; t <= steps; ++t) {
-      ops::apply_markov_transition(mesh, u, u_next);
+      ops::diffusion::apply_markov_transition(mesh, u, u_next);
       u.swap(u_next);
 
       if (t % 5 == 0) {

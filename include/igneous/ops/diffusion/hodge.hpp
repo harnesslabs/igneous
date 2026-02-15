@@ -11,12 +11,12 @@
 #include <vector>
 
 #include <igneous/core/parallel.hpp>
-#include <igneous/data/mesh.hpp>
+#include <igneous/data/space.hpp>
 #include <igneous/ops/diffusion/forms.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>
 #include <igneous/ops/diffusion/products.hpp>
 
-namespace igneous::ops {
+namespace igneous::ops::diffusion {
 
 template <typename MeshT> struct HodgeWorkspace {
   std::array<Eigen::VectorXf, 3> coords;
@@ -33,10 +33,10 @@ template <typename MeshT>
 Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
                                                  float bandwidth,
                                                  HodgeWorkspace<MeshT> &workspace) {
-  const auto &U = mesh.topology.eigen_basis;
-  const auto &mu = mesh.topology.mu;
+  const auto &U = mesh.structure.eigen_basis;
+  const auto &mu = mesh.structure.mu;
   const int n0 = U.cols();
-  const int n_verts = static_cast<int>(mesh.geometry.num_points());
+  const int n_verts = static_cast<int>(mesh.num_points());
 
   Eigen::MatrixXf D = Eigen::MatrixXf::Zero(3 * n0, n0);
 
@@ -83,12 +83,12 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
 template <typename MeshT>
 Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
                                            HodgeWorkspace<MeshT> &workspace) {
-  const auto &U = mesh.topology.eigen_basis;
-  const auto &mu = mesh.topology.mu;
+  const auto &U = mesh.structure.eigen_basis;
+  const auto &mu = mesh.structure.mu;
   const auto mu_arr = mu.array();
   const int n0 = U.cols();
   const int n_basis = 3 * n0;
-  const int n_verts = static_cast<int>(mesh.geometry.num_points());
+  const int n_verts = static_cast<int>(mesh.num_points());
 
   Eigen::MatrixXf E_up = Eigen::MatrixXf::Zero(n_basis, n_basis);
 
@@ -210,11 +210,11 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
                                              float lambda = 1.0f,
                                              int positive_imag_mode = 0,
                                              std::complex<float> *selected_eval = nullptr) {
-  const auto &U = mesh.topology.eigen_basis;
-  const auto &mu = mesh.topology.mu;
+  const auto &U = mesh.structure.eigen_basis;
+  const auto &mu = mesh.structure.mu;
 
   const int n0 = U.cols();
-  const size_t n_verts = mesh.geometry.num_points();
+  const size_t n_verts = mesh.num_points();
   const int n_verts_i = static_cast<int>(n_verts);
 
   HodgeWorkspace<MeshT> workspace;
@@ -339,4 +339,4 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
   return theta;
 }
 
-} // namespace igneous::ops
+} // namespace igneous::ops::diffusion

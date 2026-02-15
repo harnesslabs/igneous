@@ -11,7 +11,7 @@
 #include <vector>
 
 #include <igneous/core/algebra.hpp>
-#include <igneous/data/mesh.hpp>
+#include <igneous/data/space.hpp>
 #include <igneous/io/exporter.hpp>
 #include <igneous/ops/diffusion/forms.hpp>
 #include <igneous/ops/diffusion/hodge.hpp>
@@ -19,11 +19,11 @@
 #include <igneous/ops/diffusion/spectral.hpp>
 
 using namespace igneous;
-using DiffusionMesh = data::Mesh<core::Euclidean3D, data::DiffusionTopology>;
+using DiffusionMesh = data::Space<data::DiffusionGeometry>;
 
 struct Config {
   std::string input_csv;
-  std::string output_dir = "output_diffusion_topology";
+  std::string output_dir = "output_diffusion_geometry";
   size_t n_points = 1000;
   float major_radius = 2.0f;
   float minor_radius = 1.0f;
@@ -47,7 +47,7 @@ struct Config {
 
 static void print_usage() {
   std::cout
-      << "Usage: ./build/igneous-diffusion-topology [options]\n"
+      << "Usage: ./build/igneous-diffusion-geometry [options]\n"
       << "  --input-csv <path>\n"
       << "  --output-dir <path>\n"
       << "  --n-points <int>\n"
@@ -167,7 +167,7 @@ static bool parse_args(int argc, char **argv, Config &cfg) {
 static void generate_torus(DiffusionMesh &mesh, size_t n_points, float major_radius,
                            float minor_radius, uint32_t seed) {
   mesh.clear();
-  mesh.geometry.reserve(n_points);
+  mesh.reserve(n_points);
 
   std::mt19937 gen(seed);
   std::uniform_real_distribution<float> dist(0.0f, 6.28318530718f);
@@ -178,14 +178,14 @@ static void generate_torus(DiffusionMesh &mesh, size_t n_points, float major_rad
     const float x = (major_radius + minor_radius * std::cos(v)) * std::cos(u);
     const float y = (major_radius + minor_radius * std::cos(v)) * std::sin(u);
     const float z = minor_radius * std::sin(v);
-    mesh.geometry.push_point({x, y, z});
+    mesh.push_point({x, y, z});
   }
 }
 
 static void generate_sphere(DiffusionMesh &mesh, size_t n_points, float radius,
                             uint32_t seed) {
   mesh.clear();
-  mesh.geometry.reserve(n_points);
+  mesh.reserve(n_points);
 
   std::mt19937 gen(seed);
   std::uniform_real_distribution<float> u01(0.0f, 1.0f);
@@ -196,7 +196,7 @@ static void generate_sphere(DiffusionMesh &mesh, size_t n_points, float radius,
     const float theta = 2.0f * 3.14159265358979323846f * u;
     const float phi = std::acos(2.0f * v - 1.0f);
     const float sin_phi = std::sin(phi);
-    mesh.geometry.push_point({radius * sin_phi * std::cos(theta),
+    mesh.push_point({radius * sin_phi * std::cos(theta),
                               radius * sin_phi * std::sin(theta),
                               radius * std::cos(phi)});
   }
@@ -229,10 +229,10 @@ static bool load_point_cloud_csv(const std::string &filename, DiffusionMesh &mes
     if (!(iss >> x >> y >> z)) {
       continue;
     }
-    mesh.geometry.push_point({x, y, z});
+    mesh.push_point({x, y, z});
   }
 
-  return mesh.geometry.num_points() > 0;
+  return mesh.num_points() > 0;
 }
 
 static std::vector<float> to_scalar_field(const Eigen::VectorXf &values) {
@@ -251,7 +251,7 @@ static void export_vector_field(const std::string &filename,
     return;
   }
 
-  const size_t n = mesh.geometry.num_points();
+  const size_t n = mesh.num_points();
   file << "ply\n";
   file << "format ascii 1.0\n";
   file << "element vertex " << n << "\n";
@@ -264,7 +264,7 @@ static void export_vector_field(const std::string &filename,
   file << "end_header\n";
 
   for (size_t i = 0; i < n; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     const auto v = vectors[i];
     file << p.x << " " << p.y << " " << p.z << " " << v.x << " " << v.y
          << " " << v.z << "\n";
@@ -275,14 +275,14 @@ static std::array<std::array<Eigen::VectorXf, 3>, 3>
 build_gamma_data_immersion(const DiffusionMesh &mesh) {
   std::array<Eigen::VectorXf, 3> data_coords;
   std::array<Eigen::VectorXf, 3> immersion_coords;
-  ops::fill_data_coordinate_vectors(mesh, data_coords);
-  ops::fill_coordinate_vectors(mesh, immersion_coords);
+  ops::diffusion::fill_data_coordinate_vectors(mesh, data_coords);
+  ops::diffusion::fill_coordinate_vectors(mesh, immersion_coords);
 
   std::array<std::array<Eigen::VectorXf, 3>, 3> gamma{};
   for (int a = 0; a < 3; ++a) {
     for (int b = 0; b < 3; ++b) {
-      gamma[a][b].resize(static_cast<int>(mesh.geometry.num_points()));
-      ops::carre_du_champ(mesh, data_coords[a], immersion_coords[b], 0.0f,
+      gamma[a][b].resize(static_cast<int>(mesh.num_points()));
+      ops::diffusion::carre_du_champ(mesh, data_coords[a], immersion_coords[b], 0.0f,
                           gamma[a][b]);
     }
   }
@@ -293,13 +293,13 @@ static std::vector<core::Vec3> reconstruct_1form_ambient(
     const DiffusionMesh &mesh, const Eigen::VectorXf &coeffs, int n_coefficients,
     const std::array<std::array<Eigen::VectorXf, 3>, 3> &gamma_data_immersion) {
   const Eigen::MatrixXf pointwise =
-      ops::coefficients_to_pointwise(mesh, coeffs, 1, n_coefficients);
-  std::vector<core::Vec3> field(mesh.geometry.num_points(), {0.0f, 0.0f, 0.0f});
+      ops::diffusion::coefficients_to_pointwise(mesh, coeffs, 1, n_coefficients);
+  std::vector<core::Vec3> field(mesh.num_points(), {0.0f, 0.0f, 0.0f});
   if (pointwise.rows() == 0 || pointwise.cols() < 3) {
     return field;
   }
 
-  for (size_t i = 0; i < mesh.geometry.num_points(); ++i) {
+  for (size_t i = 0; i < mesh.num_points(); ++i) {
     const int p = static_cast<int>(i);
     const float vx = gamma_data_immersion[0][0][p] * pointwise(p, 0) +
                      gamma_data_immersion[0][1][p] * pointwise(p, 1) +
@@ -319,13 +319,13 @@ static std::vector<core::Vec3> reconstruct_2form_dual_ambient(
     const DiffusionMesh &mesh, const Eigen::VectorXf &coeffs, int n_coefficients,
     const std::array<std::array<Eigen::VectorXf, 3>, 3> &gamma_data_immersion) {
   const Eigen::MatrixXf pointwise =
-      ops::coefficients_to_pointwise(mesh, coeffs, 2, n_coefficients);
-  std::vector<core::Vec3> field(mesh.geometry.num_points(), {0.0f, 0.0f, 0.0f});
+      ops::diffusion::coefficients_to_pointwise(mesh, coeffs, 2, n_coefficients);
+  std::vector<core::Vec3> field(mesh.num_points(), {0.0f, 0.0f, 0.0f});
   if (pointwise.rows() == 0 || pointwise.cols() < 3) {
     return field;
   }
 
-  for (size_t i = 0; i < mesh.geometry.num_points(); ++i) {
+  for (size_t i = 0; i < mesh.num_points(); ++i) {
     const int p = static_cast<int>(i);
     const float w01 = pointwise(p, 0);
     const float w02 = pointwise(p, 1);
@@ -383,29 +383,29 @@ int main(int argc, char **argv) {
     generate_torus(mesh, cfg.n_points, cfg.major_radius, cfg.minor_radius, cfg.seed);
   }
 
-  mesh.topology.build({mesh.geometry.x_span(),
-                       mesh.geometry.y_span(),
-                       mesh.geometry.z_span(),
+  mesh.structure.build({mesh.x_span(),
+                       mesh.y_span(),
+                       mesh.z_span(),
                        cfg.k_neighbors,
                        cfg.knn_bandwidth,
                        cfg.bandwidth_variability,
                        cfg.c,
                        true});
 
-  ops::compute_eigenbasis(mesh, cfg.n_basis);
+  ops::diffusion::compute_eigenbasis(mesh, cfg.n_basis);
   const int n_coeff =
       std::max(1, std::min(cfg.n_coefficients,
-                           static_cast<int>(mesh.topology.eigen_basis.cols())));
+                           static_cast<int>(mesh.structure.eigen_basis.cols())));
 
-  ops::DiffusionFormWorkspace<DiffusionMesh> forms_ws;
+  ops::diffusion::DiffusionFormWorkspace<DiffusionMesh> forms_ws;
 
   // 1-forms
-  const Eigen::MatrixXf G1 = ops::compute_kform_gram_matrix(mesh, 1, n_coeff, forms_ws);
+  const Eigen::MatrixXf G1 = ops::diffusion::compute_kform_gram_matrix(mesh, 1, n_coeff, forms_ws);
   const Eigen::MatrixXf down1 =
-      ops::compute_down_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
-  const Eigen::MatrixXf up1 = ops::compute_up_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
-  const Eigen::MatrixXf L1 = ops::assemble_hodge_laplacian_matrix(up1, down1);
-  auto [evals1, evecs1] = ops::compute_form_spectrum(L1, G1);
+      ops::diffusion::compute_down_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
+  const Eigen::MatrixXf up1 = ops::diffusion::compute_up_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
+  const Eigen::MatrixXf L1 = ops::diffusion::assemble_hodge_laplacian_matrix(up1, down1);
+  auto [evals1, evecs1] = ops::diffusion::compute_form_spectrum(L1, G1);
 
   if (evals1.size() == 0 || evecs1.cols() == 0) {
     std::cerr << "Failed to compute 1-form spectrum.\n";
@@ -413,7 +413,7 @@ int main(int argc, char **argv) {
   }
 
   const auto harmonic1_idx =
-      ops::extract_harmonic_mode_indices(evals1, cfg.harmonic_tolerance, 3);
+      ops::diffusion::extract_harmonic_mode_indices(evals1, cfg.harmonic_tolerance, 3);
   Eigen::MatrixXf harmonic1_coeffs(evecs1.rows(),
                                    static_cast<int>(harmonic1_idx.size()));
   for (int c = 0; c < static_cast<int>(harmonic1_idx.size()); ++c) {
@@ -431,20 +431,20 @@ int main(int argc, char **argv) {
 
   const int idx0 = harmonic1_idx.empty() ? 0 : harmonic1_idx[0];
   const int idx1 = harmonic1_idx.size() > 1 ? harmonic1_idx[1] : idx0;
-  const Eigen::VectorXf theta_0 = ops::compute_circular_coordinates(
-      mesh, pad_1form_coeffs(evecs1.col(idx0), mesh.topology.eigen_basis.cols(), n_coeff),
+  const Eigen::VectorXf theta_0 = ops::diffusion::compute_circular_coordinates(
+      mesh, pad_1form_coeffs(evecs1.col(idx0), mesh.structure.eigen_basis.cols(), n_coeff),
       0.0f, cfg.circular_lambda, cfg.circular_mode_0, nullptr);
-  const Eigen::VectorXf theta_1 = ops::compute_circular_coordinates(
-      mesh, pad_1form_coeffs(evecs1.col(idx1), mesh.topology.eigen_basis.cols(), n_coeff),
+  const Eigen::VectorXf theta_1 = ops::diffusion::compute_circular_coordinates(
+      mesh, pad_1form_coeffs(evecs1.col(idx1), mesh.structure.eigen_basis.cols(), n_coeff),
       0.0f, cfg.circular_lambda, cfg.circular_mode_1, nullptr);
 
   // 2-forms
-  const Eigen::MatrixXf G2 = ops::compute_kform_gram_matrix(mesh, 2, n_coeff, forms_ws);
+  const Eigen::MatrixXf G2 = ops::diffusion::compute_kform_gram_matrix(mesh, 2, n_coeff, forms_ws);
   const Eigen::MatrixXf down2 =
-      ops::compute_down_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
-  const Eigen::MatrixXf up2 = ops::compute_up_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
-  const Eigen::MatrixXf L2 = ops::assemble_hodge_laplacian_matrix(up2, down2);
-  auto [evals2, evecs2] = ops::compute_form_spectrum(L2, G2);
+      ops::diffusion::compute_down_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
+  const Eigen::MatrixXf up2 = ops::diffusion::compute_up_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
+  const Eigen::MatrixXf L2 = ops::diffusion::assemble_hodge_laplacian_matrix(up2, down2);
+  auto [evals2, evecs2] = ops::diffusion::compute_form_spectrum(L2, G2);
 
   if (evals2.size() == 0 || evecs2.cols() == 0) {
     std::cerr << "Failed to compute 2-form spectrum.\n";
@@ -452,7 +452,7 @@ int main(int argc, char **argv) {
   }
 
   const auto harmonic2_idx =
-      ops::extract_harmonic_mode_indices(evals2, cfg.harmonic_tolerance, 3);
+      ops::diffusion::extract_harmonic_mode_indices(evals2, cfg.harmonic_tolerance, 3);
   Eigen::MatrixXf harmonic2_coeffs(evecs2.rows(),
                                    static_cast<int>(harmonic2_idx.size()));
   for (int c = 0; c < static_cast<int>(harmonic2_idx.size()); ++c) {
@@ -469,7 +469,7 @@ int main(int argc, char **argv) {
   Eigen::VectorXf wedge_coeffs;
   if (harmonic1_coeffs.cols() >= 1) {
     const int rhs_col = harmonic1_coeffs.cols() >= 2 ? 1 : 0;
-    wedge_coeffs = ops::compute_wedge_product_coeffs(
+    wedge_coeffs = ops::diffusion::compute_wedge_product_coeffs(
         mesh, harmonic1_coeffs.col(0), 1, harmonic1_coeffs.col(rhs_col), 1, n_coeff,
         forms_ws);
   } else {

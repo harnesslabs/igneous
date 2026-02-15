@@ -1,5 +1,5 @@
 #include <igneous/core/algebra.hpp>
-#include <igneous/data/mesh.hpp>
+#include <igneous/data/space.hpp>
 #include <igneous/io/exporter.hpp>
 #include <igneous/io/importer.hpp>
 #include <igneous/ops/transform.hpp>
@@ -8,9 +8,9 @@
 
 using namespace igneous;
 
-// 1. Define specific mesh types
-using PointCloud = data::Mesh<core::Euclidean3D, data::PointTopology>;
-using SurfaceMesh = data::Mesh<core::Euclidean3D, data::TriangleTopology>;
+// 1. Define specific space types
+using PointCloud = data::Space<data::DiffusionGeometry>;
+using SurfaceSpace = data::Space<data::DiscreteExteriorCalculus>;
 
 int main(int argc, char **argv) {
   if (argc < 2) {
@@ -34,10 +34,10 @@ int main(int argc, char **argv) {
   ops::normalize(pc);
 
   // C. Visualize (Create dummy height field since we can't do curvature)
-  size_t n_verts = pc.geometry.num_points();
+  size_t n_verts = pc.num_points();
   std::vector<double> height_field(n_verts);
   for (size_t i = 0; i < n_verts; ++i) {
-    height_field[i] = pc.geometry.get_vec3(i).y; // Color by Y-height
+    height_field[i] = pc.get_vec3(i).y; // Color by Y-height
   }
 
   io::export_ply_solid(pc, height_field, "output_solid_cloud.ply", 0.01);
@@ -47,12 +47,13 @@ int main(int argc, char **argv) {
   // =========================================================
   std::cout << "\n--- Testing Surface Workflow ---\n";
 
-  SurfaceMesh surf;
+  SurfaceSpace surf;
   io::load_obj(surf, input_path); // Should load faces
+  surf.structure.build({surf.num_points(), true});
   ops::normalize(surf);
 
   // Dummy field
-  std::vector<double> surf_field(surf.geometry.num_points(), 0.0);
+  std::vector<double> surf_field(surf.num_points(), 0.0);
   io::export_heatmap(surf, surf_field, "output_surface.obj");
 
   return 0;

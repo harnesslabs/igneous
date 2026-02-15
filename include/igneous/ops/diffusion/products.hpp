@@ -7,7 +7,7 @@
 #include <igneous/ops/diffusion/basis.hpp>
 #include <igneous/ops/diffusion/forms.hpp>
 
-namespace igneous::ops {
+namespace igneous::ops::diffusion {
 
 template <typename MeshT>
 Eigen::VectorXf compute_wedge_product_coeffs(
@@ -19,7 +19,7 @@ Eigen::VectorXf compute_wedge_product_coeffs(
   const int k_total = k1 + k2;
   const int n1 =
       std::max(1, std::min(n_coefficients,
-                           static_cast<int>(mesh.topology.eigen_basis.cols())));
+                           static_cast<int>(mesh.structure.eigen_basis.cols())));
 
   if (k_total > d) {
     return Eigen::VectorXf::Zero(n1);
@@ -75,7 +75,7 @@ Eigen::MatrixXf compute_wedge_operator_matrix(
   const int d = ambient_dim_3d();
   const int n1 =
       std::max(1, std::min(n_coefficients,
-                           static_cast<int>(mesh.topology.eigen_basis.cols())));
+                           static_cast<int>(mesh.structure.eigen_basis.cols())));
   const int in_dim = n1 * std::max(1, binomial_coeff(d, k_right));
   const int out_dim = n1 * std::max(1, binomial_coeff(d, k_left + k_right));
 
@@ -103,4 +103,4 @@ Eigen::MatrixXf compute_wedge_operator_matrix(const MeshT &mesh,
                                        n_coefficients, workspace);
 }
 
-} // namespace igneous::ops
+} // namespace igneous::ops::diffusion
