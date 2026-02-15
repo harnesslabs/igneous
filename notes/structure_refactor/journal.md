@@ -120,3 +120,25 @@
     - deploys to GitHub Pages using `actions/deploy-pages`
 - Documentation:
   - Added README note for docs deployment URL pattern.
+
+## Entry 0008
+- Timestamp: 2026-02-15
+- Structural Difference Targeted: Add pedantic static analysis and formatting workflow for maintainability.
+- Tooling Additions:
+  - Added `.clang-tidy` with a practical pedantic checks profile (`bugprone`, `performance`, selected `modernize/readability`).
+  - Added `.clang-format` as repo-wide formatter policy.
+  - Added helper scripts:
+    - `scripts/dev/lint.sh`
+    - `scripts/dev/format.sh`
+  - Added `Makefile` targets:
+    - `make lint`
+    - `make lint-all`
+    - `make format`
+    - `make format-check`
+- Documentation:
+  - Added lint/format usage section to `README.md`.
+- Verification:
+  - `make lint` -> pass; reports actionable warnings from current source.
+  - `make lint-all` -> pass; reports additional warnings across tests/benches.
+  - `make format-check` -> fail on existing formatting drift, as expected before first repo-wide `make format`.
+  - `ctest --test-dir build --output-on-failure` -> `14/14` passed after tooling integration.

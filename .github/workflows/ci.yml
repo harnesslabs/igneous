@@ -172,6 +172,69 @@ jobs:
           name: compile-commands
           path: build-debug/compile_commands.json
 
+  lint:
+    name: Lint (clang-tidy)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install lint tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy ripgrep
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          path: vcpkg
+
+      - name: Restore vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-${{ runner.os }}-x64-linux-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: ./vcpkg/bootstrap-vcpkg.sh
+
+      - name: Configure (Lint)
+        shell: bash
+        run: >-
+          cmake -S . -B build-lint -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=x64-linux
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Run clang-tidy (all)
+        shell: bash
+        run: IGNEOUS_LINT_SCOPE=all ./scripts/dev/lint.sh build-lint
+
+  format-check:
+    name: Format Check (clang-format)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install format tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format ripgrep
+
+      - name: Run clang-format check
+        shell: bash
+        run: ./scripts/dev/format.sh --check
+
   docs:
     name: API Docs (doxygen)
     runs-on: ubuntu-latest

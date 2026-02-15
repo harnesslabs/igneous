@@ -1,4 +1,4 @@
-.PHONY: all debug release build docs clean test test-all test-algebra test-structure test-ops bench bench-memory bench-geometry bench-dod bench-deep run-mesh run-diffusion run-spectral run-hodge
+.PHONY: all debug release build docs lint lint-all format format-check clean test test-all test-algebra test-structure test-ops bench bench-memory bench-geometry bench-dod bench-deep run-mesh run-diffusion run-spectral run-hodge
 
 all: build
 
@@ -13,6 +13,18 @@ build:
 
 docs: debug
 	cmake --build build --target docs
+
+lint: debug
+	./scripts/dev/lint.sh build
+
+lint-all: debug
+	IGNEOUS_LINT_SCOPE=all ./scripts/dev/lint.sh build
+
+format:
+	./scripts/dev/format.sh apply
+
+format-check:
+	./scripts/dev/format.sh --check
 
 clean:
 	rm -rf build

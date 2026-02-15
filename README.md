@@ -58,6 +58,29 @@ Deployment:
 - GitHub Actions workflow `.github/workflows/docs.yml` builds and deploys docs to GitHub Pages on `main`.
 - Published URL pattern: `https://<org-or-user>.github.io/igneous/`
 
+## Lint and Format
+
+This repo uses `clang-tidy` (lint) and `clang-format` (formatter) with config files at:
+
+- `.clang-tidy`
+- `.clang-format`
+
+Run locally:
+
+```bash
+make lint
+make lint-all
+make format
+make format-check
+```
+
+Notes:
+
+- `make lint` requires `build/compile_commands.json` and will run `cmake --preset default-local` via `make debug` first.
+- `make lint` runs a fast/default lint pass on C++ translation units under `src/`.
+- `make lint-all` extends lint coverage to `tests/` and `benches/` as well.
+- Tool binaries searched in `PATH`: `clang-tidy` and `clang-format` (version-suffixed variants are supported).
+
 ## Run Examples
 
 ```bash
