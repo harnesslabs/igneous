@@ -161,3 +161,13 @@
 - Verification:
   - `make format-check` -> pass.
   - `ctest --test-dir build --output-on-failure` -> `14/14` passed after formatting sweep.
+
+## Entry 0011
+- Timestamp: 2026-02-15
+- Structural Difference Targeted: Make lint/format helpers resilient when ripgrep is unavailable.
+- Fixes:
+  - Updated `scripts/dev/format.sh` to fall back to `find` when `rg` is not installed.
+  - Updated `scripts/dev/lint.sh` to fall back to `find` for both translation units and header discovery.
+- Verification:
+  - `PATH="/opt/homebrew/opt/llvm/bin:/usr/bin:/bin" /opt/homebrew/bin/bash ./scripts/dev/format.sh --check` -> pass (no ripgrep in PATH).
+  - `PATH="/opt/homebrew/opt/llvm/bin:/usr/bin:/bin" /opt/homebrew/bin/bash ./scripts/dev/lint.sh build` -> pass with expected lint warnings.

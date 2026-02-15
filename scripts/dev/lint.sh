@@ -41,20 +41,30 @@ case "${LINT_SCOPE}" in
     ;;
 esac
 
-mapfile -t TRANSLATION_UNITS < <(
-  cd "${ROOT_DIR}" &&
+collect_translation_units() {
+  if command -v rg >/dev/null 2>&1; then
     rg --files "${SEARCH_DIRS[@]}" | rg '\.(cpp|cc|cxx)$'
-)
+  else
+    find "${SEARCH_DIRS[@]}" -type f \( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' \)
+  fi
+}
+
+collect_headers() {
+  if command -v rg >/dev/null 2>&1; then
+    rg --files include/igneous | rg '\.(hpp|h|hh)$'
+  else
+    find include/igneous -type f \( -name '*.hpp' -o -name '*.h' -o -name '*.hh' \)
+  fi
+}
+
+mapfile -t TRANSLATION_UNITS < <(cd "${ROOT_DIR}" && collect_translation_units)
 
 if [[ ${#TRANSLATION_UNITS[@]} -eq 0 ]]; then
   echo "No translation units found under src/tests/benches."
   exit 0
 fi
 
-mapfile -t HEADER_FILES < <(
-  cd "${ROOT_DIR}" &&
-    rg --files include/igneous | rg '\.(hpp|h|hh)$'
-)
+mapfile -t HEADER_FILES < <(cd "${ROOT_DIR}" && collect_headers)
 
 cd "${ROOT_DIR}"
 status=0

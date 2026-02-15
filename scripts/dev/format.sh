@@ -20,10 +20,17 @@ CLANG_FORMAT_BIN="$(pick_tool clang-format clang-format-19 clang-format-18 clang
   exit 1
 }
 
-mapfile -t SOURCE_FILES < <(
-  cd "${ROOT_DIR}" &&
+collect_cpp_files() {
+  if command -v rg >/dev/null 2>&1; then
     rg --files include src tests benches | rg '\.(hpp|h|hh|cpp|cc|cxx|mm)$'
-)
+  else
+    find include src tests benches -type f \
+      \( -name '*.hpp' -o -name '*.h' -o -name '*.hh' -o -name '*.cpp' -o \
+         -name '*.cc' -o -name '*.cxx' -o -name '*.mm' \)
+  fi
+}
+
+mapfile -t SOURCE_FILES < <(cd "${ROOT_DIR}" && collect_cpp_files)
 
 if [[ ${#SOURCE_FILES[@]} -eq 0 ]]; then
   echo "No C++ source files found under include/src/tests/benches."
