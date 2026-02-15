@@ -77,7 +77,7 @@ make format-check
 Notes:
 
 - `make lint` requires `build/compile_commands.json` and will run `cmake --preset default-local` via `make debug` first.
-- `make lint` runs a fast/default lint pass on C++ translation units under `src/`.
+- `make lint` runs a default lint pass on C++ translation units under `src/` and also checks headers under `include/igneous/` for unused/incorrect includes via `misc-include-cleaner`.
 - `make lint-all` extends lint coverage to `tests/` and `benches/` as well.
 - Tool binaries searched in `PATH`: `clang-tidy` and `clang-format` (version-suffixed variants are supported).
 

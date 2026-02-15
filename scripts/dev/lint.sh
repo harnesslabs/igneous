@@ -51,6 +51,11 @@ if [[ ${#TRANSLATION_UNITS[@]} -eq 0 ]]; then
   exit 0
 fi
 
+mapfile -t HEADER_FILES < <(
+  cd "${ROOT_DIR}" &&
+    rg --files include/igneous | rg '\.(hpp|h|hh)$'
+)
+
 cd "${ROOT_DIR}"
 status=0
 EXTRA_ARGS=()
@@ -65,4 +70,13 @@ for file in "${TRANSLATION_UNITS[@]}"; do
     status=1
   fi
 done
+
+for header in "${HEADER_FILES[@]}"; do
+  if ! "${CLANG_TIDY_BIN}" -quiet "${EXTRA_ARGS[@]}" -checks='misc-include-cleaner' \
+    -p "${BUILD_DIR}" "${header}" 2>&1 |
+    sed '/^[0-9][0-9]* warnings generated\.$/d'; then
+    status=1
+  fi
+done
+
 exit "${status}"

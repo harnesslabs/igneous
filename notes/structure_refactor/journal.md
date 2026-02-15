@@ -142,3 +142,12 @@
   - `make lint-all` -> pass; reports additional warnings across tests/benches.
   - `make format-check` -> fail on existing formatting drift, as expected before first repo-wide `make format`.
   - `ctest --test-dir build --output-on-failure` -> `14/14` passed after tooling integration.
+
+## Entry 0009
+- Timestamp: 2026-02-15
+- Structural Difference Targeted: Ensure lint catches unused direct includes in headers.
+- Lint Fixes:
+  - Updated `scripts/dev/lint.sh` to run a dedicated header pass with `misc-include-cleaner` over `include/igneous/**`.
+  - Added `std::cstddef` include and removed unused includes in `include/igneous/ops/diffusion/basis.hpp`.
+- Verification:
+  - `make lint` now surfaces include-cleaner diagnostics from headers (including `basis.hpp`) and reports missing-direct-include issues.

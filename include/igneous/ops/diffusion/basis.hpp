@@ -1,13 +1,9 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
-#include <cmath>
-#include <cstdint>
+#include <cstddef>
 #include <numeric>
 #include <stdexcept>
-#include <unordered_map>
-#include <utility>
 #include <vector>
 
 namespace igneous::ops::diffusion {
