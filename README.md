@@ -90,6 +90,8 @@ Notes:
   - `IGNEOUS_LINT_JOBS=<N>` controls parallel workers (default: auto, capped at 8).
   - `IGNEOUS_LINT_HEADERS=0|1` toggles header include-cleaner pass.
   - `IGNEOUS_LINT_CHANGED_ONLY=0|1` restricts lint to changed files in git.
+- `scripts/dev/format.sh` knob:
+  - `IGNEOUS_CLANG_FORMAT_BIN=<binary>` selects an explicit formatter binary (useful to match CI version exactly).
 
 ## Run Examples
 

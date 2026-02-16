@@ -222,3 +222,16 @@
   - Updated CI lint step to pin worker count (`IGNEOUS_LINT_JOBS=4`) for stable parallel runtime.
 - Documentation:
   - Updated `README.md` lint section with new commands and env knobs.
+
+## Entry 0014
+- Timestamp: 2026-02-16
+- Structural Difference Targeted: Eliminate formatter drift between local and CI environments.
+- Problem:
+  - CI `format-check` flagged `src/main_hodge.cpp` while local checks passed, indicating formatter version skew.
+- Fixes:
+  - Added formatter binary override support in `scripts/dev/format.sh`:
+    - `IGNEOUS_CLANG_FORMAT_BIN=<binary>`
+  - Updated formatter binary discovery order to prefer explicit versioned binaries (`clang-format-21..17`) before generic `clang-format`.
+  - Pinned CI format job to Python-packaged `clang-format==20.1.3` and invoked format check through:
+    - `IGNEOUS_CLANG_FORMAT_BIN="$HOME/.local/bin/clang-format"`
+  - Updated `README.md` with formatter override usage note.

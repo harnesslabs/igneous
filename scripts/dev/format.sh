@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MODE="${1:-apply}"
+CLANG_FORMAT_BIN="${IGNEOUS_CLANG_FORMAT_BIN:-}"
 
 pick_tool() {
   local tool
@@ -15,10 +16,18 @@ pick_tool() {
   return 1
 }
 
-CLANG_FORMAT_BIN="$(pick_tool clang-format clang-format-19 clang-format-18 clang-format-17)" || {
-  echo "error: clang-format not found in PATH."
-  exit 1
-}
+if [[ -n "${CLANG_FORMAT_BIN}" ]]; then
+  if ! command -v "${CLANG_FORMAT_BIN}" >/dev/null 2>&1; then
+    echo "error: IGNEOUS_CLANG_FORMAT_BIN='${CLANG_FORMAT_BIN}' not found in PATH."
+    exit 1
+  fi
+  CLANG_FORMAT_BIN="$(command -v "${CLANG_FORMAT_BIN}")"
+else
+  CLANG_FORMAT_BIN="$(pick_tool clang-format-21 clang-format-20 clang-format-19 clang-format-18 clang-format-17 clang-format)" || {
+    echo "error: clang-format not found in PATH."
+    exit 1
+  }
+fi
 
 collect_cpp_files() {
   if command -v rg >/dev/null 2>&1; then
