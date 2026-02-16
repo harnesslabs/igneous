@@ -12,6 +12,7 @@
 
 #include <igneous/core/algebra.hpp>
 #include <igneous/data/space.hpp>
+#include <igneous/data/structures/diffusion_geometry.hpp>
 #include <igneous/io/exporter.hpp>
 #include <igneous/ops/diffusion/forms.hpp>
 #include <igneous/ops/diffusion/hodge.hpp>
@@ -410,6 +411,7 @@ int main(int argc, char** argv) {
   const auto gamma_data_immersion = build_gamma_data_immersion(mesh);
 
   std::vector<std::vector<core::Vec3>> harmonic1_fields;
+  harmonic1_fields.reserve(static_cast<size_t>(harmonic1_coeffs.cols()));
   for (int c = 0; c < harmonic1_coeffs.cols(); ++c) {
     harmonic1_fields.push_back(
         reconstruct_1form_ambient(mesh, harmonic1_coeffs.col(c), n_coeff, gamma_data_immersion));
@@ -446,6 +448,7 @@ int main(int argc, char** argv) {
   }
 
   std::vector<std::vector<core::Vec3>> harmonic2_fields;
+  harmonic2_fields.reserve(static_cast<size_t>(harmonic2_coeffs.cols()));
   for (int c = 0; c < harmonic2_coeffs.cols(); ++c) {
     harmonic2_fields.push_back(reconstruct_2form_dual_ambient(mesh, harmonic2_coeffs.col(c),
                                                               n_coeff, gamma_data_immersion));

@@ -1,20 +1,19 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <Eigen/Dense>
-#include <Eigen/Sparse>
+#include <Eigen/Eigenvalues>
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <complex>
-#include <limits>
+#include <cstddef>
 #include <utility>
 #include <vector>
 
 #include <igneous/core/parallel.hpp>
-#include <igneous/data/space.hpp>
 #include <igneous/ops/diffusion/forms.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>
-#include <igneous/ops/diffusion/products.hpp>
 
 namespace igneous::ops::diffusion {
 

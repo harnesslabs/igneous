@@ -4,11 +4,13 @@
 #include <atomic>
 #include <cctype>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdlib>
 #include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace igneous::core {

@@ -12,6 +12,7 @@
 
 #include <igneous/core/algebra.hpp>
 #include <igneous/data/space.hpp>
+#include <igneous/data/structures/diffusion_geometry.hpp>
 #include <igneous/io/exporter.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>
 #include <igneous/ops/diffusion/hodge.hpp>

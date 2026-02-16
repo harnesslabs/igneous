@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <numbers>
 #include <type_traits>
 #include <vector>
@@ -10,6 +12,7 @@
 #include <igneous/core/parallel.hpp>
 #include <igneous/data/space.hpp>
 #include <igneous/data/structure.hpp>
+#include <igneous/data/structures/discrete_exterior_calculus.hpp>
 
 namespace igneous::ops::dec {
 

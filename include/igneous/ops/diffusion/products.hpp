@@ -1,8 +1,9 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <Eigen/Dense>
 #include <algorithm>
-#include <vector>
+#include <cstddef>
 
 #include <igneous/ops/diffusion/basis.hpp>
 #include <igneous/ops/diffusion/forms.hpp>

@@ -69,17 +69,27 @@ Run locally:
 
 ```bash
 make lint
+make lint-fast
+make lint-changed
 make lint-all
+make lint-strict
 make format
 make format-check
 ```
 
 Notes:
 
-- `make lint` requires `build/compile_commands.json` and will run `cmake --preset default-local` via `make debug` first.
-- `make lint` runs a default lint pass on C++ translation units under `src/` and also checks headers under `include/igneous/` for unused/incorrect includes via `misc-include-cleaner`.
-- `make lint-all` extends lint coverage to `tests/` and `benches/` as well.
+- `make lint` is the default local pass: `src/` translation units plus header include-cleaner checks.
+- `make lint-fast` skips header include-cleaner checks (faster iterative loop).
+- `make lint-changed` checks only changed C++ translation units in git working tree (fastest local loop).
+- `make lint-all` extends lint coverage to `tests/` and `benches/`.
+- `make lint-strict` is full-project strict lint (similar to CI lint settings).
+- `make lint` and related targets auto-run `make debug` only when `build/compile_commands.json` is missing.
 - Tool binaries searched in `PATH`: `clang-tidy` and `clang-format` (version-suffixed variants are supported).
+- `scripts/dev/lint.sh` knobs:
+  - `IGNEOUS_LINT_JOBS=<N>` controls parallel workers (default: auto, capped at 8).
+  - `IGNEOUS_LINT_HEADERS=0|1` toggles header include-cleaner pass.
+  - `IGNEOUS_LINT_CHANGED_ONLY=0|1` restricts lint to changed files in git.
 
 ## Run Examples
 

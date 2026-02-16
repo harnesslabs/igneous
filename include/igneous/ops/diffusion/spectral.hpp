@@ -1,14 +1,16 @@
 #pragma once
-#include <Eigen/Sparse>
+#include <Eigen/Core>
 #include <Spectra/GenEigsSolver.h>
-#include <Spectra/MatOp/SparseGenMatProd.h>
 #include <Spectra/SymEigsSolver.h>
+#include <Spectra/Util/CompInfo.h>
+#include <Spectra/Util/SelectionRule.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <igneous/core/parallel.hpp>
-#include <igneous/data/space.hpp>
 #include <iostream>
 #include <type_traits>
+#include <vector>
 
 namespace igneous::ops::diffusion {
 

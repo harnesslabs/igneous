@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <igneous/core/blades.hpp>
 #include <igneous/data/space.hpp>
 #include <limits>

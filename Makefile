@@ -1,4 +1,4 @@
-.PHONY: all debug release build docs lint lint-all format format-check clean test test-all test-algebra test-structure test-ops bench bench-memory bench-geometry bench-dod bench-deep run-mesh run-diffusion run-spectral run-hodge
+.PHONY: all debug release build docs lint lint-fast lint-changed lint-all lint-strict lint-headers format format-check clean test test-all test-algebra test-structure test-ops bench bench-memory bench-geometry bench-dod bench-deep run-mesh run-diffusion run-spectral run-hodge
 
 all: build
 
@@ -14,11 +14,29 @@ build:
 docs: debug
 	cmake --build build --target docs
 
-lint: debug
+lint:
+	@if [ ! -f build/compile_commands.json ]; then $(MAKE) debug; fi
 	./scripts/dev/lint.sh build
 
-lint-all: debug
+lint-fast:
+	@if [ ! -f build/compile_commands.json ]; then $(MAKE) debug; fi
+	IGNEOUS_LINT_HEADERS=0 ./scripts/dev/lint.sh build
+
+lint-changed:
+	@if [ ! -f build/compile_commands.json ]; then $(MAKE) debug; fi
+	IGNEOUS_LINT_CHANGED_ONLY=1 IGNEOUS_LINT_HEADERS=0 ./scripts/dev/lint.sh build
+
+lint-all:
+	@if [ ! -f build/compile_commands.json ]; then $(MAKE) debug; fi
 	IGNEOUS_LINT_SCOPE=all ./scripts/dev/lint.sh build
+
+lint-strict:
+	@if [ ! -f build/compile_commands.json ]; then $(MAKE) debug; fi
+	IGNEOUS_LINT_SCOPE=all IGNEOUS_LINT_HEADERS=1 ./scripts/dev/lint.sh build
+
+lint-headers:
+	@if [ ! -f build/compile_commands.json ]; then $(MAKE) debug; fi
+	IGNEOUS_LINT_CHANGED_ONLY=1 IGNEOUS_LINT_HEADERS=1 ./scripts/dev/lint.sh build
 
 format:
 	./scripts/dev/format.sh apply

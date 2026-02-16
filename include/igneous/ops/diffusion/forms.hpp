@@ -1,16 +1,17 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <Eigen/Dense>
+#include <Eigen/Eigenvalues>
+#include <Eigen/SVD>
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <complex>
-#include <limits>
-#include <stdexcept>
+#include <cstddef>
 #include <utility>
 #include <vector>
 
-#include <igneous/core/algebra.hpp>
+#include <igneous/core/blades.hpp>
 #include <igneous/core/parallel.hpp>
 #include <igneous/ops/diffusion/basis.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>

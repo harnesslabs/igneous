@@ -1,16 +1,15 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <Eigen/Dense>
-#include <Eigen/Sparse>
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstddef>
 #include <span>
-#include <type_traits>
 
 #include <igneous/core/gpu.hpp>
 #include <igneous/core/parallel.hpp>
-#include <igneous/data/space.hpp>
 
 namespace igneous::ops::diffusion {
 

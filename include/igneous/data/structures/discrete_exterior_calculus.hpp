@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <vector>
@@ -66,14 +67,13 @@ struct DiscreteExteriorCalculus {
    * \return Vertex index for the requested corner.
    */
   [[nodiscard]] uint32_t get_vertex_for_face(size_t face_idx, int corner) const {
-    switch (corner) {
-    case 0:
+    if (corner == 0) {
       return face_v0[face_idx];
-    case 1:
-      return face_v1[face_idx];
-    default:
-      return face_v2[face_idx];
     }
+    if (corner == 1) {
+      return face_v1[face_idx];
+    }
+    return face_v2[face_idx];
   }
 
   /**

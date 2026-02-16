@@ -1,16 +1,17 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <Eigen/Dense>
-#include <Eigen/Sparse>
+#include <Eigen/SparseCore>
 #include <algorithm>
 #include <cmath>
-#include <concepts>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <nanoflann.hpp>
 #include <span>
+#include <utility>
 #include <vector>
 
 #include <igneous/core/gpu.hpp>

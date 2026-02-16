@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUILD_DIR="${1:-${ROOT_DIR}/build}"
 LINT_SCOPE="${IGNEOUS_LINT_SCOPE:-src}"
+LINT_HEADERS="${IGNEOUS_LINT_HEADERS:-1}"
+LINT_CHANGED_ONLY="${IGNEOUS_LINT_CHANGED_ONLY:-0}"
+LINT_JOBS="${IGNEOUS_LINT_JOBS:-}"
 
 pick_tool() {
   local tool
@@ -16,9 +19,47 @@ pick_tool() {
   return 1
 }
 
+compute_default_jobs() {
+  local cores=1
+  if command -v nproc >/dev/null 2>&1; then
+    cores="$(nproc)"
+  elif [[ "$(uname -s)" == "Darwin" ]]; then
+    cores="$(sysctl -n hw.logicalcpu 2>/dev/null || echo 1)"
+  fi
+
+  if [[ "${cores}" -gt 8 ]]; then
+    echo 8
+  else
+    echo "${cores}"
+  fi
+}
+
+validate_bool() {
+  local name="$1"
+  local value="$2"
+  case "${value}" in
+    0 | 1) ;;
+    *)
+      echo "error: ${name} must be 0 or 1 (got '${value}')."
+      exit 1
+      ;;
+  esac
+}
+
 if [[ ! -f "${BUILD_DIR}/compile_commands.json" ]]; then
   echo "error: ${BUILD_DIR}/compile_commands.json not found."
   echo "hint: run 'cmake --preset default-local' first."
+  exit 1
+fi
+
+validate_bool "IGNEOUS_LINT_HEADERS" "${LINT_HEADERS}"
+validate_bool "IGNEOUS_LINT_CHANGED_ONLY" "${LINT_CHANGED_ONLY}"
+
+if [[ -z "${LINT_JOBS}" ]]; then
+  LINT_JOBS="$(compute_default_jobs)"
+fi
+if ! [[ "${LINT_JOBS}" =~ ^[0-9]+$ ]] || [[ "${LINT_JOBS}" -lt 1 ]]; then
+  echo "error: IGNEOUS_LINT_JOBS must be a positive integer (got '${LINT_JOBS}')."
   exit 1
 fi
 
@@ -57,14 +98,69 @@ collect_headers() {
   fi
 }
 
-mapfile -t TRANSLATION_UNITS < <(cd "${ROOT_DIR}" && collect_translation_units)
+collect_changed_paths() {
+  (
+    cd "${ROOT_DIR}" || exit 1
+    if ! command -v git >/dev/null 2>&1 || ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      return 1
+    fi
+    {
+      git diff --name-only --diff-filter=ACMRTUXB HEAD -- "${SEARCH_DIRS[@]}" include/igneous
+      git ls-files --others --exclude-standard -- "${SEARCH_DIRS[@]}" include/igneous
+    } | sort -u
+  )
+}
 
-if [[ ${#TRANSLATION_UNITS[@]} -eq 0 ]]; then
-  echo "No translation units found under src/tests/benches."
-  exit 0
+filter_cpp_paths() {
+  while IFS= read -r path; do
+    case "${path}" in
+      *.cpp | *.cc | *.cxx)
+        echo "${path}"
+        ;;
+    esac
+  done
+}
+
+filter_header_paths() {
+  while IFS= read -r path; do
+    case "${path}" in
+      include/igneous/*)
+        case "${path}" in
+          *.h | *.hh | *.hpp)
+            echo "${path}"
+            ;;
+        esac
+      ;;
+    esac
+  done
+}
+
+TRANSLATION_UNITS=()
+HEADER_FILES=()
+
+if [[ "${LINT_CHANGED_ONLY}" == "1" ]]; then
+  mapfile -t CHANGED_PATHS < <(collect_changed_paths || true)
+  if [[ ${#CHANGED_PATHS[@]} -gt 0 ]]; then
+    mapfile -t TRANSLATION_UNITS < <(printf '%s\n' "${CHANGED_PATHS[@]}" | filter_cpp_paths)
+    if [[ "${LINT_HEADERS}" == "1" ]]; then
+      mapfile -t HEADER_FILES < <(printf '%s\n' "${CHANGED_PATHS[@]}" | filter_header_paths)
+    fi
+  fi
+else
+  mapfile -t TRANSLATION_UNITS < <(cd "${ROOT_DIR}" && collect_translation_units)
+  if [[ "${LINT_HEADERS}" == "1" ]]; then
+    mapfile -t HEADER_FILES < <(cd "${ROOT_DIR}" && collect_headers)
+  fi
 fi
 
-mapfile -t HEADER_FILES < <(cd "${ROOT_DIR}" && collect_headers)
+if [[ ${#TRANSLATION_UNITS[@]} -eq 0 && ( "${LINT_HEADERS}" != "1" || ${#HEADER_FILES[@]} -eq 0 ) ]]; then
+  if [[ "${LINT_CHANGED_ONLY}" == "1" ]]; then
+    echo "No changed C++ files found for lint."
+  else
+    echo "No translation units found under src/tests/benches."
+  fi
+  exit 0
+fi
 
 cd "${ROOT_DIR}"
 status=0
@@ -74,19 +170,62 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   EXTRA_ARGS+=(--extra-arg=-isysroot --extra-arg="${SDKROOT}")
 fi
 
-for file in "${TRANSLATION_UNITS[@]}"; do
-  if ! "${CLANG_TIDY_BIN}" -quiet "${EXTRA_ARGS[@]}" -p "${BUILD_DIR}" "${file}" 2>&1 |
-    sed '/^[0-9][0-9]* warnings generated\.$/d'; then
-    status=1
+lint_file() {
+  local kind="$1"
+  local file="$2"
+  local -a cmd=("${CLANG_TIDY_BIN}" -quiet "${EXTRA_ARGS[@]}")
+  if [[ "${kind}" == "header" ]]; then
+    cmd+=(-checks='misc-include-cleaner')
   fi
-done
+  cmd+=(-p "${BUILD_DIR}" "${file}")
 
-for header in "${HEADER_FILES[@]}"; do
-  if ! "${CLANG_TIDY_BIN}" -quiet "${EXTRA_ARGS[@]}" -checks='misc-include-cleaner' \
-    -p "${BUILD_DIR}" "${header}" 2>&1 |
-    sed '/^[0-9][0-9]* warnings generated\.$/d'; then
+  "${cmd[@]}" 2>&1 | sed '/^[0-9][0-9]* warnings generated\.$/d'
+}
+
+run_parallel_lint() {
+  local kind="$1"
+  shift
+  local -a files=("$@")
+  local -a pids=()
+  local failed=0
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  for file in "${files[@]}"; do
+    (
+      lint_file "${kind}" "${file}"
+    ) &
+    pids+=("$!")
+
+    if [[ ${#pids[@]} -ge ${LINT_JOBS} ]]; then
+      if ! wait "${pids[0]}"; then
+        failed=1
+      fi
+      pids=("${pids[@]:1}")
+    fi
+  done
+
+  for pid in "${pids[@]}"; do
+    if ! wait "${pid}"; then
+      failed=1
+    fi
+  done
+
+  return "${failed}"
+}
+
+echo "Lint config: scope=${LINT_SCOPE} jobs=${LINT_JOBS} headers=${LINT_HEADERS} changed_only=${LINT_CHANGED_ONLY}"
+
+if ! run_parallel_lint "tu" "${TRANSLATION_UNITS[@]}"; then
+  status=1
+fi
+
+if [[ "${LINT_HEADERS}" == "1" ]]; then
+  if ! run_parallel_lint "header" "${HEADER_FILES[@]}"; then
     status=1
   fi
-done
+fi
 
 exit "${status}"

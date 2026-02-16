@@ -215,7 +215,7 @@ jobs:
 
       - name: Run clang-tidy (all)
         shell: bash
-        run: IGNEOUS_LINT_SCOPE=all ./scripts/dev/lint.sh build-lint
+        run: IGNEOUS_LINT_SCOPE=all IGNEOUS_LINT_HEADERS=1 IGNEOUS_LINT_JOBS=4 ./scripts/dev/lint.sh build-lint
 
   format-check:
     name: Format Check (clang-format)

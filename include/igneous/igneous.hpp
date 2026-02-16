@@ -3,6 +3,8 @@
 /// \file
 /// \brief Umbrella header for the public igneous API.
 
+// This header intentionally re-exports submodules as a convenience include.
+// NOLINTBEGIN(misc-include-cleaner)
 #include <igneous/core/algebra.hpp>
 #include <igneous/core/blades.hpp>
 #include <igneous/core/memory.hpp>
@@ -24,3 +26,4 @@
 #include <igneous/ops/diffusion/products.hpp>
 #include <igneous/ops/diffusion/spectral.hpp>
 #include <igneous/ops/transform.hpp>
+// NOLINTEND(misc-include-cleaner)

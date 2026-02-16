@@ -1,9 +1,11 @@
 #pragma once
+
 #include <array>
 #include <bit>
 #include <concepts>
+#include <cstddef>
 #include <utility>
-#include <xsimd/xsimd.hpp>
+#include <xsimd/xsimd.hpp> // NOLINT(misc-include-cleaner)
 
 namespace igneous::core {
 
@@ -218,6 +220,8 @@ template <typename Field> struct AlgebraKernels<Field, Euclidean3D> {
 /// \brief Fixed-size multivector value type.
 template <typename Field, IsSignature Sig> struct Multivector {
   static constexpr size_t Size = Sig::size;
+  // xsimd symbols are provided by xsimd's umbrella include.
+  // NOLINTNEXTLINE(misc-include-cleaner)
   alignas(xsimd::default_arch::alignment()) std::array<Field, Sig::size> data;
 
   /// \brief Zero-initialized multivector.
@@ -297,6 +301,7 @@ template <typename Field, IsSignature Sig> struct Multivector {
 };
 
 /// \brief SIMD packet scalar used by wide multivectors.
+// NOLINTNEXTLINE(misc-include-cleaner)
 using Packet = xsimd::batch<float>;
 /// \brief Multivector whose scalar components are SIMD packets.
 template <typename Sig> using WideMultivector = Multivector<Packet, Sig>;

@@ -1,13 +1,14 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <span>
 #include <string>
 #include <vector>
 
 #include <igneous/core/blades.hpp>
 #include <igneous/data/structure.hpp>
-#include <igneous/data/structures/diffusion_geometry.hpp>
+#include <igneous/data/structures/diffusion_geometry.hpp> // NOLINT(misc-include-cleaner)
 #include <igneous/data/structures/discrete_exterior_calculus.hpp>
 
 namespace igneous::data {

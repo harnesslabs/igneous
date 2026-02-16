@@ -171,3 +171,54 @@
 - Verification:
   - `PATH="/opt/homebrew/opt/llvm/bin:/usr/bin:/bin" /opt/homebrew/bin/bash ./scripts/dev/format.sh --check` -> pass (no ripgrep in PATH).
   - `PATH="/opt/homebrew/opt/llvm/bin:/usr/bin:/bin" /opt/homebrew/bin/bash ./scripts/dev/lint.sh build` -> pass with expected lint warnings.
+
+## Entry 0012
+- Timestamp: 2026-02-16
+- Structural Difference Targeted: Burn down lint diagnostics to zero for the structure-first API surface.
+- Fixes:
+  - Applied include-cleaner corrections across data/core/io/ops headers (missing direct includes + unused include removals).
+  - Added explicit structure includes in CLI sources that reference structure concrete types directly:
+    - `src/main_diffusion.cpp`
+    - `src/main_diffusion_geometry.cpp`
+    - `src/main_hodge.cpp`
+    - `src/main_point.cpp`
+    - `src/main_spectral.cpp`
+  - Annotated `include/igneous/igneous.hpp` as an intentional umbrella header with:
+    - `NOLINTBEGIN(misc-include-cleaner)`
+    - `NOLINTEND(misc-include-cleaner)`
+  - Preserved `DiffusionGeometry` discoverability for downstream code by re-exporting it from
+    `include/igneous/data/space.hpp` with a targeted include-cleaner suppression.
+  - Addressed a non-include lint diagnostic in DEC:
+    - rewrote `DiscreteExteriorCalculus::get_vertex_for_face(...)` branch form to avoid `bugprone-branch-clone`.
+  - Fixed `performance-inefficient-vector-operation` warnings by reserving output capacity before push loops in:
+    - `src/main_diffusion_geometry.cpp`
+  - Stabilized xsimd lint behavior in `include/igneous/core/algebra.hpp`:
+    - restored xsimd umbrella include and added targeted `NOLINTNEXTLINE(misc-include-cleaner)` for xsimd symbol lines.
+- Verification:
+  - `make format` -> pass.
+  - `./scripts/dev/lint.sh build` -> pass (`0` exit, no warnings/errors).
+  - `make lint` -> pass (`0` exit, no warnings/errors).
+  - `cmake --build build --parallel` -> pass.
+  - `ctest --test-dir build --output-on-failure` -> `14/14` passed.
+
+## Entry 0013
+- Timestamp: 2026-02-16
+- Structural Difference Targeted: Reduce local/CI lint latency without reducing strict coverage options.
+- Lint Pipeline Changes:
+  - `scripts/dev/lint.sh` now supports parallel clang-tidy workers:
+    - `IGNEOUS_LINT_JOBS=<N>` (default auto, capped at 8).
+  - Added optional header-pass toggle:
+    - `IGNEOUS_LINT_HEADERS=0|1` (default `1`).
+  - Added changed-files-only mode:
+    - `IGNEOUS_LINT_CHANGED_ONLY=0|1` (default `0`).
+  - Added runtime lint configuration banner for visibility.
+- Make Targets:
+  - Added `make lint-fast` (skip header include-cleaner pass).
+  - Added `make lint-changed` (changed translation units only).
+  - Added `make lint-strict` (all + headers, CI-like).
+  - Added `make lint-headers` (changed-files run with header checks enabled).
+  - Updated lint targets to only run `make debug` when `build/compile_commands.json` is missing.
+- CI:
+  - Updated CI lint step to pin worker count (`IGNEOUS_LINT_JOBS=4`) for stable parallel runtime.
+- Documentation:
+  - Updated `README.md` lint section with new commands and env knobs.
