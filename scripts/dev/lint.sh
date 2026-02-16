@@ -98,6 +98,81 @@ collect_headers() {
   fi
 }
 
+extract_header_compile_args() {
+  python3 - "$1" <<'PY'
+import json
+import shlex
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        db = json.load(f)
+except Exception:
+    sys.exit(0)
+
+def command_tokens(entry):
+    if "arguments" in entry and isinstance(entry["arguments"], list):
+        return entry["arguments"]
+    if "command" in entry and isinstance(entry["command"], str):
+        try:
+            return shlex.split(entry["command"])
+        except ValueError:
+            return []
+    return []
+
+def score(tokens):
+    text = " ".join(tokens)
+    s = 0
+    if "vcpkg_installed" in text:
+        s += 8
+    if any(tok.startswith("-std=") for tok in tokens):
+        s += 4
+    if "-std" in tokens:
+        s += 4
+    if any(tok == "-isystem" or tok.startswith("-isystem") for tok in tokens):
+        s += 2
+    if any(tok == "-I" or tok.startswith("-I") for tok in tokens):
+        s += 1
+    return s
+
+best = []
+best_score = -1
+for entry in db:
+    tokens = command_tokens(entry)
+    if not tokens:
+        continue
+    s = score(tokens)
+    if s > best_score:
+        best = tokens
+        best_score = s
+
+if not best:
+    sys.exit(0)
+
+keep = []
+i = 0
+while i < len(best):
+    tok = best[i]
+    if tok in ("-I", "-isystem", "-D", "-U", "-std"):
+        if i + 1 < len(best):
+            keep.append(tok)
+            keep.append(best[i + 1])
+            i += 2
+            continue
+    if tok.startswith(("-I", "-D", "-U", "-std=", "-isystem")):
+        keep.append(tok)
+    i += 1
+
+seen = set()
+for tok in keep:
+    if tok in seen:
+        continue
+    seen.add(tok)
+    print(tok)
+PY
+}
+
 collect_changed_paths() {
   (
     cd "${ROOT_DIR}" || exit 1
@@ -170,12 +245,21 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   EXTRA_ARGS+=(--extra-arg=-isysroot --extra-arg="${SDKROOT}")
 fi
 
+HEADER_EXTRA_ARGS=("${EXTRA_ARGS[@]}")
+mapfile -t HEADER_COMPILE_ARGS < <(extract_header_compile_args "${BUILD_DIR}/compile_commands.json")
+for arg in "${HEADER_COMPILE_ARGS[@]}"; do
+  HEADER_EXTRA_ARGS+=(--extra-arg="${arg}")
+done
+
 lint_file() {
   local kind="$1"
   local file="$2"
-  local -a cmd=("${CLANG_TIDY_BIN}" -quiet "${EXTRA_ARGS[@]}")
+  local -a cmd=("${CLANG_TIDY_BIN}" -quiet)
   if [[ "${kind}" == "header" ]]; then
+    cmd+=("${HEADER_EXTRA_ARGS[@]}")
     cmd+=(-checks='misc-include-cleaner')
+  else
+    cmd+=("${EXTRA_ARGS[@]}")
   fi
   cmd+=(-p "${BUILD_DIR}" "${file}")
 

@@ -235,3 +235,19 @@
   - Pinned CI format job to Python-packaged `clang-format==20.1.3` and invoked format check through:
     - `IGNEOUS_CLANG_FORMAT_BIN="$HOME/.local/bin/clang-format"`
   - Updated `README.md` with formatter override usage note.
+
+## Entry 0015
+- Timestamp: 2026-02-16
+- Structural Difference Targeted: Make CI header lint robust when third-party headers are only available via vcpkg include paths.
+- Problem:
+  - CI lint failed on header pass with:
+    - `include/igneous/core/algebra.hpp: 'xsimd/xsimd.hpp' file not found`
+  - Cause: direct header linting for `misc-include-cleaner` does not always inherit compile flags for non-translation-unit files.
+- Fixes:
+  - Extended `scripts/dev/lint.sh` to extract header compile flags from `compile_commands.json` (preferring entries with vcpkg/system include flags).
+  - Header lint now applies extracted `-I`, `-isystem`, `-D`, `-U`, and `-std` flags via `--extra-arg` for each header invocation.
+  - Kept translation-unit lint behavior unchanged except for shared argument plumbing.
+- Verification:
+  - `bash -n scripts/dev/lint.sh` -> pass.
+  - `make lint-strict` -> pass.
+  - `./scripts/dev/lint.sh build` -> pass (`0` exit, no warnings/errors).
