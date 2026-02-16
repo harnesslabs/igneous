@@ -20,7 +20,7 @@ int main() {
   auto start = Clock::now();
 
   // We use a vector of pointers to simulate creating distinct objects
-  std::vector<Algebra *> heap_objects;
+  std::vector<Algebra*> heap_objects;
   heap_objects.reserve(OBJECT_COUNT);
 
   for (int i = 0; i < OBJECT_COUNT; ++i) {
@@ -29,13 +29,11 @@ int main() {
   }
 
   auto end = Clock::now();
-  auto dur_heap =
-      std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-          .count();
+  auto dur_heap = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
   fmt::print("Time: {} ms\n", dur_heap);
 
   // Cleanup heap objects (slow!)
-  for (auto *ptr : heap_objects)
+  for (auto* ptr : heap_objects)
     delete ptr;
 
   // --- Benchmark 2: Arena Allocation ---
@@ -46,22 +44,20 @@ int main() {
   MemoryArena arena(OBJECT_COUNT * sizeof(Algebra) * 2);
 
   // We use std::pmr::vector which uses our arena
-  std::pmr::vector<Algebra *> arena_objects(&arena);
+  std::pmr::vector<Algebra*> arena_objects(&arena);
   arena_objects.reserve(OBJECT_COUNT);
 
   start = Clock::now();
 
   for (int i = 0; i < OBJECT_COUNT; ++i) {
     // This uses our do_allocate (pointer bump)
-    void *mem = arena.allocate(sizeof(Algebra));
+    void* mem = arena.allocate(sizeof(Algebra));
     // Placement new (construct object in that memory)
     arena_objects.push_back(new (mem) Algebra());
   }
 
   end = Clock::now();
-  auto dur_arena =
-      std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-          .count();
+  auto dur_arena = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
   fmt::print("Time: {} ms\n", dur_arena);
 
   fmt::print("Speedup: {:.2f}x\n", (double)dur_heap / (double)dur_arena);

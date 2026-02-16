@@ -1,42 +1,56 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <Eigen/Dense>
-#include <Eigen/Sparse>
+#include <Eigen/Eigenvalues>
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <complex>
-#include <limits>
+#include <cstddef>
 #include <utility>
 #include <vector>
 
 #include <igneous/core/parallel.hpp>
-#include <igneous/data/mesh.hpp>
 #include <igneous/ops/diffusion/forms.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>
-#include <igneous/ops/diffusion/products.hpp>
 
-namespace igneous::ops {
+namespace igneous::ops::diffusion {
 
+/// \brief Reusable buffers for diffusion-Hodge assembly.
 template <typename MeshT> struct HodgeWorkspace {
+  /// \brief Coordinate vectors used in gamma evaluations.
   std::array<Eigen::VectorXf, 3> coords;
-  std::array<Eigen::MatrixXf, 3> gamma_x_phi_mat; // [3] each [n_verts x n0]
-  Eigen::MatrixXf weighted_u;                     // [n_verts x n0]
-  std::vector<std::vector<Eigen::VectorXf>> gamma_x_phi; // [3][n0]
-  std::vector<std::vector<Eigen::VectorXf>> gamma_phi_x; // [n0][3]
+  /// \brief `Gamma(x_a, phi_i)` matrix cache for each axis.
+  std::array<Eigen::MatrixXf, 3> gamma_x_phi_mat;
+  /// \brief Basis weighted by stationary measure.
+  Eigen::MatrixXf weighted_u;
+  /// \brief Reserved for mixed gamma layouts.
+  std::vector<std::vector<Eigen::VectorXf>> gamma_x_phi;
+  /// \brief `Gamma(phi_i, x_a)` cache per mode and axis.
+  std::vector<std::vector<Eigen::VectorXf>> gamma_phi_x;
+  /// \brief `Gamma(x_a, x_b)` caches.
   std::array<std::array<Eigen::VectorXf, 3>, 3> gamma_xx;
+  /// \brief Temporary `Gamma(phi_i, phi_j)` buffer.
   Eigen::VectorXf gamma_phi_phi;
+  /// \brief Generic temporary weight vector.
   Eigen::VectorXf weight;
 };
 
+/**
+ * \brief Assemble weak exterior derivative matrix for 1-forms.
+ * \param mesh Input diffusion space.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \param workspace Scratch buffers.
+ * \return Weak derivative matrix.
+ */
 template <typename MeshT>
-Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
-                                                 float bandwidth,
-                                                 HodgeWorkspace<MeshT> &workspace) {
-  const auto &U = mesh.topology.eigen_basis;
-  const auto &mu = mesh.topology.mu;
+Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, float bandwidth,
+                                                 HodgeWorkspace<MeshT>& workspace) {
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
   const int n0 = U.cols();
-  const int n_verts = static_cast<int>(mesh.geometry.num_points());
+  const int n_verts = static_cast<int>(mesh.num_points());
 
   Eigen::MatrixXf D = Eigen::MatrixXf::Zero(3 * n0, n0);
 
@@ -56,8 +70,7 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
         8);
   }
 
-  if (workspace.weighted_u.rows() != n_verts ||
-      workspace.weighted_u.cols() != n0) {
+  if (workspace.weighted_u.rows() != n_verts || workspace.weighted_u.cols() != n0) {
     workspace.weighted_u.resize(n_verts, n0);
   }
   workspace.weighted_u = U.array().colwise() * mu.array();
@@ -73,22 +86,34 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
   return D;
 }
 
+/**
+ * \brief Convenience overload for weak exterior derivative assembly.
+ * \param mesh Input diffusion space.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \return Weak derivative matrix.
+ */
 template <typename MeshT>
-Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT &mesh,
-                                                 float bandwidth) {
+Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, float bandwidth) {
   HodgeWorkspace<MeshT> workspace;
   return compute_weak_exterior_derivative(mesh, bandwidth, workspace);
 }
 
+/**
+ * \brief Assemble curl-energy term used in diffusion Hodge Laplacian.
+ * \param mesh Input diffusion space.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \param workspace Scratch buffers.
+ * \return Curl-energy matrix.
+ */
 template <typename MeshT>
-Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
-                                           HodgeWorkspace<MeshT> &workspace) {
-  const auto &U = mesh.topology.eigen_basis;
-  const auto &mu = mesh.topology.mu;
+Eigen::MatrixXf compute_curl_energy_matrix(const MeshT& mesh, float bandwidth,
+                                           HodgeWorkspace<MeshT>& workspace) {
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
   const auto mu_arr = mu.array();
   const int n0 = U.cols();
   const int n_basis = 3 * n0;
-  const int n_verts = static_cast<int>(mesh.geometry.num_points());
+  const int n_verts = static_cast<int>(mesh.num_points());
 
   Eigen::MatrixXf E_up = Eigen::MatrixXf::Zero(n_basis, n_basis);
 
@@ -120,16 +145,13 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
         Eigen::VectorXf gamma_phi_phi_local(n_verts);
 
         for (int l = k; l < n0; ++l) {
-          carre_du_champ(mesh, U.col(k), U.col(l), bandwidth,
-                         gamma_phi_phi_local);
+          carre_du_champ(mesh, U.col(k), U.col(l), bandwidth, gamma_phi_phi_local);
 
           for (int a = 0; a < 3; ++a) {
             for (int b = 0; b < 3; ++b) {
               const float val =
-                  (((gamma_phi_phi_local.array() *
-                     workspace.gamma_xx[a][b].array()) -
-                    (workspace.gamma_phi_x[k][b].array() *
-                     workspace.gamma_phi_x[l][a].array())) *
+                  (((gamma_phi_phi_local.array() * workspace.gamma_xx[a][b].array()) -
+                    (workspace.gamma_phi_x[k][b].array() * workspace.gamma_phi_x[l][a].array())) *
                    mu_arr)
                       .sum();
 
@@ -149,29 +171,47 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth,
   return E_up;
 }
 
+/**
+ * \brief Convenience overload for curl-energy assembly.
+ * \param mesh Input diffusion space.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \return Curl-energy matrix.
+ */
 template <typename MeshT>
-Eigen::MatrixXf compute_curl_energy_matrix(const MeshT &mesh, float bandwidth) {
+Eigen::MatrixXf compute_curl_energy_matrix(const MeshT& mesh, float bandwidth) {
   HodgeWorkspace<MeshT> workspace;
   return compute_curl_energy_matrix(mesh, bandwidth, workspace);
 }
 
-inline Eigen::MatrixXf compute_hodge_laplacian_matrix(
-    const Eigen::MatrixXf &D_weak, const Eigen::MatrixXf &E_up) {
+/**
+ * \brief Combine down and up terms into a Hodge Laplacian.
+ * \param D_weak Weak derivative matrix.
+ * \param E_up Curl-energy matrix.
+ * \return Hodge Laplacian matrix.
+ */
+inline Eigen::MatrixXf compute_hodge_laplacian_matrix(const Eigen::MatrixXf& D_weak,
+                                                      const Eigen::MatrixXf& E_up) {
   const Eigen::MatrixXf L_down = D_weak * D_weak.transpose();
   return L_down + E_up;
 }
 
+/**
+ * \brief Solve generalized Hodge eigenproblem `(L, G)` with regularization cutoff.
+ * \param laplacian Hodge Laplacian matrix.
+ * \param mass_matrix Gram/mass matrix.
+ * \param rcond Eigenvalue threshold for regularization.
+ * \return Pair `(eigenvalues, eigenvectors)`.
+ */
 inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
-compute_hodge_spectrum(const Eigen::MatrixXf &laplacian,
-                       const Eigen::MatrixXf &mass_matrix,
+compute_hodge_spectrum(const Eigen::MatrixXf& laplacian, const Eigen::MatrixXf& mass_matrix,
                        float rcond = 1e-5f) {
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> mass_solver(mass_matrix);
   if (mass_solver.info() != Eigen::Success) {
     return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
   }
 
-  const auto &mass_evals = mass_solver.eigenvalues();
-  const auto &mass_evecs = mass_solver.eigenvectors();
+  const auto& mass_evals = mass_solver.eigenvalues();
+  const auto& mass_evecs = mass_solver.eigenvectors();
   std::vector<int> keep_indices;
   keep_indices.reserve(static_cast<size_t>(mass_evals.size()));
   for (int i = 0; i < mass_evals.size(); ++i) {
@@ -203,18 +243,29 @@ compute_hodge_spectrum(const Eigen::MatrixXf &laplacian,
   return std::make_pair(evals, evecs);
 }
 
+/**
+ * \brief Compute scalar circular coordinates from a harmonic 1-form mode.
+ *
+ * This solves a generalized eigenproblem for an advection-diffusion operator
+ * built from `alpha_coeffs`.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Harmonic 1-form coefficients.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \param lambda Diffusion regularization weight.
+ * \param positive_imag_mode Which positive-imaginary mode to choose.
+ * \param selected_eval Optional output for selected complex eigenvalue.
+ * \return Angle field in `[0, 2*pi)`.
+ */
 template <typename MeshT>
-Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
-                                             const Eigen::VectorXf &alpha_coeffs,
-                                             float bandwidth,
-                                             float lambda = 1.0f,
+Eigen::VectorXf compute_circular_coordinates(const MeshT& mesh, const Eigen::VectorXf& alpha_coeffs,
+                                             float bandwidth, float lambda = 1.0f,
                                              int positive_imag_mode = 0,
-                                             std::complex<float> *selected_eval = nullptr) {
-  const auto &U = mesh.topology.eigen_basis;
-  const auto &mu = mesh.topology.mu;
+                                             std::complex<float>* selected_eval = nullptr) {
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
 
   const int n0 = U.cols();
-  const size_t n_verts = mesh.geometry.num_points();
+  const size_t n_verts = mesh.num_points();
   const int n_verts_i = static_cast<int>(n_verts);
 
   HodgeWorkspace<MeshT> workspace;
@@ -247,10 +298,9 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
       [&](int t) {
         Eigen::VectorXf weight_local(n_verts_i);
         weight_local =
-            mu.array() *
-            ((workspace.gamma_x_phi_mat[0].col(t).array() * q.col(0).array()) +
-             (workspace.gamma_x_phi_mat[1].col(t).array() * q.col(1).array()) +
-             (workspace.gamma_x_phi_mat[2].col(t).array() * q.col(2).array()));
+            mu.array() * ((workspace.gamma_x_phi_mat[0].col(t).array() * q.col(0).array()) +
+                          (workspace.gamma_x_phi_mat[1].col(t).array() * q.col(1).array()) +
+                          (workspace.gamma_x_phi_mat[2].col(t).array() * q.col(2).array()));
         X_op.col(t).noalias() = U_t * weight_local;
       },
       8);
@@ -313,8 +363,7 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
   }
 
   const int mode =
-      std::clamp(positive_imag_mode, 0,
-                 static_cast<int>(positive_imag_indices.size()) - 1);
+      std::clamp(positive_imag_mode, 0, static_cast<int>(positive_imag_indices.size()) - 1);
   const int best_idx = positive_imag_indices[static_cast<size_t>(mode)];
   if (selected_eval != nullptr) {
     *selected_eval = sorted_evals[best_idx];
@@ -339,4 +388,4 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT &mesh,
   return theta;
 }
 
-} // namespace igneous::ops
+} // namespace igneous::ops::diffusion

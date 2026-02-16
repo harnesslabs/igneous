@@ -2,33 +2,42 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <numbers>
 #include <type_traits>
 #include <vector>
 
-#include <igneous/core/algebra.hpp>
 #include <igneous/core/blades.hpp>
 #include <igneous/core/parallel.hpp>
-#include <igneous/data/mesh.hpp>
-#include <igneous/data/topology.hpp>
+#include <igneous/data/space.hpp>
+#include <igneous/data/structure.hpp>
+#include <igneous/data/structures/discrete_exterior_calculus.hpp>
 
-namespace igneous::ops {
+namespace igneous::ops::dec {
 
-template <core::IsSignature Sig, data::SurfaceTopology Topo>
-struct CurvatureWorkspace {
+/// \brief Scratch storage reused by curvature evaluation.
+template <data::SurfaceStructure StructureT> struct CurvatureWorkspace {
+  /// \brief Unnormalized per-face bivector normals.
   std::vector<core::Bivec3> face_normals;
 };
 
-template <core::IsSignature Sig, data::SurfaceTopology Topo>
-void compute_curvature_measures(const data::Mesh<Sig, Topo> &mesh,
-                                std::vector<float> &H,
-                                std::vector<float> &K,
-                                CurvatureWorkspace<Sig, Topo> &workspace) {
-  const auto &geometry = mesh.geometry;
-  const auto &topology = mesh.topology;
+/**
+ * \brief Compute mean (`H`) and Gaussian (`K`) curvature approximations.
+ *
+ * Uses angle-defect and neighborhood Laplacian estimates on triangle surfaces.
+ * \param space Input surface space.
+ * \param H Output mean-curvature-like scalar values per vertex.
+ * \param K Output Gaussian-curvature-like scalar values per vertex.
+ * \param workspace Reused temporary buffers.
+ */
+template <data::SurfaceStructure StructureT>
+void compute_curvature_measures(const data::Space<StructureT>& space, std::vector<float>& H,
+                                std::vector<float>& K, CurvatureWorkspace<StructureT>& workspace) {
+  const auto& structure = space.structure;
 
-  const size_t num_verts = geometry.num_points();
-  const size_t num_faces = topology.num_faces();
+  const size_t num_verts = space.num_points();
+  const size_t num_faces = structure.num_faces();
 
   H.assign(num_verts, 0.0f);
   K.assign(num_verts, 0.0f);
@@ -36,14 +45,14 @@ void compute_curvature_measures(const data::Mesh<Sig, Topo> &mesh,
   workspace.face_normals.resize(num_faces);
 
   const auto get_face_vertex = [&](size_t face_idx, int corner) -> uint32_t {
-    if constexpr (std::is_same_v<Topo, data::TriangleTopology>) {
+    if constexpr (std::is_same_v<StructureT, data::DiscreteExteriorCalculus>) {
       if (corner == 0)
-        return topology.face_v0[face_idx];
+        return structure.face_v0[face_idx];
       if (corner == 1)
-        return topology.face_v1[face_idx];
-      return topology.face_v2[face_idx];
+        return structure.face_v1[face_idx];
+      return structure.face_v2[face_idx];
     }
-    return topology.get_vertex_for_face(face_idx, corner);
+    return structure.get_vertex_for_face(face_idx, corner);
   };
 
   core::parallel_for_index(
@@ -54,9 +63,9 @@ void compute_curvature_measures(const data::Mesh<Sig, Topo> &mesh,
         const uint32_t i1 = get_face_vertex(f, 1);
         const uint32_t i2 = get_face_vertex(f, 2);
 
-        const core::Vec3 p0 = geometry.get_vec3(i0);
-        const core::Vec3 p1 = geometry.get_vec3(i1);
-        const core::Vec3 p2 = geometry.get_vec3(i2);
+        const core::Vec3 p0 = space.get_vec3(i0);
+        const core::Vec3 p1 = space.get_vec3(i1);
+        const core::Vec3 p2 = space.get_vec3(i2);
 
         workspace.face_normals[f] = (p1 - p0) ^ (p2 - p0);
       },
@@ -66,7 +75,7 @@ void compute_curvature_measures(const data::Mesh<Sig, Topo> &mesh,
       0, static_cast<int>(num_verts),
       [&](int vertex_idx) {
         const size_t i = static_cast<size_t>(vertex_idx);
-        const auto faces = topology.get_faces_for_vertex(static_cast<uint32_t>(i));
+        const auto faces = structure.get_faces_for_vertex(static_cast<uint32_t>(i));
         if (faces.empty()) {
           return;
         }
@@ -81,7 +90,7 @@ void compute_curvature_measures(const data::Mesh<Sig, Topo> &mesh,
         core::Vec3 sum_pos{0.0f, 0.0f, 0.0f};
         float neighbor_count = 0.0f;
 
-        const core::Vec3 p = geometry.get_vec3(i);
+        const core::Vec3 p = space.get_vec3(i);
 
         for (uint32_t f_idx : faces) {
           const core::Bivec3 fn = workspace.face_normals[f_idx];
@@ -96,14 +105,14 @@ void compute_curvature_measures(const data::Mesh<Sig, Topo> &mesh,
           core::Vec3 p_a;
           core::Vec3 p_b;
           if (i0 == i) {
-            p_a = geometry.get_vec3(i1);
-            p_b = geometry.get_vec3(i2);
+            p_a = space.get_vec3(i1);
+            p_b = space.get_vec3(i2);
           } else if (i1 == i) {
-            p_a = geometry.get_vec3(i2);
-            p_b = geometry.get_vec3(i0);
+            p_a = space.get_vec3(i2);
+            p_b = space.get_vec3(i0);
           } else {
-            p_a = geometry.get_vec3(i0);
-            p_b = geometry.get_vec3(i1);
+            p_a = space.get_vec3(i0);
+            p_b = space.get_vec3(i1);
           }
 
           const core::Vec3 u = p_a - p;
@@ -121,9 +130,8 @@ void compute_curvature_measures(const data::Mesh<Sig, Topo> &mesh,
         }
 
         if (area_sum > 1e-12f) {
-          K[i] = static_cast<float>(
-              (2.0 * std::numbers::pi_v<double> - angle_sum) /
-              (static_cast<double>(area_sum) / 3.0));
+          K[i] = static_cast<float>((2.0 * std::numbers::pi_v<double> - angle_sum) /
+                                    (static_cast<double>(area_sum) / 3.0));
         }
 
         const float n_mag_sq = n_xy * n_xy + n_yz * n_yz + n_zx * n_zx;
@@ -140,4 +148,4 @@ void compute_curvature_measures(const data::Mesh<Sig, Topo> &mesh,
       128);
 }
 
-} // namespace igneous::ops
+} // namespace igneous::ops::dec

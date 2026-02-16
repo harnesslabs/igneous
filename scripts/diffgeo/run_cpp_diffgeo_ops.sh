@@ -8,7 +8,7 @@ INPUT_CSV="${1:?first arg must be input csv path}"
 OUTPUT_DIR="${2:?second arg must be output dir path}"
 
 BUILD_DIR="${BUILD_DIR:-${ROOT_DIR}/build}"
-EXE="${BUILD_DIR}/igneous-diffusion-topology"
+EXE="${BUILD_DIR}/igneous-diffusion-geometry"
 
 N_BASIS="${N_BASIS:-50}"
 N_COEFFICIENTS="${N_COEFFICIENTS:-50}"

@@ -44,10 +44,10 @@ python3 visualizations/view_main_spectral.py --run --open
 python3 visualizations/view_main_hodge.py --run --open
 ```
 
-`src/main_diffusion_topology.cpp`:
+`src/main_diffusion_geometry.cpp`:
 
 ```bash
-python3 visualizations/view_main_diffusion_topology.py --run --open
+python3 visualizations/view_main_diffusion_geometry.py --run --open
 ```
 
 Each script writes previews and an `index.md` under `visualizations/results/<main_name>/`.

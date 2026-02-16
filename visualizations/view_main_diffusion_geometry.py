@@ -19,16 +19,16 @@ from _common import (
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="View outputs from src/main_diffusion_topology.cpp"
+        description="View outputs from src/main_diffusion_geometry.cpp"
     )
-    parser.add_argument("--run", action="store_true", help="Run igneous-diffusion-topology before rendering")
-    parser.add_argument("--executable", default="build/igneous-diffusion-topology")
-    parser.add_argument("--output-dir", default="output_diffusion_topology")
+    parser.add_argument("--run", action="store_true", help="Run igneous-diffusion-geometry before rendering")
+    parser.add_argument("--executable", default="build/igneous-diffusion-geometry")
+    parser.add_argument("--output-dir", default="output_diffusion_geometry")
     parser.add_argument("--input-csv", default=None)
     parser.add_argument("--generate-sphere", action="store_true")
     parser.add_argument("--n-points", type=int, default=None)
     parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--plots-dir", default="visualizations/results/main_diffusion_topology")
+    parser.add_argument("--plots-dir", default="visualizations/results/main_diffusion_geometry")
     parser.add_argument("--open", action="store_true", help="Open generated previews (or raw outputs)")
     args = parser.parse_args()
 
@@ -52,7 +52,7 @@ def main() -> int:
     files = sorted(output_dir.glob("*.ply"))
     if not files:
         raise SystemExit(
-            "No diffusion-topology PLY outputs found. Run with --run or verify --output-dir."
+            "No diffusion-geometry PLY outputs found. Run with --run or verify --output-dir."
         )
 
     if not has_matplotlib():
@@ -69,7 +69,7 @@ def main() -> int:
         rows.append((src.name, src, out_png))
 
     index_path = plots_dir / "index.md"
-    write_index(index_path, "main_diffusion_topology outputs", rows)
+    write_index(index_path, "main_diffusion_geometry outputs", rows)
     print(f"[viz] Wrote previews to {plots_dir}")
     print(f"[viz] Index: {index_path}")
 

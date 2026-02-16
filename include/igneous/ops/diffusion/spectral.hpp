@@ -1,39 +1,56 @@
 #pragma once
-#include <Eigen/Sparse>
+#include <Eigen/Core>
 #include <Spectra/GenEigsSolver.h>
-#include <Spectra/MatOp/SparseGenMatProd.h>
 #include <Spectra/SymEigsSolver.h>
+#include <Spectra/Util/CompInfo.h>
+#include <Spectra/Util/SelectionRule.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <igneous/core/parallel.hpp>
-#include <igneous/data/mesh.hpp>
 #include <iostream>
 #include <type_traits>
+#include <vector>
 
-namespace igneous::ops {
+namespace igneous::ops::diffusion {
 
+/**
+ * \brief Spectra-compatible matrix product wrapper over Markov CSR data.
+ *
+ * Implements the matrix-operation interface expected by Spectra.
+ */
 class MarkovCsrMatProd {
 public:
   using Scalar = float;
 
-  MarkovCsrMatProd(const std::vector<int> &row_offsets,
-                   const std::vector<int> &col_indices,
-                   const std::vector<float> &values, int n)
-      : row_offsets_(row_offsets), col_indices_(col_indices), values_(values),
-        n_(n) {}
+  /// \brief Construct operator view over CSR arrays.
+  MarkovCsrMatProd(const std::vector<int>& row_offsets, const std::vector<int>& col_indices,
+                   const std::vector<float>& values, int n)
+      : row_offsets_(row_offsets), col_indices_(col_indices), values_(values), n_(n) {}
 
-  [[nodiscard]] int rows() const { return n_; }
-  [[nodiscard]] int cols() const { return n_; }
+  /// \return Matrix row count.
+  [[nodiscard]] int rows() const {
+    return n_;
+  }
+  /// \return Matrix column count.
+  [[nodiscard]] int cols() const {
+    return n_;
+  }
 
-  void perform_op(const Scalar *x_in, Scalar *y_out) const {
+  /**
+   * \brief Apply matrix-vector product.
+   * \param x_in Input vector.
+   * \param y_out Output vector.
+   */
+  void perform_op(const Scalar* x_in, Scalar* y_out) const {
     core::parallel_for_index(
         0, n_,
         [&](int i) {
           const int begin = row_offsets_[static_cast<size_t>(i)];
           const int end = row_offsets_[static_cast<size_t>(i) + 1];
           const int count = end - begin;
-          const int *cols = col_indices_.data() + begin;
-          const float *vals = values_.data() + begin;
+          const int* cols = col_indices_.data() + begin;
+          const float* vals = values_.data() + begin;
 
           float acc = 0.0f;
           int k = 0;
@@ -52,30 +69,46 @@ public:
   }
 
 private:
-  const std::vector<int> &row_offsets_;
-  const std::vector<int> &col_indices_;
-  const std::vector<float> &values_;
+  /// \brief CSR row offsets.
+  const std::vector<int>& row_offsets_;
+  /// \brief CSR column indices.
+  const std::vector<int>& col_indices_;
+  /// \brief CSR values.
+  const std::vector<float>& values_;
+  /// \brief Matrix dimension.
   int n_ = 0;
 };
 
+/// \brief Spectra operator for the symmetrized Markov transform.
 class MarkovSymmetricCsrMatProd {
 public:
   using Scalar = float;
 
-  MarkovSymmetricCsrMatProd(const std::vector<int> &row_offsets,
-                            const std::vector<int> &col_indices,
-                            const std::vector<float> &values,
-                            const Eigen::VectorXf &sqrt_mu,
-                            const Eigen::VectorXf &inv_sqrt_mu, int n)
-      : row_offsets_(row_offsets), col_indices_(col_indices), values_(values),
-        sqrt_mu_(sqrt_mu), inv_sqrt_mu_(inv_sqrt_mu), n_(n) {}
+  /// \brief Construct normalized symmetric Markov operator.
+  MarkovSymmetricCsrMatProd(const std::vector<int>& row_offsets,
+                            const std::vector<int>& col_indices, const std::vector<float>& values,
+                            const Eigen::VectorXf& sqrt_mu, const Eigen::VectorXf& inv_sqrt_mu,
+                            int n)
+      : row_offsets_(row_offsets), col_indices_(col_indices), values_(values), sqrt_mu_(sqrt_mu),
+        inv_sqrt_mu_(inv_sqrt_mu), n_(n) {}
 
-  [[nodiscard]] int rows() const { return n_; }
-  [[nodiscard]] int cols() const { return n_; }
+  /// \return Matrix row count.
+  [[nodiscard]] int rows() const {
+    return n_;
+  }
+  /// \return Matrix column count.
+  [[nodiscard]] int cols() const {
+    return n_;
+  }
 
-  void perform_op(const Scalar *x_in, Scalar *y_out) const {
-    const float *sqrt_mu_data = sqrt_mu_.data();
-    const float *inv_sqrt_mu_data = inv_sqrt_mu_.data();
+  /**
+   * \brief Apply matrix-vector product.
+   * \param x_in Input vector.
+   * \param y_out Output vector.
+   */
+  void perform_op(const Scalar* x_in, Scalar* y_out) const {
+    const float* sqrt_mu_data = sqrt_mu_.data();
+    const float* inv_sqrt_mu_data = inv_sqrt_mu_.data();
 
     core::parallel_for_index(
         0, n_,
@@ -83,8 +116,8 @@ public:
           const int begin = row_offsets_[static_cast<size_t>(i)];
           const int end = row_offsets_[static_cast<size_t>(i) + 1];
           const int count = end - begin;
-          const int *cols = col_indices_.data() + begin;
-          const float *vals = values_.data() + begin;
+          const int* cols = col_indices_.data() + begin;
+          const float* vals = values_.data() + begin;
 
           float acc = 0.0f;
           int k = 0;
@@ -108,36 +141,54 @@ public:
   }
 
 private:
-  const std::vector<int> &row_offsets_;
-  const std::vector<int> &col_indices_;
-  const std::vector<float> &values_;
-  const Eigen::VectorXf &sqrt_mu_;
-  const Eigen::VectorXf &inv_sqrt_mu_;
+  /// \brief CSR row offsets.
+  const std::vector<int>& row_offsets_;
+  /// \brief CSR column indices.
+  const std::vector<int>& col_indices_;
+  /// \brief CSR values.
+  const std::vector<float>& values_;
+  /// \brief `sqrt(mu)` scaling.
+  const Eigen::VectorXf& sqrt_mu_;
+  /// \brief `1/sqrt(mu)` scaling.
+  const Eigen::VectorXf& inv_sqrt_mu_;
+  /// \brief Matrix dimension.
   int n_ = 0;
 };
 
+/// \brief Spectra operator over the symmetric kernel CSR matrix.
 class SymmetricKernelCsrMatProd {
 public:
   using Scalar = float;
 
-  SymmetricKernelCsrMatProd(const std::vector<int> &row_offsets,
-                            const std::vector<int> &col_indices,
-                            const std::vector<float> &values, int n)
-      : row_offsets_(row_offsets), col_indices_(col_indices), values_(values),
-        n_(n) {}
+  /// \brief Construct operator view over symmetric-kernel CSR arrays.
+  SymmetricKernelCsrMatProd(const std::vector<int>& row_offsets,
+                            const std::vector<int>& col_indices, const std::vector<float>& values,
+                            int n)
+      : row_offsets_(row_offsets), col_indices_(col_indices), values_(values), n_(n) {}
 
-  [[nodiscard]] int rows() const { return n_; }
-  [[nodiscard]] int cols() const { return n_; }
+  /// \return Matrix row count.
+  [[nodiscard]] int rows() const {
+    return n_;
+  }
+  /// \return Matrix column count.
+  [[nodiscard]] int cols() const {
+    return n_;
+  }
 
-  void perform_op(const Scalar *x_in, Scalar *y_out) const {
+  /**
+   * \brief Apply matrix-vector product.
+   * \param x_in Input vector.
+   * \param y_out Output vector.
+   */
+  void perform_op(const Scalar* x_in, Scalar* y_out) const {
     core::parallel_for_index(
         0, n_,
         [&](int i) {
           const int begin = row_offsets_[static_cast<size_t>(i)];
           const int end = row_offsets_[static_cast<size_t>(i) + 1];
           const int count = end - begin;
-          const int *cols = col_indices_.data() + begin;
-          const float *vals = values_.data() + begin;
+          const int* cols = col_indices_.data() + begin;
+          const float* vals = values_.data() + begin;
 
           float acc = 0.0f;
           int k = 0;
@@ -156,37 +207,53 @@ public:
   }
 
 private:
-  const std::vector<int> &row_offsets_;
-  const std::vector<int> &col_indices_;
-  const std::vector<float> &values_;
+  /// \brief CSR row offsets.
+  const std::vector<int>& row_offsets_;
+  /// \brief CSR column indices.
+  const std::vector<int>& col_indices_;
+  /// \brief CSR values.
+  const std::vector<float>& values_;
+  /// \brief Matrix dimension.
   int n_ = 0;
 };
 
+/// \brief Spectra operator for normalized symmetric-kernel eigensolve.
 class NormalizedSymmetricKernelCsrMatProd {
 public:
   using Scalar = float;
 
-  NormalizedSymmetricKernelCsrMatProd(const std::vector<int> &row_offsets,
-                                      const std::vector<int> &col_indices,
-                                      const std::vector<float> &values,
-                                      const Eigen::VectorXf &inv_sqrt_rows,
-                                      int n)
+  /// \brief Construct normalized symmetric-kernel operator.
+  NormalizedSymmetricKernelCsrMatProd(const std::vector<int>& row_offsets,
+                                      const std::vector<int>& col_indices,
+                                      const std::vector<float>& values,
+                                      const Eigen::VectorXf& inv_sqrt_rows, int n)
       : row_offsets_(row_offsets), col_indices_(col_indices), values_(values),
         inv_sqrt_rows_(inv_sqrt_rows), n_(n) {}
 
-  [[nodiscard]] int rows() const { return n_; }
-  [[nodiscard]] int cols() const { return n_; }
+  /// \return Matrix row count.
+  [[nodiscard]] int rows() const {
+    return n_;
+  }
+  /// \return Matrix column count.
+  [[nodiscard]] int cols() const {
+    return n_;
+  }
 
-  void perform_op(const Scalar *x_in, Scalar *y_out) const {
-    const float *inv_sqrt_data = inv_sqrt_rows_.data();
+  /**
+   * \brief Apply matrix-vector product.
+   * \param x_in Input vector.
+   * \param y_out Output vector.
+   */
+  void perform_op(const Scalar* x_in, Scalar* y_out) const {
+    const float* inv_sqrt_data = inv_sqrt_rows_.data();
     core::parallel_for_index(
         0, n_,
         [&](int i) {
           const int begin = row_offsets_[static_cast<size_t>(i)];
           const int end = row_offsets_[static_cast<size_t>(i) + 1];
           const int count = end - begin;
-          const int *cols = col_indices_.data() + begin;
-          const float *vals = values_.data() + begin;
+          const int* cols = col_indices_.data() + begin;
+          const float* vals = values_.data() + begin;
 
           float acc = 0.0f;
           int k = 0;
@@ -210,75 +277,75 @@ public:
   }
 
 private:
-  const std::vector<int> &row_offsets_;
-  const std::vector<int> &col_indices_;
-  const std::vector<float> &values_;
-  const Eigen::VectorXf &inv_sqrt_rows_;
+  /// \brief CSR row offsets.
+  const std::vector<int>& row_offsets_;
+  /// \brief CSR column indices.
+  const std::vector<int>& col_indices_;
+  /// \brief CSR values.
+  const std::vector<float>& values_;
+  /// \brief Inverse square-root row scaling.
+  const Eigen::VectorXf& inv_sqrt_rows_;
+  /// \brief Matrix dimension.
   int n_ = 0;
 };
 
-// Computes the first k eigenvectors of the Markov Chain P.
-template <typename MeshT>
-void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
+/**
+ * \brief Compute a diffusion eigenbasis from Markov CSR data.
+ * \param mesh Input diffusion space. `mesh.structure.eigen_basis` is overwritten.
+ * \param n_eigenvectors Number of eigenvectors requested.
+ */
+template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvectors) {
   const bool verbose = std::getenv("IGNEOUS_BENCH_MODE") == nullptr;
   if (verbose) {
-    std::cout << "[Spectral] Computing top " << n_eigenvectors
-              << " eigenfunctions...\n";
+    std::cout << "[Spectral] Computing top " << n_eigenvectors << " eigenfunctions...\n";
   }
 
-  const int n = [&]() {
-    if constexpr (requires { mesh.topology.markov_row_offsets; }) {
-      if (mesh.topology.markov_row_offsets.empty()) {
-        return 0;
-      }
-      return static_cast<int>(mesh.topology.markov_row_offsets.size() - 1);
-    } else if constexpr (requires { mesh.topology.P; }) {
-      return static_cast<int>(mesh.topology.P.rows());
-    } else {
-      return 0;
-    }
-  }();
+  static_assert(
+      requires {
+        mesh.structure.markov_row_offsets;
+        mesh.structure.markov_col_indices;
+        mesh.structure.markov_values;
+      }, "compute_eigenbasis requires markov CSR arrays.");
 
-  const auto solve_with_op = [&](auto &op) {
+  const int n = mesh.structure.markov_row_offsets.empty()
+                    ? 0
+                    : static_cast<int>(mesh.structure.markov_row_offsets.size() - 1);
+
+  const auto solve_with_op = [&](auto& op) {
     using OpType = std::decay_t<decltype(op)>;
 
     const int full_ncv = std::min(n, std::max(2 * n_eigenvectors + 1, 20));
     const bool try_compact = n_eigenvectors >= 32;
-    const int compact_ncv =
-        try_compact ? std::min(n, std::max(n_eigenvectors + 16, 20)) : full_ncv;
+    const int compact_ncv = try_compact ? std::min(n, std::max(n_eigenvectors + 16, 20)) : full_ncv;
 
     Spectra::GenEigsSolver<OpType> eigs(op, n_eigenvectors, compact_ncv);
     eigs.init();
     int nconv = eigs.compute(Spectra::SortRule::LargestReal);
 
-    if (try_compact &&
-        (eigs.info() != Spectra::CompInfo::Successful ||
-         nconv < n_eigenvectors) &&
+    if (try_compact && (eigs.info() != Spectra::CompInfo::Successful || nconv < n_eigenvectors) &&
         full_ncv > compact_ncv) {
       Spectra::GenEigsSolver<OpType> fallback(op, n_eigenvectors, full_ncv);
       fallback.init();
       nconv = fallback.compute(Spectra::SortRule::LargestReal);
 
       if (fallback.info() == Spectra::CompInfo::Successful) {
-        mesh.topology.eigen_basis = fallback.eigenvectors(nconv).real();
+        mesh.structure.eigen_basis = fallback.eigenvectors(nconv).real();
         if (verbose) {
           std::cout << "[Spectral] Converged! Found " << nconv
-                    << " eigenvectors. Basis shape: "
-                    << mesh.topology.eigen_basis.rows() << "x"
-                    << mesh.topology.eigen_basis.cols() << "\n";
+                    << " eigenvectors. Basis shape: " << mesh.structure.eigen_basis.rows() << "x"
+                    << mesh.structure.eigen_basis.cols() << "\n";
         }
         return;
       }
     }
 
     if (eigs.info() == Spectra::CompInfo::Successful) {
-      mesh.topology.eigen_basis = eigs.eigenvectors(nconv).real();
+      mesh.structure.eigen_basis = eigs.eigenvectors(nconv).real();
 
       if (verbose) {
         std::cout << "[Spectral] Converged! Found " << nconv
-                  << " eigenvectors. Basis shape: "
-                  << mesh.topology.eigen_basis.rows() << "x"
-                  << mesh.topology.eigen_basis.cols() << "\n";
+                  << " eigenvectors. Basis shape: " << mesh.structure.eigen_basis.rows() << "x"
+                  << mesh.structure.eigen_basis.cols() << "\n";
       }
       return;
     }
@@ -289,93 +356,71 @@ void compute_eigenbasis(MeshT &mesh, int n_eigenvectors) {
   };
 
   if (n <= 1) {
-    mesh.topology.eigen_basis =
-        Eigen::MatrixXf::Ones(std::max(1, n), std::max(1, n));
+    mesh.structure.eigen_basis = Eigen::MatrixXf::Ones(std::max(1, n), std::max(1, n));
     return;
   }
 
   if constexpr (requires {
-                  mesh.topology.markov_row_offsets;
-                  mesh.topology.markov_col_indices;
-                  mesh.topology.markov_values;
+                  mesh.structure.symmetric_row_offsets;
+                  mesh.structure.symmetric_col_indices;
+                  mesh.structure.symmetric_values;
+                  mesh.structure.symmetric_row_sums;
                 }) {
-    if constexpr (requires {
-                    mesh.topology.symmetric_row_offsets;
-                    mesh.topology.symmetric_col_indices;
-                    mesh.topology.symmetric_values;
-                    mesh.topology.symmetric_row_sums;
-                  }) {
-      const auto &sym_row_offsets = mesh.topology.symmetric_row_offsets;
-      const auto &sym_col_indices = mesh.topology.symmetric_col_indices;
-      const auto &sym_values = mesh.topology.symmetric_values;
-      const auto &row_sums = mesh.topology.symmetric_row_sums;
-      if (!sym_row_offsets.empty() &&
-          static_cast<int>(sym_row_offsets.size()) == n + 1 &&
-          row_sums.size() == n) {
-        const int k_eval = std::max(1, std::min(n_eigenvectors, std::max(1, n - 1)));
-        const int full_ncv = std::min(n, std::max(2 * k_eval + 1, 20));
-        const bool try_compact = k_eval >= 32;
-        const int compact_ncv =
-            try_compact ? std::min(n, std::max(k_eval + 16, 20)) : full_ncv;
+    const auto& sym_row_offsets = mesh.structure.symmetric_row_offsets;
+    const auto& sym_col_indices = mesh.structure.symmetric_col_indices;
+    const auto& sym_values = mesh.structure.symmetric_values;
+    const auto& row_sums = mesh.structure.symmetric_row_sums;
+    if (!sym_row_offsets.empty() && static_cast<int>(sym_row_offsets.size()) == n + 1 &&
+        row_sums.size() == n) {
+      const int k_eval = std::max(1, std::min(n_eigenvectors, std::max(1, n - 1)));
+      const int full_ncv = std::min(n, std::max(2 * k_eval + 1, 20));
+      const bool try_compact = k_eval >= 32;
+      const int compact_ncv = try_compact ? std::min(n, std::max(k_eval + 16, 20)) : full_ncv;
 
-        Eigen::VectorXf inv_sqrt_rows(n);
-        for (int i = 0; i < n; ++i) {
-          inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
+      Eigen::VectorXf inv_sqrt_rows(n);
+      for (int i = 0; i < n; ++i) {
+        inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
+      }
+
+      NormalizedSymmetricKernelCsrMatProd op(sym_row_offsets, sym_col_indices, sym_values,
+                                             inv_sqrt_rows, n);
+      const auto solve_symmetric = [&](int ncv) -> bool {
+        Spectra::SymEigsSolver<NormalizedSymmetricKernelCsrMatProd> eigs(op, k_eval, ncv);
+        eigs.init();
+        const int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
+        if (eigs.info() != Spectra::CompInfo::Successful || nconv <= 0) {
+          return false;
         }
 
-        NormalizedSymmetricKernelCsrMatProd op(sym_row_offsets, sym_col_indices,
-                                               sym_values, inv_sqrt_rows, n);
-        const auto solve_symmetric = [&](int ncv) -> bool {
-          Spectra::SymEigsSolver<NormalizedSymmetricKernelCsrMatProd> eigs(op,
-                                                                            k_eval,
-                                                                            ncv);
-          eigs.init();
-          const int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
-          if (eigs.info() != Spectra::CompInfo::Successful || nconv <= 0) {
-            return false;
-          }
-
-          Eigen::MatrixXf basis = eigs.eigenvectors(nconv);
-          basis = basis.array().colwise() * inv_sqrt_rows.array();
-          if (std::abs(basis(0, 0)) > 1e-12f) {
-            basis /= basis(0, 0);
-          }
-          mesh.topology.eigen_basis = basis;
-
-          if (verbose) {
-            std::cout << "[Spectral] Converged! Found " << nconv
-                      << " eigenvectors. Basis shape: "
-                      << mesh.topology.eigen_basis.rows() << "x"
-                      << mesh.topology.eigen_basis.cols() << "\n";
-          }
-          return true;
-        };
-
-        if ((try_compact && solve_symmetric(compact_ncv)) ||
-            solve_symmetric(full_ncv)) {
-          return;
+        Eigen::MatrixXf basis = eigs.eigenvectors(nconv);
+        basis = basis.array().colwise() * inv_sqrt_rows.array();
+        if (std::abs(basis(0, 0)) > 1e-12f) {
+          basis /= basis(0, 0);
         }
+        mesh.structure.eigen_basis = basis;
 
         if (verbose) {
-          std::cerr << "[Spectral] Symmetric-kernel solve failed, falling back to "
-                       "generic solver.\n";
+          std::cout << "[Spectral] Converged! Found " << nconv
+                    << " eigenvectors. Basis shape: " << mesh.structure.eigen_basis.rows() << "x"
+                    << mesh.structure.eigen_basis.cols() << "\n";
         }
+        return true;
+      };
+
+      if ((try_compact && solve_symmetric(compact_ncv)) || solve_symmetric(full_ncv)) {
+        return;
+      }
+
+      if (verbose) {
+        std::cerr << "[Spectral] Symmetric-kernel solve failed, falling back to "
+                     "generic solver.\n";
       }
     }
-
-    MarkovCsrMatProd fallback_op(mesh.topology.markov_row_offsets,
-                                 mesh.topology.markov_col_indices,
-                                 mesh.topology.markov_values, n);
-    solve_with_op(fallback_op);
-  } else if constexpr (requires { mesh.topology.P; }) {
-    const auto &P = mesh.topology.P;
-    Spectra::SparseGenMatProd<float> op(P);
-    solve_with_op(op);
-  } else {
-    static_assert(
-        requires { mesh.topology.P; },
-        "compute_eigenbasis requires markov CSR arrays or sparse matrix P.");
   }
+
+  MarkovCsrMatProd fallback_op(mesh.structure.markov_row_offsets, mesh.structure.markov_col_indices,
+                               mesh.structure.markov_values, n);
+  solve_with_op(fallback_op);
 }
 
-} // namespace igneous::ops
+} // namespace igneous::ops::diffusion

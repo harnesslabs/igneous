@@ -6,13 +6,13 @@
 [![CodeQL](https://github.com/harnesslabs/igneous/actions/workflows/codeql.yml/badge.svg)](https://github.com/harnesslabs/igneous/actions/workflows/codeql.yml)
 [![Release](https://github.com/harnesslabs/igneous/actions/workflows/release.yml/badge.svg)](https://github.com/harnesslabs/igneous/actions/workflows/release.yml)
 
-Data-oriented C++23 geometry and topology engine with a throughput-first CPU pipeline.
+Data-oriented C++23 geometry and structure engine with a throughput-first CPU pipeline.
 
 ## Highlights
 
 - SoA geometry storage (`x`, `y`, `z`) for cache-friendly traversal.
-- Triangle topology with explicit face arrays and CSR adjacency (faces + vertex neighbors).
-- Diffusion topology with k-NN graph construction (`nanoflann`) and sparse Markov chain (`Eigen`).
+- `DiscreteExteriorCalculus` structure with explicit face arrays and CSR adjacency (faces + vertex neighbors).
+- `DiffusionGeometry` structure with k-NN graph construction (`nanoflann`) and sparse Markov chain (`Eigen`).
 - Spectral and Hodge operator stack (Gram, weak exterior derivative, curl energy, Hodge spectrum).
 - Doctest correctness suite and Google Benchmark performance suite.
 
@@ -36,6 +36,63 @@ cmake --preset default-local -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
 ```
 
+## API Docs
+
+The repo uses Doxygen-style comments in headers under `include/igneous/`.
+
+Generate docs:
+
+```bash
+cmake -S . -B build -G Ninja
+cmake --build build --target docs
+```
+
+Output:
+
+- `build/docs/html/index.html`
+
+If Doxygen is missing, install it first (for example via Homebrew: `brew install doxygen graphviz`).
+
+Deployment:
+
+- GitHub Actions workflow `.github/workflows/docs.yml` builds and deploys docs to GitHub Pages on `main`.
+- Published URL pattern: `https://<org-or-user>.github.io/igneous/`
+
+## Lint and Format
+
+This repo uses `clang-tidy` (lint) and `clang-format` (formatter) with config files at:
+
+- `.clang-tidy`
+- `.clang-format`
+
+Run locally:
+
+```bash
+make lint
+make lint-fast
+make lint-changed
+make lint-all
+make lint-strict
+make format
+make format-check
+```
+
+Notes:
+
+- `make lint` is the default local pass: `src/` translation units plus header include-cleaner checks.
+- `make lint-fast` skips header include-cleaner checks (faster iterative loop).
+- `make lint-changed` checks only changed C++ translation units in git working tree (fastest local loop).
+- `make lint-all` extends lint coverage to `tests/` and `benches/`.
+- `make lint-strict` is full-project strict lint (similar to CI lint settings).
+- `make lint` and related targets auto-run `make debug` only when `build/compile_commands.json` is missing.
+- Tool binaries searched in `PATH`: `clang-tidy` and `clang-format` (version-suffixed variants are supported).
+- `scripts/dev/lint.sh` knobs:
+  - `IGNEOUS_LINT_JOBS=<N>` controls parallel workers (default: auto, capped at 8).
+  - `IGNEOUS_LINT_HEADERS=0|1` toggles header include-cleaner pass.
+  - `IGNEOUS_LINT_CHANGED_ONLY=0|1` restricts lint to changed files in git.
+- `scripts/dev/format.sh` knob:
+  - `IGNEOUS_CLANG_FORMAT_BIN=<binary>` selects an explicit formatter binary (useful to match CI version exactly).
+
 ## Run Examples
 
 ```bash
@@ -44,6 +101,7 @@ cmake --build build -j8
 ./build/igneous-diffusion assets/bunny.obj
 ./build/igneous-spectral assets/bunny.obj
 ./build/igneous-hodge
+./build/igneous-diffusion-geometry
 ```
 
 ## Visualizations
@@ -56,7 +114,7 @@ python3 visualizations/view_main_mesh.py --run --open
 python3 visualizations/view_main_diffusion.py --run --open
 python3 visualizations/view_main_spectral.py --run --open
 python3 visualizations/view_main_hodge.py --run --open
-python3 visualizations/view_main_diffusion_topology.py --run --open
+python3 visualizations/view_main_diffusion_geometry.py --run --open
 ```
 
 Detailed usage is documented in `visualizations/README.md`.
@@ -76,7 +134,7 @@ Standard parity round:
 ./scripts/hodge/run_parity_round.sh
 ```
 
-## Diffusion Topology Parity Workflow
+## Diffusion Geometry Parity Workflow
 
 Standard torus+sphere parity round:
 
@@ -113,8 +171,8 @@ ctest --test-dir build --output-on-failure --verbose
 Current suites:
 
 - `test_algebra`
-- `test_topology_triangle`
-- `test_topology_diffusion`
+- `test_structure_dec`
+- `test_structure_diffusion_geometry`
 - `test_ops_curvature_flow`
 - `test_ops_spectral_geometry`
 - `test_ops_hodge`
@@ -161,7 +219,7 @@ IGNEOUS_BENCH_MODE=1 IGNEOUS_BACKEND=parallel IGNEOUS_NUM_THREADS=8 \
 
 Benchmark groups:
 
-- `bench_mesh_topology_build`
+- `bench_mesh_structure_build`
 - `bench_curvature_kernel`
 - `bench_flow_kernel`
 - `bench_diffusion_build`
@@ -178,7 +236,7 @@ Pipeline benchmark groups:
 - `bench_pipeline_diffusion_main`
 - `bench_pipeline_spectral_main`
 - `bench_pipeline_hodge_main`
-- `bench_hodge_phase_topology`
+- `bench_hodge_phase_structure_build`
 - `bench_hodge_phase_eigenbasis`
 - `bench_hodge_phase_gram`
 - `bench_hodge_phase_weak_derivative`
@@ -189,6 +247,7 @@ Pipeline benchmark groups:
 ## CI/CD Workflows
 
 - `.github/workflows/ci.yml`: Linux/macOS build + tests, sanitizer pass, compile commands artifact.
+- `.github/workflows/docs.yml`: Doxygen build and GitHub Pages deployment for API docs.
 - `.github/workflows/perf-smoke.yml`: PR smoke benchmark report against baseline (report-only).
 - `.github/workflows/perf-deep.yml`: nightly/manual deep benchmark capture and summary (report-only).
 - `.github/workflows/release.yml`: tag-triggered `v*` release packaging and GitHub Release asset publish.
@@ -236,8 +295,7 @@ git push origin vX.Y.Z
 ```cpp
 #include <igneous/igneous.hpp>
 
-using Sig = igneous::core::Euclidean3D;
-using Mesh = igneous::data::Mesh<Sig, igneous::data::TriangleTopology>;
+using Mesh = igneous::data::Space<igneous::data::DiscreteExteriorCalculus>;
 
 int main() {
   Mesh mesh;
@@ -246,11 +304,11 @@ int main() {
   std::vector<float> H;
   std::vector<float> K;
 
-  igneous::ops::CurvatureWorkspace<Sig, igneous::data::TriangleTopology> curvature_ws;
-  igneous::ops::FlowWorkspace<Sig, igneous::data::TriangleTopology> flow_ws;
+  igneous::ops::dec::CurvatureWorkspace<igneous::data::DiscreteExteriorCalculus> curvature_ws;
+  igneous::ops::dec::FlowWorkspace<igneous::data::DiscreteExteriorCalculus> flow_ws;
 
-  igneous::ops::compute_curvature_measures(mesh, H, K, curvature_ws);
-  igneous::ops::integrate_mean_curvature_flow(mesh, 0.01f, flow_ws);
+  igneous::ops::dec::compute_curvature_measures(mesh, H, K, curvature_ws);
+  igneous::ops::dec::integrate_mean_curvature_flow(mesh, 0.01f, flow_ws);
 }
 ```
 

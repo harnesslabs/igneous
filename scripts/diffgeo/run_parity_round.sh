@@ -23,7 +23,7 @@ source "${VENV_PATH}/bin/activate"
 PYTHON_BIN="${VENV_PATH}/bin/python"
 
 BUILD_DIR="${BUILD_DIR:-${ROOT_DIR}/build}"
-if [[ ! -x "${BUILD_DIR}/igneous-diffusion-topology" ]]; then
+if [[ ! -x "${BUILD_DIR}/igneous-diffusion-geometry" ]]; then
   cmake -S "${ROOT_DIR}" -B "${BUILD_DIR}"
   cmake --build "${BUILD_DIR}" -j8
 fi
@@ -97,7 +97,7 @@ COMPARE_ARGS=(
   --cpp-root "${CPP_ROOT}"
   --output-markdown "${REPORT_DIR}/parity_report.md"
   --output-json "${REPORT_DIR}/parity_report.json"
-  --label "Diffusion topology parity round ${ROUND_TAG}"
+  --label "Diffusion geometry parity round ${ROUND_TAG}"
 )
 
 if [[ -n "${PREVIOUS_REPORT_JSON:-}" ]]; then

@@ -2,13 +2,12 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
-#include <igneous/data/topology.hpp>
+#include <igneous/data/structures/discrete_exterior_calculus.hpp>
 
-TEST_CASE("TriangleTopology builds face and neighbor CSR") {
-  igneous::data::TriangleTopology topo;
+TEST_CASE("DiscreteExteriorCalculus builds face and neighbor CSR") {
+  igneous::data::DiscreteExteriorCalculus topo;
   topo.faces_to_vertices = {
-      0, 1, 2,
-      0, 2, 3,
+      0, 1, 2, 0, 2, 3,
   };
 
   topo.build({4, true});

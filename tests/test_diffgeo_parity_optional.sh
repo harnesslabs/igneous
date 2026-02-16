@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REQUIRE_PARITY="${IGNEOUS_REQUIRE_PARITY:-0}"
 
 if [[ "${REQUIRE_PARITY}" != "1" ]]; then
-  echo "Skipping optional diffusion topology parity test: CLI now emits PLY-only outputs"
+  echo "Skipping optional diffusion geometry parity test: CLI now emits PLY-only outputs"
   exit 0
 fi
 
@@ -32,4 +32,4 @@ if not payload["gates"]["final_pass"]:
     raise SystemExit("final parity gate failed")
 PY
 
-echo "optional diffusion topology parity test passed"
+echo "optional diffusion geometry parity test passed"

@@ -3,39 +3,38 @@
 
 #include <cmath>
 #include <igneous/core/algebra.hpp>
-#include <igneous/data/mesh.hpp>
+#include <igneous/data/space.hpp>
 #include <igneous/ops/diffusion/geometry.hpp>
 #include <igneous/ops/diffusion/spectral.hpp>
 
-static igneous::data::Mesh<igneous::core::Euclidean3D, igneous::data::DiffusionTopology>
+static igneous::data::Space<igneous::data::DiffusionGeometry>
 make_diffusion_cloud(size_t n_points) {
-  using Mesh = igneous::data::Mesh<igneous::core::Euclidean3D, igneous::data::DiffusionTopology>;
+  using Mesh = igneous::data::Space<igneous::data::DiffusionGeometry>;
   Mesh mesh;
-  mesh.geometry.reserve(n_points);
+  mesh.reserve(n_points);
 
   for (size_t i = 0; i < n_points; ++i) {
     const float t = static_cast<float>(i) / static_cast<float>(n_points);
-    mesh.geometry.push_point({std::cos(t * 6.283185f), std::sin(t * 6.283185f), t});
+    mesh.push_point({std::cos(t * 6.283185f), std::sin(t * 6.283185f), t});
   }
 
-  mesh.topology.build(
-      {mesh.geometry.x_span(), mesh.geometry.y_span(), mesh.geometry.z_span(), 24});
+  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), 24});
   return mesh;
 }
 
 TEST_CASE("Spectral basis and Gram matrix are finite and shaped correctly") {
   auto mesh = make_diffusion_cloud(400);
 
-  igneous::ops::compute_eigenbasis(mesh, 8);
+  igneous::ops::diffusion::compute_eigenbasis(mesh, 8);
 
-  CHECK(mesh.topology.eigen_basis.rows() == static_cast<int>(mesh.geometry.num_points()));
-  CHECK(mesh.topology.eigen_basis.cols() >= 1);
+  CHECK(mesh.structure.eigen_basis.rows() == static_cast<int>(mesh.num_points()));
+  CHECK(mesh.structure.eigen_basis.cols() >= 1);
 
-  igneous::ops::GeometryWorkspace<decltype(mesh)> ws;
-  const Eigen::MatrixXf G = igneous::ops::compute_1form_gram_matrix(mesh, 0.05f, ws);
+  igneous::ops::diffusion::GeometryWorkspace<decltype(mesh)> ws;
+  const Eigen::MatrixXf G = igneous::ops::diffusion::compute_1form_gram_matrix(mesh, 0.05f, ws);
 
-  CHECK(G.rows() == mesh.topology.eigen_basis.cols() * 3);
-  CHECK(G.cols() == mesh.topology.eigen_basis.cols() * 3);
+  CHECK(G.rows() == mesh.structure.eigen_basis.cols() * 3);
+  CHECK(G.cols() == mesh.structure.eigen_basis.cols() * 3);
 
   for (int r = 0; r < G.rows(); ++r) {
     for (int c = 0; c < G.cols(); ++c) {

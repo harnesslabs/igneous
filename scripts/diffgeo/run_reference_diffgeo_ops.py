@@ -98,7 +98,7 @@ def circular_coordinates(form, lam: float, mode: int):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run reference diffusion topology ops")
+    parser = argparse.ArgumentParser(description="Run reference diffusion geometry ops")
     parser.add_argument("--input-csv", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--n-function-basis", type=int, default=50)

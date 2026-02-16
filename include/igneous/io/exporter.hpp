@@ -2,21 +2,28 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <span>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
-#include <igneous/data/mesh.hpp>
-#include <igneous/data/topology.hpp>
+#include <igneous/data/space.hpp>
+#include <igneous/data/structure.hpp>
 
 namespace igneous::io {
 
-using igneous::data::Mesh;
+using igneous::data::Space;
 
+/**
+ * \brief Map normalized scalar `t` in `[0,1]` to an RGB heatmap color.
+ * \param t Normalized scalar value.
+ * \return RGB tuple as 8-bit channels.
+ */
 inline std::tuple<uint8_t, uint8_t, uint8_t> get_heatmap_color_bytes(double t) {
   t = std::clamp(t, 0.0, 1.0);
   float r = 0.0f;
@@ -42,8 +49,17 @@ inline std::tuple<uint8_t, uint8_t, uint8_t> get_heatmap_color_bytes(double t) {
   };
 }
 
+/**
+ * \brief Compute robust color bounds via mean +/- `sigma_clip` * stddev.
+ *
+ * Non-finite values are skipped.
+ * \param field Scalar field values.
+ * \param sigma_clip Number of standard deviations used for clipping.
+ * \return Pair `(min_value, max_value)` used for color normalization.
+ */
 template <typename Field>
-inline std::pair<double, double> compute_field_bounds(std::span<const Field> field, double sigma_clip) {
+inline std::pair<double, double> compute_field_bounds(std::span<const Field> field,
+                                                      double sigma_clip) {
   double sum = 0.0;
   double sum_sq = 0.0;
   int count = 0;
@@ -65,9 +81,16 @@ inline std::pair<double, double> compute_field_bounds(std::span<const Field> fie
   return {mean - (sigma_clip * std_dev), mean + (sigma_clip * std_dev)};
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_ply(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
-                const std::string &filename, double sigma_clip = 2.0) {
+/**
+ * \brief Export a scalar field as colored point vertices in ASCII PLY.
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output PLY file path.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
+template <typename StructureT, typename Field>
+void export_ply(const Space<StructureT>& mesh, std::span<const Field> field,
+                const std::string& filename, double sigma_clip = 2.0) {
   const auto [min_v, max_v] = compute_field_bounds(field, sigma_clip);
 
   std::ofstream file(filename);
@@ -75,7 +98,7 @@ void export_ply(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
     return;
   }
 
-  const size_t n_verts = mesh.geometry.num_points();
+  const size_t n_verts = mesh.num_points();
 
   file << "ply\n";
   file << "format ascii 1.0\n";
@@ -90,28 +113,45 @@ void export_ply(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
 
   const double denom = std::max(1e-12, max_v - min_v);
   for (size_t i = 0; i < n_verts; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     const double val = (i < field.size()) ? static_cast<double>(field[i]) : 0.0;
     const double t = (val - min_v) / denom;
     const auto [r, g, b] = get_heatmap_color_bytes(t);
 
-    file << p.x << " " << p.y << " " << p.z << " " << static_cast<int>(r) << " " << static_cast<int>(g)
-         << " " << static_cast<int>(b) << "\n";
+    file << p.x << " " << p.y << " " << p.z << " " << static_cast<int>(r) << " "
+         << static_cast<int>(g) << " " << static_cast<int>(b) << "\n";
   }
 
   std::cout << "[IO] Exported PLY " << filename << "\n";
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_ply(const Mesh<Sig, Topo> &mesh, const std::vector<Field> &field,
-                const std::string &filename, double sigma_clip = 2.0) {
-  export_ply(mesh, std::span<const Field>(field.data(), field.size()), filename,
-             sigma_clip);
+/**
+ * \brief `std::vector` overload for `export_ply`.
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output PLY file path.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
+template <typename StructureT, typename Field>
+void export_ply(const Space<StructureT>& mesh, const std::vector<Field>& field,
+                const std::string& filename, double sigma_clip = 2.0) {
+  export_ply(mesh, std::span<const Field>(field.data(), field.size()), filename, sigma_clip);
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_heatmap(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
-                    const std::string &filename, double sigma_clip = 2.0) {
+/**
+ * \brief Export a heatmap OBJ.
+ *
+ * Surface structures emit triangle faces; non-surface structures emit OBJ point
+ * records (`p`) referencing all vertices.
+ *
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output OBJ file path.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
+template <typename StructureT, typename Field>
+void export_heatmap(const Space<StructureT>& mesh, std::span<const Field> field,
+                    const std::string& filename, double sigma_clip = 2.0) {
   const auto [min_v, max_v] = compute_field_bounds(field, sigma_clip);
 
   std::ofstream file(filename);
@@ -119,25 +159,25 @@ void export_heatmap(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
     return;
   }
 
-  const size_t n_verts = mesh.geometry.num_points();
+  const size_t n_verts = mesh.num_points();
   const double denom = std::max(1e-12, max_v - min_v);
 
   for (size_t i = 0; i < n_verts; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     const double val = (i < field.size()) ? static_cast<double>(field[i]) : 0.0;
     const double t = (val - min_v) / denom;
     const auto [r, g, b] = get_heatmap_color_bytes(t);
 
-    file << "v " << p.x << " " << p.y << " " << p.z << " " << (r / 255.0f) << " " << (g / 255.0f) << " "
-         << (b / 255.0f) << "\n";
+    file << "v " << p.x << " " << p.y << " " << p.z << " " << (r / 255.0f) << " " << (g / 255.0f)
+         << " " << (b / 255.0f) << "\n";
   }
 
-  if constexpr (igneous::data::SurfaceTopology<Topo>) {
-    const size_t n_faces = mesh.topology.num_faces();
+  if constexpr (igneous::data::SurfaceStructure<StructureT>) {
+    const size_t n_faces = mesh.structure.num_faces();
     for (size_t i = 0; i < n_faces; ++i) {
-      file << "f " << mesh.topology.get_vertex_for_face(i, 0) + 1 << " "
-           << mesh.topology.get_vertex_for_face(i, 1) + 1 << " "
-           << mesh.topology.get_vertex_for_face(i, 2) + 1 << "\n";
+      file << "f " << mesh.structure.get_vertex_for_face(i, 0) + 1 << " "
+           << mesh.structure.get_vertex_for_face(i, 1) + 1 << " "
+           << mesh.structure.get_vertex_for_face(i, 2) + 1 << "\n";
     }
   } else {
     file << "p";
@@ -153,18 +193,34 @@ void export_heatmap(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
   std::cout << "[IO] Exported OBJ " << filename << "\n";
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_heatmap(const Mesh<Sig, Topo> &mesh,
-                    const std::vector<Field> &field,
-                    const std::string &filename, double sigma_clip = 2.0) {
-  export_heatmap(mesh, std::span<const Field>(field.data(), field.size()),
-                 filename, sigma_clip);
+/**
+ * \brief `std::vector` overload for `export_heatmap`.
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output OBJ file path.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
+template <typename StructureT, typename Field>
+void export_heatmap(const Space<StructureT>& mesh, const std::vector<Field>& field,
+                    const std::string& filename, double sigma_clip = 2.0) {
+  export_heatmap(mesh, std::span<const Field>(field.data(), field.size()), filename, sigma_clip);
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_ply_solid(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
-                      const std::string &filename, double radius = 0.01,
-                      double sigma_clip = 2.0) {
+/**
+ * \brief Export each point as a small tetrahedron in a colored PLY mesh.
+ *
+ * This is useful for visualizing point clouds in tools that primarily render
+ * polygonal meshes.
+ *
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output PLY file path.
+ * \param radius Tetrahedron scale per point.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
+template <typename StructureT, typename Field>
+void export_ply_solid(const Space<StructureT>& mesh, std::span<const Field> field,
+                      const std::string& filename, double radius = 0.01, double sigma_clip = 2.0) {
   const auto [min_v, max_v] = compute_field_bounds(field, sigma_clip);
 
   std::ofstream file(filename);
@@ -172,7 +228,7 @@ void export_ply_solid(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
     return;
   }
 
-  const size_t n_points = mesh.geometry.num_points();
+  const size_t n_points = mesh.num_points();
   const size_t n_verts = n_points * 4;
   const size_t n_faces = n_points * 4;
 
@@ -194,7 +250,7 @@ void export_ply_solid(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
   const double denom = std::max(1e-12, max_v - min_v);
 
   for (size_t i = 0; i < n_points; ++i) {
-    const auto p = mesh.geometry.get_vec3(i);
+    const auto p = mesh.get_vec3(i);
     const double val = (i < field.size()) ? static_cast<double>(field[i]) : 0.0;
     const double t = (val - min_v) / denom;
     const auto [r, g, b] = get_heatmap_color_bytes(t);
@@ -204,9 +260,12 @@ void export_ply_solid(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
     const int ib = b;
 
     file << p.x << " " << (p.y + h) << " " << p.z << " " << ir << " " << ig << " " << ib << "\n";
-    file << (p.x - s) << " " << (p.y - s) << " " << (p.z + s) << " " << ir << " " << ig << " " << ib << "\n";
-    file << (p.x + s) << " " << (p.y - s) << " " << (p.z + s) << " " << ir << " " << ig << " " << ib << "\n";
-    file << p.x << " " << (p.y - s) << " " << (p.z - s) << " " << ir << " " << ig << " " << ib << "\n";
+    file << (p.x - s) << " " << (p.y - s) << " " << (p.z + s) << " " << ir << " " << ig << " " << ib
+         << "\n";
+    file << (p.x + s) << " " << (p.y - s) << " " << (p.z + s) << " " << ir << " " << ig << " " << ib
+         << "\n";
+    file << p.x << " " << (p.y - s) << " " << (p.z - s) << " " << ir << " " << ig << " " << ib
+         << "\n";
   }
 
   for (size_t i = 0; i < n_points; ++i) {
@@ -220,13 +279,19 @@ void export_ply_solid(const Mesh<Sig, Topo> &mesh, std::span<const Field> field,
   std::cout << "[IO] Exported Solid PLY " << filename << "\n";
 }
 
-template <typename Sig, typename Topo, typename Field>
-void export_ply_solid(const Mesh<Sig, Topo> &mesh,
-                      const std::vector<Field> &field,
-                      const std::string &filename, double radius = 0.01,
-                      double sigma_clip = 2.0) {
-  export_ply_solid(mesh, std::span<const Field>(field.data(), field.size()),
-                   filename, radius, sigma_clip);
+/**
+ * \brief `std::vector` overload for `export_ply_solid`.
+ * \param mesh Input space.
+ * \param field Scalar field values.
+ * \param filename Output PLY file path.
+ * \param radius Tetrahedron scale per point.
+ * \param sigma_clip Sigma clipping for color normalization.
+ */
+template <typename StructureT, typename Field>
+void export_ply_solid(const Space<StructureT>& mesh, const std::vector<Field>& field,
+                      const std::string& filename, double radius = 0.01, double sigma_clip = 2.0) {
+  export_ply_solid(mesh, std::span<const Field>(field.data(), field.size()), filename, radius,
+                   sigma_clip);
 }
 
 } // namespace igneous::io

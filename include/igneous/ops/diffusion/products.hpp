@@ -1,25 +1,36 @@
 #pragma once
 
+#include <Eigen/Core>
 #include <Eigen/Dense>
 #include <algorithm>
-#include <vector>
+#include <cstddef>
 
 #include <igneous/ops/diffusion/basis.hpp>
 #include <igneous/ops/diffusion/forms.hpp>
 
-namespace igneous::ops {
+namespace igneous::ops::diffusion {
 
+/**
+ * \brief Compute coefficients of `alpha ^ beta` in diffusion-form basis.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Left operand coefficients.
+ * \param k1 Left exterior degree.
+ * \param beta_coeffs Right operand coefficients.
+ * \param k2 Right exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch buffers.
+ * \return Flattened coefficient vector of the wedge product.
+ */
 template <typename MeshT>
-Eigen::VectorXf compute_wedge_product_coeffs(
-    const MeshT &mesh, const Eigen::VectorXf &alpha_coeffs, int k1,
-    const Eigen::VectorXf &beta_coeffs, int k2, int n_coefficients,
-    DiffusionFormWorkspace<MeshT> &workspace) {
+Eigen::VectorXf compute_wedge_product_coeffs(const MeshT& mesh, const Eigen::VectorXf& alpha_coeffs,
+                                             int k1, const Eigen::VectorXf& beta_coeffs, int k2,
+                                             int n_coefficients,
+                                             DiffusionFormWorkspace<MeshT>& workspace) {
   (void)workspace;
   const int d = ambient_dim_3d();
   const int k_total = k1 + k2;
   const int n1 =
-      std::max(1, std::min(n_coefficients,
-                           static_cast<int>(mesh.topology.eigen_basis.cols())));
+      std::max(1, std::min(n_coefficients, static_cast<int>(mesh.structure.eigen_basis.cols())));
 
   if (k_total > d) {
     return Eigen::VectorXf::Zero(n1);
@@ -33,10 +44,8 @@ Eigen::VectorXf compute_wedge_product_coeffs(
     return Eigen::VectorXf();
   }
 
-  const Eigen::MatrixXf alpha_pw =
-      coefficients_to_pointwise(mesh, alpha_coeffs, k1, n1);
-  const Eigen::MatrixXf beta_pw =
-      coefficients_to_pointwise(mesh, beta_coeffs, k2, n1);
+  const Eigen::MatrixXf alpha_pw = coefficients_to_pointwise(mesh, alpha_coeffs, k1, n1);
+  const Eigen::MatrixXf beta_pw = coefficients_to_pointwise(mesh, beta_coeffs, k2, n1);
   if (alpha_pw.rows() == 0 || beta_pw.rows() == 0) {
     return Eigen::VectorXf();
   }
@@ -49,33 +58,51 @@ Eigen::VectorXf compute_wedge_product_coeffs(
     const int left = wedge_idx.left_indices[t];
     const int right = wedge_idx.right_indices[t];
     const float sign = static_cast<float>(wedge_idx.signs[t]);
-    wedge_pw.col(target).array() +=
-        sign * alpha_pw.col(left).array() * beta_pw.col(right).array();
+    wedge_pw.col(target).array() += sign * alpha_pw.col(left).array() * beta_pw.col(right).array();
   }
 
   return project_pointwise_to_coefficients(mesh, wedge_pw, n1);
 }
 
+/**
+ * \brief Convenience overload for wedge coefficient assembly.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Left operand coefficients.
+ * \param k1 Left exterior degree.
+ * \param beta_coeffs Right operand coefficients.
+ * \param k2 Right exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \return Flattened coefficient vector of the wedge product.
+ */
 template <typename MeshT>
-Eigen::VectorXf compute_wedge_product_coeffs(const MeshT &mesh,
-                                             const Eigen::VectorXf &alpha_coeffs,
-                                             int k1,
-                                             const Eigen::VectorXf &beta_coeffs,
-                                             int k2,
+Eigen::VectorXf compute_wedge_product_coeffs(const MeshT& mesh, const Eigen::VectorXf& alpha_coeffs,
+                                             int k1, const Eigen::VectorXf& beta_coeffs, int k2,
                                              int n_coefficients) {
   DiffusionFormWorkspace<MeshT> workspace;
-  return compute_wedge_product_coeffs(mesh, alpha_coeffs, k1, beta_coeffs, k2,
-                                      n_coefficients, workspace);
+  return compute_wedge_product_coeffs(mesh, alpha_coeffs, k1, beta_coeffs, k2, n_coefficients,
+                                      workspace);
 }
 
+/**
+ * \brief Build the linear operator matrix for left wedge multiplication.
+ *
+ * Returns `W` such that `W * beta_coeffs` approximates `alpha ^ beta`.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Fixed left operand coefficients.
+ * \param k_left Left exterior degree.
+ * \param k_right Right exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch buffers.
+ * \return Dense linear operator matrix.
+ */
 template <typename MeshT>
-Eigen::MatrixXf compute_wedge_operator_matrix(
-    const MeshT &mesh, const Eigen::VectorXf &alpha_coeffs, int k_left,
-    int k_right, int n_coefficients, DiffusionFormWorkspace<MeshT> &workspace) {
+Eigen::MatrixXf compute_wedge_operator_matrix(const MeshT& mesh,
+                                              const Eigen::VectorXf& alpha_coeffs, int k_left,
+                                              int k_right, int n_coefficients,
+                                              DiffusionFormWorkspace<MeshT>& workspace) {
   const int d = ambient_dim_3d();
   const int n1 =
-      std::max(1, std::min(n_coefficients,
-                           static_cast<int>(mesh.topology.eigen_basis.cols())));
+      std::max(1, std::min(n_coefficients, static_cast<int>(mesh.structure.eigen_basis.cols())));
   const int in_dim = n1 * std::max(1, binomial_coeff(d, k_right));
   const int out_dim = n1 * std::max(1, binomial_coeff(d, k_left + k_right));
 
@@ -84,8 +111,7 @@ Eigen::MatrixXf compute_wedge_operator_matrix(
     Eigen::VectorXf beta = Eigen::VectorXf::Zero(in_dim);
     beta[col] = 1.0f;
     const Eigen::VectorXf wedge =
-        compute_wedge_product_coeffs(mesh, alpha_coeffs, k_left, beta, k_right,
-                                     n1, workspace);
+        compute_wedge_product_coeffs(mesh, alpha_coeffs, k_left, beta, k_right, n1, workspace);
     if (wedge.size() == out_dim) {
       op.col(col) = wedge;
     }
@@ -93,14 +119,22 @@ Eigen::MatrixXf compute_wedge_operator_matrix(
   return op;
 }
 
+/**
+ * \brief Convenience overload for wedge operator assembly.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Fixed left operand coefficients.
+ * \param k_left Left exterior degree.
+ * \param k_right Right exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \return Dense linear operator matrix.
+ */
 template <typename MeshT>
-Eigen::MatrixXf compute_wedge_operator_matrix(const MeshT &mesh,
-                                              const Eigen::VectorXf &alpha_coeffs,
-                                              int k_left, int k_right,
-                                              int n_coefficients) {
+Eigen::MatrixXf compute_wedge_operator_matrix(const MeshT& mesh,
+                                              const Eigen::VectorXf& alpha_coeffs, int k_left,
+                                              int k_right, int n_coefficients) {
   DiffusionFormWorkspace<MeshT> workspace;
-  return compute_wedge_operator_matrix(mesh, alpha_coeffs, k_left, k_right,
-                                       n_coefficients, workspace);
+  return compute_wedge_operator_matrix(mesh, alpha_coeffs, k_left, k_right, n_coefficients,
+                                       workspace);
 }
 
-} // namespace igneous::ops
+} // namespace igneous::ops::diffusion

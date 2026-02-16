@@ -6,7 +6,7 @@
 #include <igneous/ops/diffusion/basis.hpp>
 
 TEST_CASE("Wedge basis indices match lexicographic combinations") {
-  const auto idx = igneous::ops::get_wedge_basis_indices(4, 2);
+  const auto idx = igneous::ops::diffusion::get_wedge_basis_indices(4, 2);
   REQUIRE(idx.size() == 6);
 
   CHECK(idx[0] == std::vector<int>({0, 1}));
@@ -18,14 +18,14 @@ TEST_CASE("Wedge basis indices match lexicographic combinations") {
 }
 
 TEST_CASE("kp1 children and signs follow Laplace expansion semantics") {
-  const auto info = igneous::ops::kp1_children_and_signs(4, 2);
+  const auto info = igneous::ops::diffusion::kp1_children_and_signs(4, 2);
   REQUIRE(info.signs.size() == 3);
   CHECK(info.signs[0] == 1);
   CHECK(info.signs[1] == -1);
   CHECK(info.signs[2] == 1);
 
   for (size_t row = 0; row < info.idx_kp1.size(); ++row) {
-    const auto &parent = info.idx_kp1[row];
+    const auto& parent = info.idx_kp1[row];
     for (int r = 0; r < 3; ++r) {
       std::vector<int> child;
       child.reserve(2);
@@ -34,14 +34,14 @@ TEST_CASE("kp1 children and signs follow Laplace expansion semantics") {
           child.push_back(parent[static_cast<size_t>(c)]);
         }
       }
-      const int expected = igneous::ops::lex_rank_combination(child, 4);
+      const int expected = igneous::ops::diffusion::lex_rank_combination(child, 4);
       CHECK(info.children[row][static_cast<size_t>(r)] == expected);
     }
   }
 }
 
 TEST_CASE("Wedge product index mapping produces anti-symmetric split for 1-forms") {
-  const auto map = igneous::ops::get_wedge_product_indices(3, 1, 1);
+  const auto map = igneous::ops::diffusion::get_wedge_product_indices(3, 1, 1);
   REQUIRE(map.n_targets == 3);
   REQUIRE(map.n_splits == 2);
   REQUIRE(map.target_indices.size() == 6);

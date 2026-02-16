@@ -1,14 +1,21 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <igneous/core/blades.hpp>
-#include <igneous/data/mesh.hpp>
+#include <igneous/data/space.hpp>
 #include <limits>
 
 namespace igneous::ops {
 
-template <typename Sig, typename Topo> void normalize(data::Mesh<Sig, Topo> &mesh) {
-  const size_t n_verts = mesh.geometry.num_points();
+/**
+ * \brief Normalize geometry to a unit box centered at the origin.
+ *
+ * The largest axis extent is mapped to length `2.0`.
+ * \param mesh Input/output space geometry.
+ */
+template <typename StructureT> void normalize(data::Space<StructureT>& mesh) {
+  const size_t n_verts = mesh.num_points();
   if (n_verts == 0) {
     return;
   }
@@ -19,7 +26,7 @@ template <typename Sig, typename Topo> void normalize(data::Mesh<Sig, Topo> &mes
                       std::numeric_limits<float>::lowest()};
 
   for (size_t i = 0; i < n_verts; ++i) {
-    const core::Vec3 p = mesh.geometry.get_vec3(i);
+    const core::Vec3 p = mesh.get_vec3(i);
     min_p.x = std::min(min_p.x, p.x);
     min_p.y = std::min(min_p.y, p.y);
     min_p.z = std::min(min_p.z, p.z);
@@ -35,8 +42,8 @@ template <typename Sig, typename Topo> void normalize(data::Mesh<Sig, Topo> &mes
   const float scale_scalar = (max_dim > 1e-9f) ? (2.0f / max_dim) : 1.0f;
 
   for (size_t i = 0; i < n_verts; ++i) {
-    const core::Vec3 p = mesh.geometry.get_vec3(i);
-    mesh.geometry.set_vec3(i, (p - center) * scale_scalar);
+    const core::Vec3 p = mesh.get_vec3(i);
+    mesh.set_vec3(i, (p - center) * scale_scalar);
   }
 }
 
