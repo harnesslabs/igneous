@@ -1,5 +1,6 @@
 # Igneous
 
+[![Docs](https://img.shields.io/badge/docs-harnesslabs.dev-blue)](https://docs.harnesslabs.dev/)
 [![CI](https://github.com/harnesslabs/igneous/actions/workflows/ci.yml/badge.svg)](https://github.com/harnesslabs/igneous/actions/workflows/ci.yml)
 [![Perf Smoke](https://github.com/harnesslabs/igneous/actions/workflows/perf-smoke.yml/badge.svg)](https://github.com/harnesslabs/igneous/actions/workflows/perf-smoke.yml)
 [![Perf Deep](https://github.com/harnesslabs/igneous/actions/workflows/perf-deep.yml/badge.svg)](https://github.com/harnesslabs/igneous/actions/workflows/perf-deep.yml)
