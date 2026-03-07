@@ -14,6 +14,13 @@
 
 namespace igneous::ops::diffusion {
 
+inline constexpr float kSpectralDefaultTolerance = 1e-10f;
+inline constexpr float kSpectralSmallBasisTolerance = 1e-6f;
+
+inline float spectral_solver_tolerance(int n_eigenvectors) {
+  return n_eigenvectors <= 16 ? kSpectralSmallBasisTolerance : kSpectralDefaultTolerance;
+}
+
 /**
  * \brief Spectra-compatible matrix product wrapper over Markov CSR data.
  *
@@ -313,6 +320,7 @@ template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvector
 
   const auto solve_with_op = [&](auto& op) {
     using OpType = std::decay_t<decltype(op)>;
+    const float solver_tol = spectral_solver_tolerance(n_eigenvectors);
 
     const int full_ncv = std::min(n, std::max(2 * n_eigenvectors + 1, 20));
     const bool try_compact = n_eigenvectors >= 32;
@@ -320,13 +328,13 @@ template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvector
 
     Spectra::GenEigsSolver<OpType> eigs(op, n_eigenvectors, compact_ncv);
     eigs.init();
-    int nconv = eigs.compute(Spectra::SortRule::LargestReal);
+    int nconv = eigs.compute(Spectra::SortRule::LargestReal, 1000, solver_tol);
 
     if (try_compact && (eigs.info() != Spectra::CompInfo::Successful || nconv < n_eigenvectors) &&
         full_ncv > compact_ncv) {
       Spectra::GenEigsSolver<OpType> fallback(op, n_eigenvectors, full_ncv);
       fallback.init();
-      nconv = fallback.compute(Spectra::SortRule::LargestReal);
+      nconv = fallback.compute(Spectra::SortRule::LargestReal, 1000, solver_tol);
 
       if (fallback.info() == Spectra::CompInfo::Successful) {
         mesh.structure.eigen_basis = fallback.eigenvectors(nconv).real();
@@ -377,6 +385,7 @@ template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvector
     if (!sym_row_offsets.empty() && static_cast<int>(sym_row_offsets.size()) == n + 1 &&
         row_sums.size() == n) {
       const int k_eval = std::max(1, std::min(n_eigenvectors, std::max(1, n - 1)));
+      const float solver_tol = spectral_solver_tolerance(k_eval);
       const int full_ncv = std::min(n, std::max(2 * k_eval + 1, 20));
       const bool try_compact = k_eval >= 32;
       const int compact_ncv = try_compact ? std::min(n, std::max(k_eval + 16, 20)) : full_ncv;
@@ -408,7 +417,7 @@ template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvector
       const auto solve_symmetric = [&](int ncv) -> bool {
         Spectra::SymEigsSolver<SymmetricKernelCsrMatProd> eigs(op, k_eval, ncv);
         eigs.init();
-        const int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
+        const int nconv = eigs.compute(Spectra::SortRule::LargestMagn, 1000, solver_tol);
         if (eigs.info() != Spectra::CompInfo::Successful || nconv <= 0) {
           return false;
         }
