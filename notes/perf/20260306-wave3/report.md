@@ -120,3 +120,25 @@ Using the Wave 3 artifacts in this directory:
   - a new eigensolver trade that improves diffusion eigenbasis without shifting too much cost back into diffusion build,
   - a mathematically exact reduction of the remaining scalar spectrum/reconstruction overhead,
   - or another order-preserving data-oriented rewrite outside diffusion geometry like the accepted DEC face-incidence pass.
+
+## Post-PR Continuation
+
+### Kept Since The PR Was Opened
+- `cf653c4` `ci(perf): add diffgeo coverage to smoke and deep reports`
+- pending `perf(dec): specialize curvature traversal for DEC storage`
+
+### Current Additional Gains
+- DEC curvature:
+  - `bench_curvature_kernel/400`: `888653 ns -> 816836 ns` CPU (`-8.08%`)
+  - `bench_geometry` `Grid 1000x1000` curvature: `5.716 ms -> 5.358 ms` (`-6.26%`)
+  - `bench_geometry` `Grid 1000x1000` structure: `14.516 ms -> 13.661 ms` (`-5.89%`)
+
+### New Rejections
+- Weighted coordinate seed for the large-basis symmetric eigensolve.
+- CPU Markov multi-step copy-avoidance rewrite.
+- Early serial short-circuit in `parallel_for_index`.
+
+### Current Read Of The Remaining Work
+- The large sparse diffusion eigensolve is still the biggest shared runtime cost.
+- The geometry/DEC path still has room for order-preserving data-oriented rewrites, but the wins are now single-digit rather than order-of-magnitude.
+- GitHub perf smoke/deep will now surface `bench_diffgeo` even when the baseline branch predates that benchmark target.
