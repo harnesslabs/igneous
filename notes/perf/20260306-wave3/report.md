@@ -1,9 +1,9 @@
 # Wave 3 Report
 
 ## Outcome
-- Status: paused after hitting the campaign stop rule.
-- Stop reason: two consecutive major fronts failed to produce a keep-worthy change after the last kept diffgeo win.
-- Current branch head: `d1db951`.
+- Status: paused after the latest kept hodge pass.
+- Stop reason: the remaining dominant cost is now circular plus eigensolve, and the next credible wins appear to require more invasive solver/formulation changes than the high-confidence internal refactors used in this wave.
+- Current branch head: `89e82be`.
 
 ## Kept Improvements
 1. `2c56f6d` `perf(diffgeo): add wave3 harness and reuse form operators`
@@ -15,6 +15,12 @@
    - Shared circular-coordinate setup across the paired solves and densified `X_op` assembly.
 4. `2a6213d` `perf(diffgeo): parallelize form up-laplacian assembly`
    - Parallelized exact upper-triangle assembly for the generic up-Laplacian sweep.
+5. `1425f1f` `perf(spectral): cache normalized kernel operator`
+   - Cached the normalized symmetric-kernel CSR lazily on first eigensolve so the solver stops reapplying row normalization inside every matvec.
+6. `dee719f` `perf(diffusion): fuse post-knn build passes`
+   - Parallelized and fused the post-kNN diffusion-build passes while keeping the accepted sparse symmetrization path intact.
+7. `89e82be` `perf(hodge): cache gamma assembly in workspace`
+   - Reused mixed gamma and coordinate gamma inside `HodgeWorkspace`, then reset the workspace explicitly in rebuild-heavy loops.
 
 ## Rejected Fronts
 - Normalized symmetric-kernel precompute during diffusion build.
@@ -22,46 +28,58 @@
   - Failed the build-vs-pipeline trade and regressed `bench_diffusion_build/2000`.
 - Circular mass-space standard solve.
   - Changed solver strategy without producing a meaningful circular or pipeline win.
+- Symmetric normalized-kernel sort/init variants.
+  - `LargestAlge` and `sqrt(row_sums)` seeding improved some scalar spectral cases but regressed higher-rank hodge/diffgeo eigensolve targets.
+- Large-mesh atomic DEC face incidence.
+  - Improved isolated structure build but hurt large-grid curvature/flow locality enough to lose the overall geometry benchmark.
 
 ## Final Headline Numbers
 Using the Wave 3 artifacts in this directory:
 - Diffgeo pipeline:
   - Baseline after Wave 3 harness landed: `bench_diffgeo_pipeline/4000/64/32/32 = 4169.532 ms` in `baseline.md`
-  - Current best kept result: `444.296 ms` CPU in `results/bench_diffgeo_up_parallel_20260306-173505.txt`
+  - Current head: `404.855 ms` CPU in the current three-repetition rerank
 - Diffgeo circular phase:
   - Baseline: `2416.567 ms` in `baseline.md`
-  - After circular reuse: `274.929 ms` in `results/bench_diffgeo_circular_20260306-172407.txt`
-  - Current head: `272.185 ms` in `results/bench_diffgeo_up_parallel_20260306-173505.txt`
-- Diffgeo up terms:
-  - `bench_diffgeo_phase_k1_up/4000/64/32/32`: `73.024 ms` -> `6.498 ms`
-  - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `102.051 ms` -> `8.692 ms`
+  - Current head: `268.336 ms` in the current three-repetition rerank
+- Diffgeo eigenbasis phase:
+  - Baseline after the harness landed: `893.912 ms` in `baseline.md`
+  - Current head: `106.225 ms` in the current three-repetition rerank
+- Hodge pipeline:
+  - Current head: `423.551 ms` in the current three-repetition rerank
+- Hodge circular phase:
+  - Current head: `266.806 ms` in the current three-repetition rerank
+- Hodge eigenbasis phase:
+  - Current head: `117.306 ms` in the current three-repetition rerank
+- Spectral pipeline:
+  - Current head: `22.367 ms` in the current three-repetition rerank
 - App guard:
   - `igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`
   - Early Wave 3 head: `real 1.40`
-  - After the circular reuse pass: `real 0.24`
-  - Current head after the up-Laplacian pass: `real 0.13`
+  - Current head: `real 0.11`
+  - `igneous-hodge --no-ply`: current head `real 0.10`
 
 ## Current Hotspot Order
 ### Diffgeo
 - `circular`
 - `eigenbasis`
-- `structure_build`
+- remaining spectrum/reconstruction overhead
 - remaining misc pipeline overhead
 
 ### Hodge
 - `circular`
 - `eigenbasis`
-- `structure_build`
+- remaining spectrum/curl overhead
 
 ## Assessment
-- The high-confidence, behavior-preserving wins in the generic diffusion-form path have been taken.
-- The remaining big items are circular and scalar eigenbasis.
-- The last two serious attempts on those fronts failed the campaign gate without changing semantics.
-- Further gains are still possible, but they are less likely to come from internal refactors alone.
+- The high-confidence, behavior-preserving wins in diffusion build, generic form assembly, and Hodge gamma reuse have been taken.
+- Build-heavy workloads are no longer the main problem.
+- Both the hodge and diffgeo pipelines are now dominated by circular-coordinate solves and scalar eigensolve time.
+- The most recent rejected experiments were on symmetric eigensolver control and DEC structure locality, which is a useful signal that the easy internal refactors are mostly exhausted.
 
 ## Recommended Next Wave
 - Only continue if one of these is acceptable:
   - a more invasive circular-coordinate formulation or solver change,
   - a different spectral build/eigensolver trade that may move cost between build and solve,
-  - API-level caching/lifecycle changes above the current internal-workspace approach.
+  - API-level caching/lifecycle changes above the current internal-workspace approach,
+  - or a new benchmark target for the remaining diffgeo spectrum/reconstruction overhead so that those phases can be attacked directly.
 - Otherwise, keep the current head as the Wave 3 endpoint.
