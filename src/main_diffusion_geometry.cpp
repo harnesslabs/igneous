@@ -423,12 +423,13 @@ int main(int argc, char** argv) {
 
   const int idx0 = harmonic1_idx.empty() ? 0 : harmonic1_idx[0];
   const int idx1 = harmonic1_idx.size() > 1 ? harmonic1_idx[1] : idx0;
+  ops::diffusion::CircularCoordinateWorkspace<DiffusionMesh> circular_ws;
   const Eigen::VectorXf theta_0 = ops::diffusion::compute_circular_coordinates(
       mesh, pad_1form_coeffs(evecs1.col(idx0), mesh.structure.eigen_basis.cols(), n_coeff), 0.0f,
-      cfg.circular_lambda, cfg.circular_mode_0, nullptr);
+      cfg.circular_lambda, cfg.circular_mode_0, nullptr, circular_ws);
   const Eigen::VectorXf theta_1 = ops::diffusion::compute_circular_coordinates(
       mesh, pad_1form_coeffs(evecs1.col(idx1), mesh.structure.eigen_basis.cols(), n_coeff), 0.0f,
-      cfg.circular_lambda, cfg.circular_mode_1, nullptr);
+      cfg.circular_lambda, cfg.circular_mode_1, nullptr, circular_ws);
 
   // 2-forms
   const Eigen::MatrixXf G2 = ops::diffusion::compute_kform_gram_matrix(mesh, 2, n_coeff, forms_ws);

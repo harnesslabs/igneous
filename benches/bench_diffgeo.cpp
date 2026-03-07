@@ -228,12 +228,13 @@ void bench_diffgeo_pipeline(benchmark::State& state) {
     const int idx1 = harmonic1_idx.size() > 1 ? harmonic1_idx[1] : idx0;
 
     const auto gamma_data = build_gamma_data_immersion(mesh);
+    igneous::ops::diffusion::CircularCoordinateWorkspace<DiffusionMesh> circular_ws;
     const Eigen::VectorXf theta_0 = igneous::ops::diffusion::compute_circular_coordinates(
         mesh, pad_1form_coeffs(evecs1.col(idx0), mesh.structure.eigen_basis.cols(), cfg.n_coeff),
-        0.0f, 1.0f, 0, nullptr);
+        0.0f, 1.0f, 0, nullptr, circular_ws);
     const Eigen::VectorXf theta_1 = igneous::ops::diffusion::compute_circular_coordinates(
         mesh, pad_1form_coeffs(evecs1.col(idx1), mesh.structure.eigen_basis.cols(), cfg.n_coeff),
-        0.0f, 1.0f, 1, nullptr);
+        0.0f, 1.0f, 1, nullptr, circular_ws);
 
     const Eigen::MatrixXf G2 =
         igneous::ops::diffusion::compute_kform_gram_matrix(mesh, 2, cfg.n_coeff, forms_ws);
@@ -354,12 +355,15 @@ void bench_diffgeo_phase_circular(benchmark::State& state) {
       pad_1form_coeffs(modes.evecs1.col(idx0), mesh.structure.eigen_basis.cols(), cfg.n_coeff);
   const Eigen::VectorXf alpha1 =
       pad_1form_coeffs(modes.evecs1.col(idx1), mesh.structure.eigen_basis.cols(), cfg.n_coeff);
+  igneous::ops::diffusion::CircularCoordinateWorkspace<DiffusionMesh> circular_ws;
 
   for (auto _ : state) {
     const Eigen::VectorXf theta_0 =
-        igneous::ops::diffusion::compute_circular_coordinates(mesh, alpha0, 0.0f, 1.0f, 0, nullptr);
+        igneous::ops::diffusion::compute_circular_coordinates(mesh, alpha0, 0.0f, 1.0f, 0,
+                                                              nullptr, circular_ws);
     const Eigen::VectorXf theta_1 =
-        igneous::ops::diffusion::compute_circular_coordinates(mesh, alpha1, 0.0f, 1.0f, 1, nullptr);
+        igneous::ops::diffusion::compute_circular_coordinates(mesh, alpha1, 0.0f, 1.0f, 1,
+                                                              nullptr, circular_ws);
     benchmark::DoNotOptimize(theta_0.data());
     benchmark::DoNotOptimize(theta_1.data());
   }

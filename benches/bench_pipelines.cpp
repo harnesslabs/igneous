@@ -164,11 +164,14 @@ void bench_pipeline_hodge_main(benchmark::State& state) {
         igneous::ops::diffusion::compute_curl_energy_matrix(mesh, kBandwidth, hodge_ws);
     const Eigen::MatrixXf L = igneous::ops::diffusion::compute_hodge_laplacian_matrix(D, E);
     auto [evals, evecs] = igneous::ops::diffusion::compute_hodge_spectrum(L, G);
+    igneous::ops::diffusion::CircularCoordinateWorkspace<DiffusionMesh> circular_ws;
 
     const Eigen::VectorXf theta_0 =
-        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(0), kBandwidth);
+        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(0), kBandwidth, 1.0f,
+                                                              0, nullptr, circular_ws);
     const Eigen::VectorXf theta_1 =
-        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(1), kBandwidth);
+        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(1), kBandwidth, 1.0f,
+                                                              0, nullptr, circular_ws);
 
     benchmark::DoNotOptimize(evals.data());
     benchmark::DoNotOptimize(theta_0.data());
@@ -298,12 +301,15 @@ void bench_hodge_phase_circular(benchmark::State& state) {
       igneous::ops::diffusion::compute_curl_energy_matrix(mesh, kBandwidth, hodge_ws);
   const Eigen::MatrixXf L = igneous::ops::diffusion::compute_hodge_laplacian_matrix(D, E);
   auto [evals, evecs] = igneous::ops::diffusion::compute_hodge_spectrum(L, G);
+  igneous::ops::diffusion::CircularCoordinateWorkspace<DiffusionMesh> circular_ws;
 
   for (auto _ : state) {
     const Eigen::VectorXf theta_0 =
-        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(0), kBandwidth);
+        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(0), kBandwidth, 1.0f,
+                                                              0, nullptr, circular_ws);
     const Eigen::VectorXf theta_1 =
-        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(1), kBandwidth);
+        igneous::ops::diffusion::compute_circular_coordinates(mesh, evecs.col(1), kBandwidth, 1.0f,
+                                                              0, nullptr, circular_ws);
     benchmark::DoNotOptimize(theta_0.data());
     benchmark::DoNotOptimize(theta_1.data());
     benchmark::DoNotOptimize(evals.data());

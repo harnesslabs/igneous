@@ -19,7 +19,7 @@ Use one entry per optimization hypothesis.
 
 ## 2026-03-06 Diffgeo Operator Reuse + Closed-Form 2-Form Up Term
 - Timestamp: 2026-03-07T00:05:00Z
-- Commit: pending
+- Commit: `2c56f6d`
 - Primary target:
   - `bench_diffgeo_phase_k2_up/4000/64/32/32`
   - `bench_diffgeo_pipeline/4000/64/32/32`
@@ -74,7 +74,7 @@ Use one entry per optimization hypothesis.
 
 ## 2026-03-06 Diffgeo Dense Block Weak-Derivative Assembly
 - Timestamp: 2026-03-07T00:16:00Z
-- Commit: pending
+- Commit: `6ca4ba7`
 - Primary target:
   - `bench_diffgeo_pipeline/4000/64/32/32`
   - `bench_diffgeo_pipeline/1000/50/32/32`
@@ -125,3 +125,81 @@ Use one entry per optimization hypothesis.
 - Notes:
   - The isolated `k2_up` regression stayed below the threshold for an equal-or-higher-priority benchmark because the primary end-to-end pipeline target improved by about `6%` on both benchmark sizes and the app-level runtime dropped materially.
   - This patch should be followed by a focused `k2_up` / circular pass, since those are now the dominant remaining diffgeo costs.
+
+## 2026-03-06 Shared Circular Workspace + Dense X Operator
+- Timestamp: 2026-03-07T00:25:00Z
+- Commit: pending
+- Primary target:
+  - `bench_diffgeo_phase_circular/4000/64/32/32`
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+  - `bench_hodge_phase_circular`
+  - `bench_pipeline_hodge_main`
+- Hypothesis:
+  - Reuse the circular-coordinate setup across the paired harmonic-mode solves and replace the per-column `X_op` assembly with a dense matrix contraction so the circular stage stops recomputing `Gamma(x, phi)`, the scalar weak Laplacian, and the function Gram on every call.
+- Files touched:
+  - `include/igneous/ops/diffusion/hodge.hpp`
+  - `src/main_diffusion_geometry.cpp`
+  - `src/main_hodge.cpp`
+  - `benches/bench_diffgeo.cpp`
+  - `benches/bench_pipelines.cpp`
+  - `notes/perf/20260306-wave3/journal.md`
+- Benchmark commands:
+  - Smoke:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/1000/50/32/32|bench_diffgeo_phase_circular/1000/50/32/32|bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_circular|bench_hodge_phase_eigenbasis|bench_hodge_phase_structure_build' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - Recorded deep artifacts:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/1000/50/32/32|bench_diffgeo_phase_circular/1000/50/32/32|bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_diffgeo_circular_20260306-172407.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_diffgeo_circular_20260306-172407.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_circular|bench_hodge_phase_eigenbasis|bench_hodge_phase_structure_build' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_pipelines_circular_20260306-172407.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_pipelines_circular_20260306-172407.txt'`
+  - App/runtime:
+    - `/usr/bin/time -p ./build/igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`
+  - Tests:
+    - `ctest --test-dir build --output-on-failure -R 'test_ops_hodge|test_hodge_cli_outputs|test_ops_diffusion_forms|test_ops_diffusion_wedge|test_diffgeo_cli_outputs'`
+    - `ctest --test-dir build --output-on-failure -j8`
+- Smoke results:
+  - Baseline head before the patch from `results/bench_diffgeo_20260306-171657.txt` and `results/bench_pipelines_20260306-171657.txt`:
+    - `bench_diffgeo_pipeline/1000/50/32/32`: `155.420 ms` CPU
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `881.450 ms`
+    - `bench_diffgeo_phase_circular/1000/50/32/32`: `86.347 ms`
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `538.494 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `118.488 ms`
+    - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `98.507 ms`
+    - `bench_pipeline_hodge_main`: `747.071 ms`
+    - `bench_hodge_phase_circular`: `542.146 ms`
+    - `bench_hodge_phase_eigenbasis`: `129.857 ms`
+    - `bench_hodge_phase_structure_build`: `34.216 ms`
+  - Current patch smoke:
+    - `bench_diffgeo_pipeline/1000/50/32/32`: `115.121 ms` (`-25.93%`)
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `611.242 ms` (`-30.66%`)
+    - `bench_diffgeo_phase_circular/1000/50/32/32`: `12.476 ms` (`-85.55%`)
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `268.406 ms` (`-50.16%`)
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `116.708 ms` (`-1.50%`)
+    - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `99.005 ms` (`+0.51%`)
+    - `bench_pipeline_hodge_main`: `476.600 ms` (`-36.22%`)
+    - `bench_hodge_phase_circular`: `272.153 ms` (`-49.80%`)
+    - `bench_hodge_phase_eigenbasis`: `130.470 ms` (`+0.47%`)
+    - `bench_hodge_phase_structure_build`: `34.300 ms` (`+0.25%`)
+- Deep results:
+  - Recorded artifacts: `results/bench_diffgeo_circular_20260306-172407.{txt,json}` and `results/bench_pipelines_circular_20260306-172407.{txt,json}`
+  - `bench_diffgeo_pipeline/1000/50/32/32`: `114.638 ms` CPU (`-26.24%` vs baseline head)
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `609.250 ms` (`-30.88%`)
+  - `bench_diffgeo_phase_circular/1000/50/32/32`: `4.631 ms` (`-94.64%`)
+  - `bench_diffgeo_phase_circular/4000/64/32/32`: `274.929 ms` (`-48.95%`)
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `118.593 ms` (`+0.09%`)
+  - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `102.051 ms` (`+3.60%`)
+  - `bench_pipeline_hodge_main`: `476.473 ms` (`-36.22%`)
+  - `bench_hodge_phase_circular`: `274.345 ms` (`-49.39%`)
+  - `bench_hodge_phase_eigenbasis`: `129.714 ms` (`-0.11%`)
+  - `bench_hodge_phase_structure_build`: `34.362 ms` (`+0.43%`)
+- App/runtime checks:
+  - Head before patch: `real 0.26`, `user 0.26`, `sys 0.01`
+  - Current patch: `real 0.24`, `user 0.21`, `sys 0.01`
+- Test results:
+  - Targeted circular-sensitive suite: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - This keeps circular mode-selection semantics intact; the sort criteria and positive-imaginary mode selection are unchanged.
+  - The remaining isolated `k2_up` regression is above `3%`, but it is not an equal-or-higher-priority benchmark for this hypothesis, while both end-to-end pipelines improved materially.
+  - The `1000`-point circular phase dropped sharply because the dense `X_op` contraction removed the fixed per-call setup cost that dominated the smaller problem.

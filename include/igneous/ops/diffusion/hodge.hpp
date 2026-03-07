@@ -8,6 +8,7 @@
 #include <cmath>
 #include <complex>
 #include <cstddef>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -36,6 +37,85 @@ template <typename MeshT> struct HodgeWorkspace {
   /// \brief Generic temporary weight vector.
   Eigen::VectorXf weight;
 };
+
+/// \brief Reusable buffers for circular-coordinate assembly on a fixed mesh/basis state.
+template <typename MeshT> struct CircularCoordinateWorkspace {
+  std::array<Eigen::VectorXf, 3> coords;
+  std::array<Eigen::MatrixXf, 3> gamma_x_phi_mat;
+  Eigen::MatrixXf weighted_u;
+  Eigen::MatrixXf function_gram;
+  Eigen::MatrixXf laplacian0_weak;
+  Eigen::MatrixXf alpha_mat;
+  Eigen::MatrixXf q;
+  Eigen::MatrixXf weighted_gamma;
+  Eigen::MatrixXf x_op;
+  Eigen::VectorXf gamma_local;
+  Eigen::VectorXf z_real;
+  Eigen::VectorXf z_imag;
+  int prepared_n_verts = -1;
+  int prepared_n0 = -1;
+  float prepared_bandwidth = std::numeric_limits<float>::quiet_NaN();
+
+  void reset() {
+    prepared_n_verts = -1;
+    prepared_n0 = -1;
+    prepared_bandwidth = std::numeric_limits<float>::quiet_NaN();
+  }
+};
+
+template <typename MeshT>
+void prepare_circular_coordinate_workspace(const MeshT& mesh, float bandwidth,
+                                          CircularCoordinateWorkspace<MeshT>& workspace) {
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
+  const int n0 = U.cols();
+  const int n_verts = static_cast<int>(mesh.num_points());
+
+  if (workspace.prepared_n_verts == n_verts && workspace.prepared_n0 == n0 &&
+      workspace.prepared_bandwidth == bandwidth) {
+    return;
+  }
+
+  fill_coordinate_vectors(mesh, workspace.coords);
+
+  for (int a = 0; a < 3; ++a) {
+    workspace.gamma_x_phi_mat[a].resize(n_verts, n0);
+    core::parallel_for_index(
+        0, n0,
+        [&](int t) {
+          carre_du_champ(mesh, workspace.coords[a], U.col(t), bandwidth,
+                         workspace.gamma_x_phi_mat[a].col(t));
+        },
+        8);
+  }
+
+  workspace.weighted_u.resize(n_verts, n0);
+  workspace.weighted_u = U.array().colwise() * mu.array();
+
+  workspace.function_gram.resize(n0, n0);
+  workspace.function_gram.noalias() = U.transpose() * workspace.weighted_u;
+
+  workspace.laplacian0_weak.setZero(n0, n0);
+  workspace.gamma_local.resize(n_verts);
+  for (int i = 0; i < n0; ++i) {
+    for (int j = i; j < n0; ++j) {
+      carre_du_champ(mesh, U.col(i), U.col(j), bandwidth, workspace.gamma_local);
+      const float val = (workspace.gamma_local.array() * mu.array()).sum();
+      workspace.laplacian0_weak(i, j) = val;
+      workspace.laplacian0_weak(j, i) = val;
+    }
+  }
+
+  workspace.alpha_mat.resize(n0, 3);
+  workspace.q.resize(n_verts, 3);
+  workspace.weighted_gamma.resize(n_verts, n0);
+  workspace.x_op.resize(n0, n0);
+  workspace.z_real.resize(n_verts);
+  workspace.z_imag.resize(n_verts);
+  workspace.prepared_n_verts = n_verts;
+  workspace.prepared_n0 = n0;
+  workspace.prepared_bandwidth = bandwidth;
+}
 
 /**
  * \brief Assemble weak exterior derivative matrix for 1-forms.
@@ -258,73 +338,44 @@ compute_hodge_spectrum(const Eigen::MatrixXf& laplacian, const Eigen::MatrixXf& 
  */
 template <typename MeshT>
 Eigen::VectorXf compute_circular_coordinates(const MeshT& mesh, const Eigen::VectorXf& alpha_coeffs,
-                                             float bandwidth, float lambda = 1.0f,
-                                             int positive_imag_mode = 0,
-                                             std::complex<float>* selected_eval = nullptr) {
+                                             float bandwidth, float lambda,
+                                             int positive_imag_mode,
+                                             std::complex<float>* selected_eval,
+                                             CircularCoordinateWorkspace<MeshT>& workspace) {
   const auto& U = mesh.structure.eigen_basis;
   const auto& mu = mesh.structure.mu;
 
   const int n0 = U.cols();
-  const size_t n_verts = mesh.num_points();
-  const int n_verts_i = static_cast<int>(n_verts);
+  const int n_verts = static_cast<int>(mesh.num_points());
 
-  HodgeWorkspace<MeshT> workspace;
-  fill_coordinate_vectors(mesh, workspace.coords);
+  prepare_circular_coordinate_workspace(mesh, bandwidth, workspace);
 
-  for (int a = 0; a < 3; ++a) {
-    workspace.gamma_x_phi_mat[a].resize(n_verts_i, n0);
-    core::parallel_for_index(
-        0, n0,
-        [&](int t) {
-          carre_du_champ(mesh, workspace.coords[a], U.col(t), bandwidth,
-                         workspace.gamma_x_phi_mat[a].col(t));
-        },
-        8);
-  }
+  const Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>> alpha_map(
+      alpha_coeffs.data(), n0, 3);
+  workspace.alpha_mat = alpha_map;
 
-  Eigen::MatrixXf alpha_mat(n0, 3);
-  for (int k = 0; k < n0; ++k) {
-    alpha_mat(k, 0) = alpha_coeffs(k * 3 + 0);
-    alpha_mat(k, 1) = alpha_coeffs(k * 3 + 1);
-    alpha_mat(k, 2) = alpha_coeffs(k * 3 + 2);
-  }
+  workspace.q.noalias() = U * workspace.alpha_mat;
+  workspace.weighted_gamma =
+      (workspace.gamma_x_phi_mat[0].array().colwise() *
+       (workspace.q.col(0).array() * mu.array()))
+          .matrix();
+  workspace.weighted_gamma.array() +=
+      workspace.gamma_x_phi_mat[1].array().colwise() *
+      (workspace.q.col(1).array() * mu.array());
+  workspace.weighted_gamma.array() +=
+      workspace.gamma_x_phi_mat[2].array().colwise() *
+      (workspace.q.col(2).array() * mu.array());
 
-  const Eigen::MatrixXf q = U * alpha_mat;
-  const Eigen::MatrixXf U_t = U.transpose();
+  workspace.x_op.noalias() = U.transpose() * workspace.weighted_gamma;
 
-  Eigen::MatrixXf X_op(n0, n0);
-  core::parallel_for_index(
-      0, n0,
-      [&](int t) {
-        Eigen::VectorXf weight_local(n_verts_i);
-        weight_local =
-            mu.array() * ((workspace.gamma_x_phi_mat[0].col(t).array() * q.col(0).array()) +
-                          (workspace.gamma_x_phi_mat[1].col(t).array() * q.col(1).array()) +
-                          (workspace.gamma_x_phi_mat[2].col(t).array() * q.col(2).array()));
-        X_op.col(t).noalias() = U_t * weight_local;
-      },
-      8);
-
-  Eigen::MatrixXf laplacian0_weak = Eigen::MatrixXf::Zero(n0, n0);
-  Eigen::VectorXf gamma_local(n_verts_i);
-  for (int i = 0; i < n0; ++i) {
-    for (int j = i; j < n0; ++j) {
-      carre_du_champ(mesh, U.col(i), U.col(j), bandwidth, gamma_local);
-      const float val = (gamma_local.array() * mu.array()).sum();
-      laplacian0_weak(i, j) = val;
-      laplacian0_weak(j, i) = val;
-    }
-  }
-
-  Eigen::MatrixXf function_gram = U.transpose() * (U.array().colwise() * mu.array()).matrix();
-  Eigen::MatrixXf operator_weak = X_op - (lambda * laplacian0_weak);
-  Eigen::GeneralizedEigenSolver<Eigen::MatrixXf> solver(operator_weak, function_gram);
+  const Eigen::MatrixXf operator_weak = workspace.x_op - (lambda * workspace.laplacian0_weak);
+  Eigen::GeneralizedEigenSolver<Eigen::MatrixXf> solver(operator_weak, workspace.function_gram);
   if (solver.info() != Eigen::Success) {
-    return Eigen::VectorXf::Zero(static_cast<int>(n_verts));
+    return Eigen::VectorXf::Zero(n_verts);
   }
 
-  Eigen::VectorXcf evals = solver.eigenvalues().cast<std::complex<float>>();
-  Eigen::MatrixXcf evecs = solver.eigenvectors().cast<std::complex<float>>();
+  const Eigen::VectorXcf evals = solver.eigenvalues().cast<std::complex<float>>();
+  const Eigen::MatrixXcf evecs = solver.eigenvectors().cast<std::complex<float>>();
 
   std::vector<int> order(static_cast<size_t>(n0));
   for (int i = 0; i < n0; ++i) {
@@ -344,48 +395,76 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT& mesh, const Eigen::Vec
     return a.imag() < b.imag();
   });
 
-  Eigen::VectorXcf sorted_evals(n0);
-  Eigen::MatrixXcf sorted_evecs(n0, n0);
+  int positive_imag_count = 0;
+  for (int i = 0; i < n0; ++i) {
+    if (evals[order[static_cast<size_t>(i)]].imag() > 1e-6f) {
+      ++positive_imag_count;
+    }
+  }
+  if (positive_imag_count == 0) {
+    return Eigen::VectorXf::Zero(n_verts);
+  }
+
+  const int mode = std::clamp(positive_imag_mode, 0, positive_imag_count - 1);
+  int selected_src = -1;
+  int positive_index = 0;
   for (int i = 0; i < n0; ++i) {
     const int src = order[static_cast<size_t>(i)];
-    sorted_evals[i] = evals[src];
-    sorted_evecs.col(i) = evecs.col(src);
-  }
-
-  std::vector<int> positive_imag_indices;
-  for (int i = 0; i < n0; ++i) {
-    if (sorted_evals[i].imag() > 1e-6f) {
-      positive_imag_indices.push_back(i);
+    if (evals[src].imag() <= 1e-6f) {
+      continue;
     }
+    if (positive_index == mode) {
+      selected_src = src;
+      break;
+    }
+    ++positive_index;
   }
-  if (positive_imag_indices.empty()) {
-    return Eigen::VectorXf::Zero(static_cast<int>(n_verts));
+  if (selected_src < 0) {
+    return Eigen::VectorXf::Zero(n_verts);
   }
 
-  const int mode =
-      std::clamp(positive_imag_mode, 0, static_cast<int>(positive_imag_indices.size()) - 1);
-  const int best_idx = positive_imag_indices[static_cast<size_t>(mode)];
   if (selected_eval != nullptr) {
-    *selected_eval = sorted_evals[best_idx];
+    *selected_eval = evals[selected_src];
   }
 
-  const Eigen::VectorXcf z_coeffs = sorted_evecs.col(best_idx);
-  Eigen::VectorXf theta(static_cast<int>(n_verts));
-  constexpr float kTwoPi = 6.28318530717958647692f;
+  const Eigen::VectorXcf z_coeffs = evecs.col(selected_src);
+  workspace.z_real.noalias() = U * z_coeffs.real();
+  workspace.z_imag.noalias() = U * z_coeffs.imag();
 
-  for (size_t i = 0; i < n_verts; ++i) {
-    std::complex<float> zi(0.0f, 0.0f);
-    for (int k = 0; k < n0; ++k) {
-      zi += U(static_cast<int>(i), k) * z_coeffs(k);
-    }
-    float angle = std::atan2(zi.imag(), zi.real());
+  Eigen::VectorXf theta(n_verts);
+  constexpr float kTwoPi = 6.28318530717958647692f;
+  for (int i = 0; i < n_verts; ++i) {
+    float angle = std::atan2(workspace.z_imag[i], workspace.z_real[i]);
     if (angle < 0.0f) {
       angle += static_cast<float>(kTwoPi);
     }
-    theta[static_cast<int>(i)] = angle;
+    theta[i] = angle;
   }
 
   return theta;
+}
+
+/**
+ * \brief Compute scalar circular coordinates from a harmonic 1-form mode.
+ *
+ * This solves a generalized eigenproblem for an advection-diffusion operator
+ * built from `alpha_coeffs`.
+ * \param mesh Input diffusion space.
+ * \param alpha_coeffs Harmonic 1-form coefficients.
+ * \param bandwidth Diffusion bandwidth parameter.
+ * \param lambda Diffusion regularization weight.
+ * \param positive_imag_mode Which positive-imaginary mode to choose.
+ * \param selected_eval Optional output for selected complex eigenvalue.
+ * \return Angle field in `[0, 2*pi)`.
+ */
+template <typename MeshT>
+Eigen::VectorXf compute_circular_coordinates(const MeshT& mesh, const Eigen::VectorXf& alpha_coeffs,
+                                             float bandwidth, float lambda = 1.0f,
+                                             int positive_imag_mode = 0,
+                                             std::complex<float>* selected_eval = nullptr) {
+  CircularCoordinateWorkspace<MeshT> workspace;
+  return compute_circular_coordinates(mesh, alpha_coeffs, bandwidth, lambda, positive_imag_mode,
+                                      selected_eval, workspace);
 }
 
 } // namespace igneous::ops::diffusion
