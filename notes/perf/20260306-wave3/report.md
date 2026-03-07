@@ -1,9 +1,9 @@
 # Wave 3 Report
 
 ## Outcome
-- Status: paused after the latest kept hodge pass.
-- Stop reason: the remaining dominant cost is now circular plus eigensolve, and the next credible wins appear to require more invasive solver/formulation changes than the high-confidence internal refactors used in this wave.
-- Current branch head: `5d0f4db`.
+- Status: active.
+- Current focus: diffusion eigenbasis time first, then remaining spectrum/reconstruction overhead.
+- Current branch head: `907b8ac`.
 
 ## Kept Improvements
 1. `2c56f6d` `perf(diffgeo): add wave3 harness and reuse form operators`
@@ -23,6 +23,8 @@
    - Reused mixed gamma and coordinate gamma inside `HodgeWorkspace`, then reset the workspace explicitly in rebuild-heavy loops.
 8. `5d0f4db` `perf(dec): parallelize stable face-incidence build`
    - Replaced the large-mesh serial DEC face-incidence count/write passes with a stable block-prefix build that preserves per-vertex face order.
+9. `907b8ac` `perf(circular): matrixize workspace preparation`
+   - Replaced the mean-centered circular workspace preparation sweeps with exact matrix formulas for `Gamma(x, phi)` and the scalar weak Laplacian.
 
 ## Rejected Fronts
 - Normalized symmetric-kernel precompute during diffusion build.
@@ -45,26 +47,26 @@
 Using the Wave 3 artifacts in this directory:
 - Diffgeo pipeline:
   - Baseline after Wave 3 harness landed: `bench_diffgeo_pipeline/4000/64/32/32 = 4169.532 ms` in `baseline.md`
-  - Current head: `404.855 ms` CPU in the current three-repetition rerank
+  - Current head: `147.268 ms` CPU in `bench_diffgeo_circularprep_candidate_20260306-192320.txt`
 - Diffgeo circular phase:
   - Baseline: `2416.567 ms` in `baseline.md`
-  - Current head: `268.336 ms` in the current three-repetition rerank
+  - Current head: `3.821 ms` CPU in `bench_diffgeo_circularprep_candidate_20260306-192320.txt`
 - Diffgeo eigenbasis phase:
   - Baseline after the harness landed: `893.912 ms` in `baseline.md`
-  - Current head: `106.225 ms` in the current three-repetition rerank
+  - Current head: `107.143 ms` CPU in `bench_diffgeo_circularprep_candidate_20260306-192320.txt`
 - Hodge pipeline:
-  - Current head: `423.551 ms` in the current three-repetition rerank
+  - Current head: `164.629 ms` CPU in `bench_pipelines_circularprep_candidate_20260306-192320.txt`
 - Hodge circular phase:
-  - Current head: `266.806 ms` in the current three-repetition rerank
+  - Current head: `4.074 ms` CPU in `bench_pipelines_circularprep_candidate_20260306-192320.txt`
 - Hodge eigenbasis phase:
-  - Current head: `117.306 ms` in the current three-repetition rerank
+  - Current head: `116.807 ms` CPU in `bench_pipelines_circularprep_candidate_20260306-192320.txt`
 - Spectral pipeline:
   - Current head: `22.367 ms` in the current three-repetition rerank
 - App guard:
   - `igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`
   - Early Wave 3 head: `real 1.40`
-  - Current head: `real 0.11`
-  - `igneous-hodge --no-ply`: current head `real 0.10`
+  - Current head: `real 0.07`
+  - `igneous-hodge --no-ply`: current head `real 0.05`
 - Geometry large-grid guard:
   - `bench_geometry` `Grid 1000x1000`
   - structure: `17.288 ms -> 14.532 ms`
@@ -73,27 +75,23 @@ Using the Wave 3 artifacts in this directory:
 
 ## Current Hotspot Order
 ### Diffgeo
-- `circular`
 - `eigenbasis`
 - remaining spectrum/reconstruction overhead
 - remaining misc pipeline overhead
 
 ### Hodge
-- `circular`
 - `eigenbasis`
 - remaining spectrum/curl overhead
 
 ## Assessment
 - The high-confidence, behavior-preserving wins in diffusion build, generic form assembly, and Hodge gamma reuse have been taken.
 - Build-heavy workloads are no longer the main problem.
-- Both the hodge and diffgeo pipelines are now dominated by circular-coordinate solves and scalar eigensolve time.
-- The most recent rejected experiments were on symmetric eigensolver control and DEC structure locality, which is a useful signal that the easy internal refactors are mostly exhausted.
-- The new DEC face-incidence rewrite shows there is still room outside diffusion geometry when the change preserves downstream traversal order.
+- The matrix circular-prep rewrite removed the dominant remaining circular hotspot without changing solver behavior, which reset the hotspot ranking.
+- The main remaining shared cost is diffusion eigenbasis time; after that, the pipelines are mostly spectrum/reconstruction overhead rather than circular-coordinate assembly.
+- The new DEC face-incidence rewrite and the circular-prep rewrite both came from replacing large scalar sweeps with exact matrix formulations that preserve downstream behavior.
 
 ## Recommended Next Wave
 - Only continue if one of these is acceptable:
-  - a more invasive circular-coordinate formulation or solver change,
-  - a different spectral build/eigensolver trade that may move cost between build and solve,
-  - API-level caching/lifecycle changes above the current internal-workspace approach,
-  - or a new benchmark target for the remaining diffgeo spectrum/reconstruction overhead so that those phases can be attacked directly.
-- Otherwise, keep the current head as the Wave 3 endpoint.
+  - a new eigensolver trade that improves diffusion eigenbasis without shifting too much cost back into diffusion build,
+  - a mathematically exact reduction of the remaining scalar spectrum/reconstruction overhead,
+  - or another order-preserving data-oriented rewrite outside diffusion geometry like the accepted DEC face-incidence pass.

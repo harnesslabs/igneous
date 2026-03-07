@@ -878,3 +878,66 @@ Use one entry per optimization hypothesis.
 - Notes:
   - The stable block-prefix construction keeps per-vertex face order intact, which avoided the locality regressions seen in the rejected atomic face-incidence rewrite.
   - The 400-mesh DOD structure microbenchmark stayed effectively flat on exact A/B, but the larger geometry workloads cleared the keep bar and improved the downstream kernels at the same time.
+
+## 2026-03-06 Matrix Circular Workspace Preparation
+- Timestamp: 2026-03-07T02:24:00Z
+- Commit: `907b8ac`
+- Primary target:
+  - `bench_hodge_phase_circular`
+  - `bench_diffgeo_phase_circular/4000/64/32/32`
+  - `bench_pipeline_hodge_main`
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+- Hypothesis:
+  - Replace the mean-centered circular workspace preparation path with exact matrix formulas for `Gamma(x, phi)` and the scalar weak Laplacian, so the phase stops paying thousands of scalar `carre_du_champ` sweeps before each paired circular solve.
+- Files touched:
+  - `include/igneous/ops/diffusion/hodge.hpp`
+- Benchmark commands:
+  - Exact baseline on the reverted `5d0f4db` worktree:
+    - `cmake --build build --target bench_pipelines bench_diffgeo igneous-hodge igneous-diffusion-geometry -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_circular|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_pipelines_circularprep_baseline_20260306-192236.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_diffgeo_circularprep_baseline_20260306-192236.txt'`
+  - Candidate:
+    - `cmake --build build --target bench_pipelines bench_diffgeo igneous-hodge igneous-diffusion-geometry test_ops_hodge test_ops_diffusion_forms test_ops_diffusion_wedge -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_circular|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_pipelines_circularprep_candidate_20260306-192320.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_diffgeo_circularprep_candidate_20260306-192320.txt'`
+    - `ctest --test-dir build --output-on-failure -R 'test_ops_hodge|test_hodge_cli_outputs|test_ops_diffusion_forms|test_ops_diffusion_wedge|test_diffgeo_cli_outputs'`
+    - `ctest --test-dir build --output-on-failure -j8`
+    - `env IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge --output-dir <tempdir> --no-ply`
+    - `env IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`
+- Smoke results:
+  - Current patch at `0.05s` min time:
+    - `bench_pipeline_hodge_main`: `165.823 ms`
+    - `bench_hodge_phase_circular`: `4.308 ms`
+    - `bench_hodge_phase_eigenbasis`: `119.710 ms`
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `159.715 ms`
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `4.004 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `109.604 ms`
+- Deep results:
+  - Exact A/B artifacts:
+    - `notes/perf/20260306-wave3/results/bench_pipelines_circularprep_baseline_20260306-192236.txt`
+    - `notes/perf/20260306-wave3/results/bench_pipelines_circularprep_candidate_20260306-192320.txt`
+    - `notes/perf/20260306-wave3/results/bench_diffgeo_circularprep_baseline_20260306-192236.txt`
+    - `notes/perf/20260306-wave3/results/bench_diffgeo_circularprep_candidate_20260306-192320.txt`
+  - `bench_pipeline_hodge_main`: `425.753 ms` -> `164.629 ms` CPU (`-61.33%`)
+  - `bench_hodge_phase_circular`: `267.803 ms` -> `4.074 ms` CPU (`-98.48%`)
+  - `bench_hodge_phase_eigenbasis`: `116.965 ms` -> `116.807 ms` CPU (`-0.14%`)
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `409.351 ms` -> `147.268 ms` CPU (`-64.02%`)
+  - `bench_diffgeo_phase_circular/4000/64/32/32`: `267.488 ms` -> `3.821 ms` CPU (`-98.57%`)
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `107.028 ms` -> `107.143 ms` CPU (`+0.11%`)
+- App/runtime checks:
+  - `env IGNEOUS_BENCH_MODE=1 ./build/igneous-hodge --output-dir <tempdir> --no-ply`: `real 0.05`, `user 0.10`, `sys 0.01`
+  - `env IGNEOUS_BENCH_MODE=1 ./build/igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`: `real 0.07`, `user 0.19`, `sys 0.01`
+  - Recorded artifact: `notes/perf/20260306-wave3/results/app_timings_circularprep_20260306-192320.txt`
+- Test results:
+  - `test_ops_hodge`: pass
+  - `test_ops_diffusion_forms`: pass
+  - `test_ops_diffusion_wedge`: pass
+  - `test_hodge_cli_outputs`: pass
+  - `test_diffgeo_cli_outputs`: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - The key identity on the mean-centered path is that `Gamma(x, phi)` is a row-wise covariance under the Markov kernel, and the scalar weak Laplacian is `U^T diag(P^T b) U - (P U)^T diag(b) (P U)` with `b = mu / (2 * local_bandwidth)`.
+  - This changed only the preparation path. The generalized eigensolve and circular mode-selection logic stayed unchanged, which is why the eigenbasis guard benchmarks remained flat while the circular phase collapsed.

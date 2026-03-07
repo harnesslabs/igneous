@@ -12,6 +12,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Parallelized/fused post-kNN diffusion-build passes while keeping the existing Eigen sparse symmetrization path; this is the accepted build optimization over the rejected direct CSR rewrite.
 - Hodge workspace gamma-cache reuse within a fixed mesh/eigenbasis state; if the workspace is reused across rebuilds, reset it explicitly first.
 - Stable block-prefix DEC face-incidence construction for large meshes; it preserves per-vertex face order while removing the large-mesh serial bottleneck.
+- Matrix-form circular workspace preparation on the mean-centered diffusion path; keep the exact covariance formulas for `Gamma(x, phi)` and the scalar weak Laplacian instead of reverting to pairwise scalar `carre_du_champ` sweeps.
 
 ## Do Not Repeat
 - Tightening Arnoldi subspace below the current accepted compact fallback.
