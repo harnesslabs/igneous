@@ -26,16 +26,36 @@ template <typename MeshT> struct HodgeWorkspace {
   std::array<Eigen::MatrixXf, 3> gamma_x_phi_mat;
   /// \brief Basis weighted by stationary measure.
   Eigen::MatrixXf weighted_u;
-  /// \brief Reserved for mixed gamma layouts.
-  std::vector<std::vector<Eigen::VectorXf>> gamma_x_phi;
-  /// \brief `Gamma(phi_i, x_a)` cache per mode and axis.
-  std::vector<std::vector<Eigen::VectorXf>> gamma_phi_x;
   /// \brief `Gamma(x_a, x_b)` caches.
   std::array<std::array<Eigen::VectorXf, 3>, 3> gamma_xx;
   /// \brief Temporary `Gamma(phi_i, phi_j)` buffer.
   Eigen::VectorXf gamma_phi_phi;
   /// \brief Generic temporary weight vector.
   Eigen::VectorXf weight;
+  /// \brief Cached state for `gamma_x_phi_mat` and `weighted_u`.
+  int mixed_n_verts = -1;
+  /// \brief Cached scalar basis count for `gamma_x_phi_mat` and `weighted_u`.
+  int mixed_n0 = -1;
+  /// \brief Cached bandwidth for `gamma_x_phi_mat`.
+  float mixed_bandwidth = std::numeric_limits<float>::quiet_NaN();
+  /// \brief Whether mixed gamma and weighted basis caches are ready.
+  bool mixed_ready = false;
+  /// \brief Cached state for `gamma_xx`.
+  int gamma_xx_n_verts = -1;
+  /// \brief Cached bandwidth for `gamma_xx`.
+  float gamma_xx_bandwidth = std::numeric_limits<float>::quiet_NaN();
+  /// \brief Whether coordinate gamma caches are ready.
+  bool gamma_xx_ready = false;
+
+  void reset_cache() {
+    mixed_n_verts = -1;
+    mixed_n0 = -1;
+    mixed_bandwidth = std::numeric_limits<float>::quiet_NaN();
+    mixed_ready = false;
+    gamma_xx_n_verts = -1;
+    gamma_xx_bandwidth = std::numeric_limits<float>::quiet_NaN();
+    gamma_xx_ready = false;
+  }
 };
 
 /// \brief Reusable buffers for circular-coordinate assembly on a fixed mesh/basis state.
@@ -117,6 +137,70 @@ void prepare_circular_coordinate_workspace(const MeshT& mesh, float bandwidth,
   workspace.prepared_bandwidth = bandwidth;
 }
 
+inline bool hodge_cache_matches(float lhs, float rhs) {
+  return std::abs(lhs - rhs) <= 1e-12f;
+}
+
+template <typename MeshT>
+void ensure_hodge_mixed_cache(const MeshT& mesh, float bandwidth,
+                              HodgeWorkspace<MeshT>& workspace) {
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
+  const int n0 = U.cols();
+  const int n_verts = static_cast<int>(mesh.num_points());
+
+  if (workspace.mixed_ready && workspace.mixed_n_verts == n_verts &&
+      workspace.mixed_n0 == n0 && hodge_cache_matches(workspace.mixed_bandwidth, bandwidth)) {
+    return;
+  }
+
+  fill_coordinate_vectors(mesh, workspace.coords);
+
+  for (int a = 0; a < 3; ++a) {
+    workspace.gamma_x_phi_mat[a].resize(n_verts, n0);
+    core::parallel_for_index(
+        0, n0,
+        [&](int i) {
+          carre_du_champ(mesh, workspace.coords[a], U.col(i), bandwidth,
+                         workspace.gamma_x_phi_mat[a].col(i));
+        },
+        8);
+  }
+
+  workspace.weighted_u.resize(n_verts, n0);
+  workspace.weighted_u = U.array().colwise() * mu.array();
+  workspace.mixed_n_verts = n_verts;
+  workspace.mixed_n0 = n0;
+  workspace.mixed_bandwidth = bandwidth;
+  workspace.mixed_ready = true;
+}
+
+template <typename MeshT>
+void ensure_hodge_gamma_xx(const MeshT& mesh, float bandwidth, HodgeWorkspace<MeshT>& workspace) {
+  const int n_verts = static_cast<int>(mesh.num_points());
+  if (workspace.gamma_xx_ready && workspace.gamma_xx_n_verts == n_verts &&
+      hodge_cache_matches(workspace.gamma_xx_bandwidth, bandwidth)) {
+    return;
+  }
+
+  fill_coordinate_vectors(mesh, workspace.coords);
+
+  for (int a = 0; a < 3; ++a) {
+    for (int b = a; b < 3; ++b) {
+      workspace.gamma_xx[a][b].resize(n_verts);
+      carre_du_champ(mesh, workspace.coords[a], workspace.coords[b], bandwidth,
+                     workspace.gamma_xx[a][b]);
+      if (a != b) {
+        workspace.gamma_xx[b][a] = workspace.gamma_xx[a][b];
+      }
+    }
+  }
+
+  workspace.gamma_xx_n_verts = n_verts;
+  workspace.gamma_xx_bandwidth = bandwidth;
+  workspace.gamma_xx_ready = true;
+}
+
 /**
  * \brief Assemble weak exterior derivative matrix for 1-forms.
  * \param mesh Input diffusion space.
@@ -128,32 +212,10 @@ template <typename MeshT>
 Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, float bandwidth,
                                                  HodgeWorkspace<MeshT>& workspace) {
   const auto& U = mesh.structure.eigen_basis;
-  const auto& mu = mesh.structure.mu;
   const int n0 = U.cols();
-  const int n_verts = static_cast<int>(mesh.num_points());
 
   Eigen::MatrixXf D = Eigen::MatrixXf::Zero(3 * n0, n0);
-
-  fill_coordinate_vectors(mesh, workspace.coords);
-
-  for (int a = 0; a < 3; ++a) {
-    if (workspace.gamma_x_phi_mat[a].rows() != n_verts ||
-        workspace.gamma_x_phi_mat[a].cols() != n0) {
-      workspace.gamma_x_phi_mat[a].resize(n_verts, n0);
-    }
-    core::parallel_for_index(
-        0, n0,
-        [&](int i) {
-          carre_du_champ(mesh, workspace.coords[a], U.col(i), bandwidth,
-                         workspace.gamma_x_phi_mat[a].col(i));
-        },
-        8);
-  }
-
-  if (workspace.weighted_u.rows() != n_verts || workspace.weighted_u.cols() != n0) {
-    workspace.weighted_u.resize(n_verts, n0);
-  }
-  workspace.weighted_u = U.array().colwise() * mu.array();
+  ensure_hodge_mixed_cache(mesh, bandwidth, workspace);
 
   for (int a = 0; a < 3; ++a) {
     const Eigen::MatrixXf coupling =
@@ -196,28 +258,8 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT& mesh, float bandwidth,
   const int n_verts = static_cast<int>(mesh.num_points());
 
   Eigen::MatrixXf E_up = Eigen::MatrixXf::Zero(n_basis, n_basis);
-
-  fill_coordinate_vectors(mesh, workspace.coords);
-
-  for (int a = 0; a < 3; ++a) {
-    for (int b = 0; b < 3; ++b) {
-      workspace.gamma_xx[a][b].resize(n_verts);
-      carre_du_champ(mesh, workspace.coords[a], workspace.coords[b], bandwidth,
-                     workspace.gamma_xx[a][b]);
-    }
-  }
-
-  workspace.gamma_phi_x.assign(n0, std::vector<Eigen::VectorXf>(3));
-  core::parallel_for_index(
-      0, n0,
-      [&](int k) {
-        for (int d = 0; d < 3; ++d) {
-          workspace.gamma_phi_x[k][d].resize(n_verts);
-          carre_du_champ(mesh, U.col(k), workspace.coords[d], bandwidth,
-                         workspace.gamma_phi_x[k][d]);
-        }
-      },
-      8);
+  ensure_hodge_gamma_xx(mesh, bandwidth, workspace);
+  ensure_hodge_mixed_cache(mesh, bandwidth, workspace);
 
   core::parallel_for_index(
       0, n0,
@@ -231,7 +273,8 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT& mesh, float bandwidth,
             for (int b = 0; b < 3; ++b) {
               const float val =
                   (((gamma_phi_phi_local.array() * workspace.gamma_xx[a][b].array()) -
-                    (workspace.gamma_phi_x[k][b].array() * workspace.gamma_phi_x[l][a].array())) *
+                    (workspace.gamma_x_phi_mat[b].col(k).array() *
+                     workspace.gamma_x_phi_mat[a].col(l).array())) *
                    mu_arr)
                       .sum();
 

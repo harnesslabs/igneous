@@ -155,6 +155,7 @@ void bench_pipeline_hodge_main(benchmark::State& state) {
   for (auto _ : state) {
     build_diffusion_geometry(mesh, kBandwidth, kNeighbors);
     igneous::ops::diffusion::compute_eigenbasis(mesh, kBasis);
+    hodge_ws.reset_cache();
 
     const Eigen::MatrixXf G =
         igneous::ops::diffusion::compute_1form_gram_matrix(mesh, kBandwidth, geom_ws);

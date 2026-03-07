@@ -10,6 +10,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Shared circular-coordinate setup reuse within a single pipeline call; keep the existing mode ordering and selection semantics unchanged.
 - Parallel upper-triangle assembly for generic form up-Laplacians; it preserved outputs and removed the serial bottleneck in the basis-pair sweep.
 - Parallelized/fused post-kNN diffusion-build passes while keeping the existing Eigen sparse symmetrization path; this is the accepted build optimization over the rejected direct CSR rewrite.
+- Hodge workspace gamma-cache reuse within a fixed mesh/eigenbasis state; if the workspace is reused across rebuilds, reset it explicitly first.
 
 ## Do Not Repeat
 - Tightening Arnoldi subspace below the current accepted compact fallback.

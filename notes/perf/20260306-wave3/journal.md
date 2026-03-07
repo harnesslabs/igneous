@@ -528,3 +528,179 @@ Use one entry per optimization hypothesis.
 - Notes:
   - The kept change does not alter the accepted sparse symmetrization strategy; it only parallelizes and fuses the scalar post-kNN passes that were still serial.
   - The canonical spectral guards stayed flat or improved, but the `4000/64` torus eigensolve used by `bench_diffgeo_phase_eigenbasis` consistently regressed by about `6%`. The end-to-end `diffgeo` pipeline still improved by `4.45%`, so this was accepted as a net build-heavy pipeline win rather than a pure spectral win.
+
+## 2026-03-06 Symmetric Solver `LargestAlge`
+- Timestamp: 2026-03-07T01:22:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_eigenbasis/2000/16`
+  - `bench_hodge_phase_eigenbasis`
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`
+- Hypothesis:
+  - Switch the normalized symmetric-kernel eigensolve from `LargestMagn` to `LargestAlge` so the solver targets the algebraically largest diffusion modes directly instead of sorting by magnitude.
+- Files touched:
+  - `include/igneous/ops/diffusion/spectral.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_eigenbasis/2000/16' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_hodge_phase_eigenbasis|bench_pipeline_hodge_main' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - Baseline current head after `dee719f`:
+    - `bench_eigenbasis/2000/16`: `11.401 ms` CPU
+    - `bench_pipeline_spectral_main`: `22.921 ms`
+    - `bench_hodge_phase_eigenbasis`: `118.252 ms`
+    - `bench_pipeline_hodge_main`: `442.637 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `107.828 ms`
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `428.990 ms`
+  - Current patch:
+    - `bench_eigenbasis/2000/16`: `11.789 ms` (`+3.40%`)
+    - `bench_pipeline_spectral_main`: `24.031 ms` (`+4.84%`)
+    - `bench_hodge_phase_eigenbasis`: `119.311 ms` (`+0.90%`)
+    - `bench_pipeline_hodge_main`: `442.863 ms` (`+0.05%`)
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `110.094 ms` (`+2.10%`)
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `424.396 ms` (`-1.07%`)
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run; rejected before app timing and correctness gates
+- Test results:
+  - not run; rejected before correctness gating
+- Decision: `rejected`
+- Rejected because:
+  - The symmetric sort-rule change regressed the canonical scalar eigenbasis benchmark and the spectral pipeline without providing a compensating hodge or diffgeo win.
+- Notes:
+  - This is distinct from the earlier generic Arnoldi sort-rule work. The symmetric normalized-kernel path should stay on `LargestMagn`.
+
+## 2026-03-06 Symmetric Solver `sqrt(row-sums)` Seed
+- Timestamp: 2026-03-07T01:31:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_eigenbasis/2000/16`
+  - `bench_pipeline_spectral_main`
+  - `bench_hodge_phase_eigenbasis`
+- Hypothesis:
+  - Seed the normalized symmetric-kernel eigensolve with `sqrt(row_sums)` so Arnoldi starts near the dominant diffusion mode instead of using Spectra's default random residual.
+- Files touched:
+  - `include/igneous/ops/diffusion/spectral.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_eigenbasis/2000/16' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_hodge_phase_eigenbasis|bench_pipeline_hodge_main' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - Baseline current head after `dee719f`:
+    - `bench_eigenbasis/2000/16`: `11.401 ms` CPU
+    - `bench_pipeline_spectral_main`: `22.921 ms`
+    - `bench_hodge_phase_eigenbasis`: `118.252 ms`
+    - `bench_pipeline_hodge_main`: `442.637 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `107.828 ms`
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `428.990 ms`
+  - Current patch:
+    - `bench_eigenbasis/2000/16`: `10.899 ms` (`-4.40%`)
+    - `bench_pipeline_spectral_main`: `20.001 ms` (`-12.74%`)
+    - `bench_hodge_phase_eigenbasis`: `126.251 ms` (`+6.76%`)
+    - `bench_pipeline_hodge_main`: `446.302 ms` (`+0.83%`)
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `109.216 ms` (`+1.29%`)
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `422.493 ms` (`-1.51%`)
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run; rejected before app timing and correctness gates
+- Test results:
+  - not run; rejected before correctness gating
+- Decision: `rejected`
+- Rejected because:
+  - The seeded symmetric solve improved the small scalar spectral path but regressed the 64-mode hodge eigensolve too much to keep.
+- Notes:
+  - This is distinct from the earlier rejected generic `mu`-init Arnoldi attempt. The symmetric normalized-kernel path should keep Spectra's default residual initialization.
+
+## 2026-03-06 Large-Mesh Atomic DEC Face Incidence
+- Timestamp: 2026-03-07T01:34:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_geometry` large-grid structure build
+  - `bench_mesh_structure_build/400`
+- Hypothesis:
+  - Parallelize the DEC face-incidence CSR build for large meshes with atomic count/write heads so the million-face geometry benchmark stops paying for two fully serial face sweeps.
+- Files touched:
+  - `include/igneous/data/structures/discrete_exterior_calculus.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_geometry`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_mesh_structure_build/400|bench_curvature_kernel/400|bench_flow_kernel/400' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `ctest --test-dir build --output-on-failure -R 'test_structure_dec|test_ops_curvature_flow'`
+- Smoke results:
+  - `bench_geometry`:
+    - `Grid 1000x1000` structure: `15.662 ms` -> `12.577 ms` (`-19.70%`)
+    - `Grid 1000x1000` curvature: `5.427 ms` -> `6.076 ms` (`+11.96%`)
+    - `Grid 1000x1000` flow: `0.881 ms` -> `1.028 ms` (`+16.69%`)
+    - `Grid 500x500` structure: `4.074 ms` -> `3.248 ms` (`-20.28%`)
+    - `Grid 500x500` curvature: `1.324 ms` -> `1.447 ms` (`+9.29%`)
+  - `bench_dod`:
+    - `bench_mesh_structure_build/400`: `2.821 ms` -> `1.819 ms` (`-35.52%`)
+    - `bench_curvature_kernel/400`: `0.983 ms` -> `0.831 ms` (`-15.46%`)
+    - `bench_flow_kernel/400`: `0.166 ms` -> `0.195 ms` (`+17.46%`)
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run; rejected before app timing and correctness gates
+- Test results:
+  - `test_structure_dec`: pass
+  - `test_ops_curvature_flow`: pass
+- Decision: `rejected`
+- Rejected because:
+  - The atomic face-incidence path improved the isolated structure build but changed downstream locality/order enough to slow the large-grid curvature and flow kernels, so the overall geometry benchmark got worse.
+- Notes:
+  - If the DEC structure builder is revisited, the next version should preserve or explicitly reorder face/neighborhood locality instead of only chasing build throughput.
+
+## 2026-03-06 Hodge Gamma Cache Reuse
+- Timestamp: 2026-03-07T01:39:00Z
+- Commit: pending
+- Primary target:
+  - `bench_hodge_phase_curl_energy`
+  - `bench_hodge_phase_weak_derivative`
+  - `bench_pipeline_hodge_main`
+- Hypothesis:
+  - Cache `Gamma(x, phi)`, `U .* mu`, and `Gamma(x, x)` inside `HodgeWorkspace`, reuse the mixed gamma directly inside curl-energy assembly, and reset the workspace only when the mesh/build/eigenbasis state changes.
+- Files touched:
+  - `include/igneous/ops/diffusion/hodge.hpp`
+  - `benches/bench_pipelines.cpp`
+- Benchmark commands:
+  - Exact baseline worktree at `dee719f`:
+    - `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=/opt/homebrew/bin/ninja -DCMAKE_TOOLCHAIN_FILE=/Users/autoparallel/vcpkg/scripts/buildsystems/vcpkg.cmake`
+    - `cmake --build build --target bench_dod bench_pipelines test_ops_hodge -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='/Users/autoparallel/Code/igneous/notes/perf/20260306-wave3/results/bench_dod_hodgecache_baseline_20260306-183810.json' --benchmark_out_format=json > '/Users/autoparallel/Code/igneous/notes/perf/20260306-wave3/results/bench_dod_hodgecache_baseline_20260306-183810.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_weak_derivative|bench_hodge_phase_curl_energy|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='/Users/autoparallel/Code/igneous/notes/perf/20260306-wave3/results/bench_pipelines_hodgecache_baseline_20260306-183810.json' --benchmark_out_format=json > '/Users/autoparallel/Code/igneous/notes/perf/20260306-wave3/results/bench_pipelines_hodgecache_baseline_20260306-183810.txt'`
+    - `ctest --test-dir build --output-on-failure -R 'test_ops_hodge'`
+  - Candidate:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_weak_derivative/2000/16|bench_curl_energy/2000/16|bench_hodge_solve/2000/16' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_dod_hodgecache_candidate_20260306-183833.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_dod_hodgecache_candidate_20260306-183833.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_weak_derivative|bench_hodge_phase_curl_energy|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_pipelines_hodgecache_candidate_20260306-183833.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_pipelines_hodgecache_candidate_20260306-183833.txt'`
+    - `ctest --test-dir build --output-on-failure -R 'test_ops_hodge|test_hodge_cli_outputs'`
+    - `ctest --test-dir build --output-on-failure -j8`
+- Smoke results:
+  - Current patch at `0.05s` min time:
+    - `bench_weak_derivative/2000/16`: `0.047 ms` CPU
+    - `bench_curl_energy/2000/16`: `1.087 ms`
+    - `bench_pipeline_hodge_main`: `431.851 ms`
+    - `bench_hodge_phase_weak_derivative`: `1.104 ms`
+    - `bench_hodge_phase_curl_energy`: `26.781 ms`
+    - `bench_hodge_phase_eigenbasis`: `115.948 ms`
+- Deep results:
+  - Exact A/B against `dee719f`:
+    - `bench_weak_derivative/2000/16`: `0.506 ms` -> `0.048 ms` (`-90.60%`)
+    - `bench_curl_energy/2000/16`: `2.189 ms` -> `1.166 ms` (`-46.73%`)
+    - `bench_hodge_solve/2000/16`: `0.132 ms` -> `0.121 ms` (`-7.66%`)
+    - `bench_pipeline_hodge_main`: `456.996 ms` -> `441.018 ms` (`-3.50%`)
+    - `bench_hodge_phase_weak_derivative`: `3.683 ms` -> `1.080 ms` (`-70.67%`)
+    - `bench_hodge_phase_curl_energy`: `28.824 ms` -> `25.882 ms` (`-10.21%`)
+    - `bench_hodge_phase_eigenbasis`: `119.500 ms` -> `118.666 ms` (`-0.70%`)
+- App/runtime checks:
+  - `env IGNEOUS_BENCH_MODE=1 ./build/igneous-hodge --output-dir <tempdir> --no-ply`: `real 0.10`, `user 0.15`, `sys 0.01`
+- Test results:
+  - `test_ops_hodge`: pass
+  - `test_hodge_cli_outputs`: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - `HodgeWorkspace::reset_cache()` is now required when the mesh/build/eigenbasis state changes and the same workspace instance is reused. Internal rebuild-heavy benchmark loops were updated accordingly.
+  - The main single-call win comes from reusing weak-derivative mixed gamma inside curl-energy assembly and from only computing the symmetric coordinate gamma tensor once per fixed workspace state.
