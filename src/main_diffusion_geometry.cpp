@@ -389,6 +389,10 @@ int main(int argc, char** argv) {
 
   // 1-forms
   const Eigen::MatrixXf G1 = ops::diffusion::compute_kform_gram_matrix(mesh, 1, n_coeff, forms_ws);
+  const Eigen::MatrixXf G1_inv =
+      ops::diffusion::compute_kform_gram_inverse(mesh, 1, n_coeff, forms_ws);
+  const Eigen::MatrixXf D1 =
+      ops::diffusion::compute_weak_exterior_derivative(mesh, 1, n_coeff, forms_ws);
   const Eigen::MatrixXf down1 =
       ops::diffusion::compute_down_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
   const Eigen::MatrixXf up1 =
@@ -419,17 +423,18 @@ int main(int argc, char** argv) {
 
   const int idx0 = harmonic1_idx.empty() ? 0 : harmonic1_idx[0];
   const int idx1 = harmonic1_idx.size() > 1 ? harmonic1_idx[1] : idx0;
+  ops::diffusion::CircularCoordinateWorkspace<DiffusionMesh> circular_ws;
   const Eigen::VectorXf theta_0 = ops::diffusion::compute_circular_coordinates(
       mesh, pad_1form_coeffs(evecs1.col(idx0), mesh.structure.eigen_basis.cols(), n_coeff), 0.0f,
-      cfg.circular_lambda, cfg.circular_mode_0, nullptr);
+      cfg.circular_lambda, cfg.circular_mode_0, nullptr, circular_ws);
   const Eigen::VectorXf theta_1 = ops::diffusion::compute_circular_coordinates(
       mesh, pad_1form_coeffs(evecs1.col(idx1), mesh.structure.eigen_basis.cols(), n_coeff), 0.0f,
-      cfg.circular_lambda, cfg.circular_mode_1, nullptr);
+      cfg.circular_lambda, cfg.circular_mode_1, nullptr, circular_ws);
 
   // 2-forms
   const Eigen::MatrixXf G2 = ops::diffusion::compute_kform_gram_matrix(mesh, 2, n_coeff, forms_ws);
   const Eigen::MatrixXf down2 =
-      ops::diffusion::compute_down_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
+      ops::diffusion::assemble_down_laplacian_matrix_from_previous(D1, G1_inv);
   const Eigen::MatrixXf up2 =
       ops::diffusion::compute_up_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
   const Eigen::MatrixXf L2 = ops::diffusion::assemble_hodge_laplacian_matrix(up2, down2);

@@ -424,10 +424,13 @@ int main(int argc, char** argv) {
 
   std::complex<float> selected_eval_0(0.0f, 0.0f);
   std::complex<float> selected_eval_1(0.0f, 0.0f);
+  ops::diffusion::CircularCoordinateWorkspace<DiffusionMesh> circular_ws;
   const auto theta_0 = ops::diffusion::compute_circular_coordinates(
-      mesh, evecs.col(0), 0.0f, cfg.circular_lambda, cfg.circular_mode_0, &selected_eval_0);
+      mesh, evecs.col(0), 0.0f, cfg.circular_lambda, cfg.circular_mode_0, &selected_eval_0,
+      circular_ws);
   const auto theta_1 = ops::diffusion::compute_circular_coordinates(
-      mesh, evecs.col(1), 0.0f, cfg.circular_lambda, cfg.circular_mode_1, &selected_eval_1);
+      mesh, evecs.col(1), 0.0f, cfg.circular_lambda, cfg.circular_mode_1, &selected_eval_1,
+      circular_ws);
 
   std::cout << "HODGE SPECTRUM (first 12 modes)\n";
   for (int i = 0; i < 12 && i < evals.size(); ++i) {

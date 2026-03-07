@@ -18,22 +18,6 @@
 
 namespace igneous::ops::diffusion {
 
-/// \brief Shared scratch buffers for diffusion k-form operators.
-template <typename MeshT> struct DiffusionFormWorkspace {
-  /// \brief Coordinate vectors used for gamma evaluations.
-  std::array<Eigen::VectorXf, 3> coords;
-  /// \brief `Gamma(x_a, x_b)` caches.
-  std::array<std::array<Eigen::VectorXf, 3>, 3> gamma_coords;
-  /// \brief `Gamma(x_a, phi_i)` matrix cache per axis.
-  std::array<Eigen::MatrixXf, 3> gamma_mixed;
-  /// \brief Generic temporary gamma vector.
-  Eigen::VectorXf gamma_tmp;
-  /// \brief Number of columns currently available in `gamma_mixed`.
-  int gamma_mixed_cols = 0;
-  /// \brief Whether `gamma_coords` has been initialized.
-  bool gamma_coords_ready = false;
-};
-
 /// \brief Precomputed compound-minor determinants for metric pullbacks.
 struct CompoundDeterminantData {
   /// \brief Basis index combinations for the target degree.
@@ -44,6 +28,54 @@ struct CompoundDeterminantData {
   int degree = 0;
   /// \brief Number of basis components for this degree.
   int n_components = 0;
+};
+
+/// \brief Shared scratch buffers for diffusion k-form operators.
+template <typename MeshT> struct DiffusionFormWorkspace {
+  /// \brief Coordinate vectors used for gamma evaluations.
+  std::array<Eigen::VectorXf, 3> coords;
+  /// \brief `Gamma(x_a, x_b)` caches.
+  std::array<std::array<Eigen::VectorXf, 3>, 3> gamma_coords;
+  /// \brief `Gamma(x_a, phi_i)` matrix cache per axis.
+  std::array<Eigen::MatrixXf, 3> gamma_mixed;
+  /// \brief Generic temporary gamma vector.
+  Eigen::VectorXf gamma_tmp;
+  /// \brief Cached weighted basis block `U_left .* mu`.
+  Eigen::MatrixXf weighted_u;
+  /// \brief Cached compound determinants by degree.
+  std::array<CompoundDeterminantData, 3> compound_cache;
+  /// \brief Cached Gram matrices by degree.
+  std::array<Eigen::MatrixXf, 3> gram_cache;
+  /// \brief Cached Gram pseudo-inverses by degree.
+  std::array<Eigen::MatrixXf, 3> gram_inverse_cache;
+  /// \brief Number of columns currently available in `gamma_mixed`.
+  int gamma_mixed_cols = 0;
+  /// \brief Column count currently held in `weighted_u`.
+  int weighted_u_cols = 0;
+  /// \brief Column count associated with `gram_cache[k]`.
+  std::array<int, 3> gram_cols = {0, 0, 0};
+  /// \brief Column count associated with `gram_inverse_cache[k]`.
+  std::array<int, 3> gram_inverse_cols = {0, 0, 0};
+  /// \brief Whether `gamma_coords` has been initialized.
+  bool gamma_coords_ready = false;
+  /// \brief Whether `compound_cache[k]` is valid.
+  std::array<bool, 3> compound_ready = {false, false, false};
+  /// \brief Whether `gram_cache[k]` is valid.
+  std::array<bool, 3> gram_ready = {false, false, false};
+  /// \brief Whether `gram_inverse_cache[k]` is valid.
+  std::array<bool, 3> gram_inverse_ready = {false, false, false};
+
+  /// \brief Invalidate derived caches after mesh/build/eigenbasis changes.
+  void reset_cache() {
+    gamma_mixed_cols = 0;
+    weighted_u_cols = 0;
+    gram_cols = {0, 0, 0};
+    gram_inverse_cols = {0, 0, 0};
+    gamma_coords_ready = false;
+    compound_ready = {false, false, false};
+    gram_ready = {false, false, false};
+    gram_inverse_ready = {false, false, false};
+  }
 };
 
 /**
@@ -169,6 +201,29 @@ void ensure_gamma_mixed(const MeshT& mesh, int n_coefficients,
 }
 
 /**
+ * \brief Ensure `workspace.weighted_u` holds `U_left .* mu` for `n_coefficients`.
+ * \param mesh Input diffusion space.
+ * \param n_coefficients Required basis column count.
+ * \param workspace Scratch workspace to populate.
+ */
+template <typename MeshT>
+void ensure_weighted_u(const MeshT& mesh, int n_coefficients,
+                       DiffusionFormWorkspace<MeshT>& workspace) {
+  const auto& U = mesh.structure.eigen_basis;
+  const auto& mu = mesh.structure.mu;
+  const int n = static_cast<int>(mesh.num_points());
+  const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
+
+  if (workspace.weighted_u_cols == n1 && workspace.weighted_u.rows() == n) {
+    return;
+  }
+
+  workspace.weighted_u.resize(n, n1);
+  workspace.weighted_u = U.leftCols(n1).array().colwise() * mu.array();
+  workspace.weighted_u_cols = n1;
+}
+
+/**
  * \brief Compute all compound determinant vectors for k-form metric pullbacks.
  * \param mesh Input diffusion space.
  * \param k Exterior degree.
@@ -178,6 +233,11 @@ void ensure_gamma_mixed(const MeshT& mesh, int n_coefficients,
 template <typename MeshT>
 CompoundDeterminantData compute_compound_determinants(const MeshT& mesh, int k,
                                                       DiffusionFormWorkspace<MeshT>& workspace) {
+  if (k >= 0 && k < static_cast<int>(workspace.compound_cache.size()) &&
+      workspace.compound_ready[k]) {
+    return workspace.compound_cache[static_cast<size_t>(k)];
+  }
+
   ensure_gamma_coords(mesh, workspace);
 
   CompoundDeterminantData out;
@@ -198,6 +258,10 @@ CompoundDeterminantData compute_compound_determinants(const MeshT& mesh, int k,
     }
   }
 
+  if (k >= 0 && k < static_cast<int>(workspace.compound_cache.size())) {
+    workspace.compound_cache[static_cast<size_t>(k)] = out;
+    workspace.compound_ready[k] = true;
+  }
   return out;
 }
 
@@ -213,31 +277,38 @@ template <typename MeshT>
 Eigen::MatrixXf compute_kform_gram_matrix(const MeshT& mesh, int k, int n_coefficients,
                                           DiffusionFormWorkspace<MeshT>& workspace) {
   const auto& U = mesh.structure.eigen_basis;
-  const auto& mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
   const auto compounds = compute_compound_determinants(mesh, k, workspace);
   const int Ck = std::max(1, compounds.n_components);
   Eigen::MatrixXf G = Eigen::MatrixXf::Zero(n1 * Ck, n1 * Ck);
 
   const int n = static_cast<int>(mesh.num_points());
+  ensure_weighted_u(mesh, n1, workspace);
   Eigen::ArrayXf weights(n);
 
   if (k == 0) {
     for (int i = 0; i < n1; ++i) {
       for (int l = i; l < n1; ++l) {
-        const float val = (U.col(i).array() * U.col(l).array() * mu.array()).sum();
+        const float val = workspace.weighted_u.col(i).dot(U.col(l));
         G(i, l) = val;
         if (i != l) {
           G(l, i) = val;
         }
       }
     }
+    if (k >= 0 && k < static_cast<int>(workspace.gram_cache.size())) {
+      workspace.gram_cache[static_cast<size_t>(k)] = G;
+      workspace.gram_ready[k] = true;
+      workspace.gram_cols[k] = n1;
+      workspace.gram_inverse_ready[k] = false;
+      workspace.gram_inverse_cols[k] = 0;
+    }
     return G;
   }
 
   for (int i = 0; i < n1; ++i) {
     for (int l = i; l < n1; ++l) {
-      weights = U.col(i).array() * U.col(l).array() * mu.array();
+      weights = workspace.weighted_u.col(i).array() * U.col(l).array();
       for (int a = 0; a < Ck; ++a) {
         for (int b = 0; b < Ck; ++b) {
           const auto& compound = compounds.values[static_cast<size_t>(a * Ck + b)];
@@ -253,6 +324,13 @@ Eigen::MatrixXf compute_kform_gram_matrix(const MeshT& mesh, int k, int n_coeffi
     }
   }
 
+  if (k >= 0 && k < static_cast<int>(workspace.gram_cache.size())) {
+    workspace.gram_cache[static_cast<size_t>(k)] = G;
+    workspace.gram_ready[k] = true;
+    workspace.gram_cols[k] = n1;
+    workspace.gram_inverse_ready[k] = false;
+    workspace.gram_inverse_cols[k] = 0;
+  }
   return G;
 }
 
@@ -285,16 +363,15 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, int k, int n
   }
 
   const auto& U = mesh.structure.eigen_basis;
-  const auto& mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
   ensure_gamma_mixed(mesh, n1, workspace);
 
   if (k == 0) {
     const int d = ambient_dim_3d();
     Eigen::MatrixXf D = Eigen::MatrixXf::Zero(n1 * d, n1);
-    Eigen::MatrixXf weighted_u = U.leftCols(n1).array().colwise() * mu.array();
+    ensure_weighted_u(mesh, n1, workspace);
     for (int a = 0; a < d; ++a) {
-      const Eigen::MatrixXf coupling = weighted_u.transpose() * workspace.gamma_mixed[a];
+      const Eigen::MatrixXf coupling = workspace.weighted_u.transpose() * workspace.gamma_mixed[a];
       for (int i = 0; i < n1; ++i) {
         D.row(i * d + a) = coupling.row(i);
       }
@@ -306,27 +383,26 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, int k, int n
   const auto compounds = compute_compound_determinants(mesh, k, workspace);
   const int Ck = static_cast<int>(kp1.idx_k.size());
   const int Ckp1 = static_cast<int>(kp1.idx_kp1.size());
+  ensure_weighted_u(mesh, n1, workspace);
 
   Eigen::MatrixXf D = Eigen::MatrixXf::Zero(n1 * Ckp1, n1 * Ck);
-  const int n = static_cast<int>(mesh.num_points());
+  for (int Jp = 0; Jp < Ckp1; ++Jp) {
+    for (int J = 0; J < Ck; ++J) {
+      Eigen::MatrixXf coupling = Eigen::MatrixXf::Zero(n1, n1);
 
-  for (int I = 0; I < n1; ++I) {
-    for (int i = 0; i < n1; ++i) {
-      for (int Jp = 0; Jp < Ckp1; ++Jp) {
-        for (int J = 0; J < Ck; ++J) {
-          float accum = 0.0f;
-          for (int p = 0; p < n; ++p) {
-            float laplace_sum = 0.0f;
-            for (int r = 0; r < k + 1; ++r) {
-              const int coord_dim = kp1.idx_kp1[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
-              const int child_idx = kp1.children[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
-              const auto& minor_det = compounds.values[static_cast<size_t>(child_idx * Ck + J)];
-              laplace_sum += static_cast<float>(kp1.signs[static_cast<size_t>(r)]) *
-                             workspace.gamma_mixed[coord_dim](p, i) * minor_det[p];
-            }
-            accum += U(p, I) * laplace_sum * mu[p];
-          }
-          D(I * Ckp1 + Jp, i * Ck + J) = accum;
+      for (int r = 0; r < k + 1; ++r) {
+        const int coord_dim = kp1.idx_kp1[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
+        const int child_idx = kp1.children[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
+        const auto& minor_det = compounds.values[static_cast<size_t>(child_idx * Ck + J)];
+        const Eigen::MatrixXf scaled =
+            workspace.gamma_mixed[coord_dim].array().colwise() * minor_det.array();
+        coupling.noalias() += static_cast<float>(kp1.signs[static_cast<size_t>(r)]) *
+                              (workspace.weighted_u.transpose() * scaled);
+      }
+
+      for (int I = 0; I < n1; ++I) {
+        for (int i = 0; i < n1; ++i) {
+          D(I * Ckp1 + Jp, i * Ck + J) = coupling(I, i);
         }
       }
     }
@@ -357,6 +433,19 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, int k, int n
 inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf& matrix, float rcond);
 
 /**
+ * \brief Forward declaration of cached Gram pseudo-inverse helper.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch workspace.
+ * \param rcond Relative conditioning threshold.
+ * \return Pseudo-inverse Gram matrix.
+ */
+template <typename MeshT>
+Eigen::MatrixXf compute_kform_gram_inverse(const MeshT& mesh, int k, int n_coefficients,
+                                           DiffusionFormWorkspace<MeshT>& workspace, float rcond);
+
+/**
  * \brief Assemble codifferential matrix `delta_k` from `d_{k-1}` and mass.
  * \param mesh Input diffusion space.
  * \param k Exterior degree.
@@ -372,8 +461,8 @@ Eigen::MatrixXf compute_codifferential_matrix(const MeshT& mesh, int k, int n_co
   }
   const Eigen::MatrixXf D_prev =
       compute_weak_exterior_derivative(mesh, k - 1, n_coefficients, workspace);
-  const Eigen::MatrixXf G_prev = compute_kform_gram_matrix(mesh, k - 1, n_coefficients, workspace);
-  const Eigen::MatrixXf G_prev_inv = pseudo_inverse_symmetric(G_prev, 1e-5f);
+  const Eigen::MatrixXf G_prev_inv =
+      compute_kform_gram_inverse(mesh, k - 1, n_coefficients, workspace, 1e-5f);
   return G_prev_inv * D_prev.transpose();
 }
 
@@ -450,6 +539,60 @@ inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf& matrix,
 }
 
 /**
+ * \brief Return cached pseudo-inverse of the k-form Gram matrix.
+ * \param mesh Input diffusion space.
+ * \param k Exterior degree.
+ * \param n_coefficients Basis truncation size.
+ * \param workspace Scratch workspace.
+ * \param rcond Relative conditioning threshold.
+ * \return Pseudo-inverse Gram matrix.
+ */
+template <typename MeshT>
+Eigen::MatrixXf compute_kform_gram_inverse(const MeshT& mesh, int k, int n_coefficients,
+                                           DiffusionFormWorkspace<MeshT>& workspace, float rcond) {
+  if (k < 0 || k > 2) {
+    return Eigen::MatrixXf();
+  }
+
+  const auto& U = mesh.structure.eigen_basis;
+  const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
+  if (workspace.gram_inverse_ready[k] && workspace.gram_inverse_cols[k] == n1) {
+    return workspace.gram_inverse_cache[static_cast<size_t>(k)];
+  }
+
+  Eigen::MatrixXf gram;
+  if (workspace.gram_ready[k] && workspace.gram_cols[k] == n1) {
+    gram = workspace.gram_cache[static_cast<size_t>(k)];
+  } else {
+    gram = compute_kform_gram_matrix(mesh, k, n1, workspace);
+  }
+
+  workspace.gram_inverse_cache[static_cast<size_t>(k)] = pseudo_inverse_symmetric(gram, rcond);
+  workspace.gram_inverse_ready[k] = true;
+  workspace.gram_inverse_cols[k] = n1;
+  return workspace.gram_inverse_cache[static_cast<size_t>(k)];
+}
+
+/// \brief Convenience overload using the default conditioning threshold.
+template <typename MeshT>
+Eigen::MatrixXf compute_kform_gram_inverse(const MeshT& mesh, int k, int n_coefficients,
+                                           DiffusionFormWorkspace<MeshT>& workspace) {
+  return compute_kform_gram_inverse(mesh, k, n_coefficients, workspace, 1e-5f);
+}
+
+/**
+ * \brief Assemble a down-Laplacian from precomputed previous-degree operators.
+ * \param D_prev Previous-degree weak derivative matrix.
+ * \param G_prev_inv Previous-degree Gram pseudo-inverse.
+ * \return Down-Laplacian matrix.
+ */
+inline Eigen::MatrixXf
+assemble_down_laplacian_matrix_from_previous(const Eigen::MatrixXf& D_prev,
+                                             const Eigen::MatrixXf& G_prev_inv) {
+  return D_prev * G_prev_inv * D_prev.transpose();
+}
+
+/**
  * \brief Assemble up-Laplacian contribution for k-forms.
  * \param mesh Input diffusion space.
  * \param k Exterior degree.
@@ -473,76 +616,74 @@ Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT& mesh, int k, int n_coef
 
   if (k == 0) {
     Eigen::MatrixXf L = Eigen::MatrixXf::Zero(n1, n1);
-    for (int i = 0; i < n1; ++i) {
-      for (int l = i; l < n1; ++l) {
-        workspace.gamma_tmp.resize(n);
-        carre_du_champ(mesh, U.col(i), U.col(l), 0.0f, workspace.gamma_tmp);
-        const float val = (workspace.gamma_tmp.array() * mu.array()).sum();
-        L(i, l) = val;
-        if (i != l) {
-          L(l, i) = val;
-        }
-      }
-    }
-    return L;
+    core::parallel_for_index(
+        0, n1,
+        [&](int i) {
+          Eigen::VectorXf gamma_local(n);
+          for (int l = i; l < n1; ++l) {
+            carre_du_champ(mesh, U.col(i), U.col(l), 0.0f, gamma_local);
+            L(i, l) = (gamma_local.array() * mu.array()).sum();
+          }
+        },
+        4);
+    return Eigen::MatrixXf(L.selfadjointView<Eigen::Upper>());
   }
 
   const auto compounds = compute_compound_determinants(mesh, k, workspace);
   const int Ck = compounds.n_components;
   Eigen::MatrixXf L = Eigen::MatrixXf::Zero(n1 * Ck, n1 * Ck);
 
-  for (int i = 0; i < n1; ++i) {
-    for (int l = i; l < n1; ++l) {
-      workspace.gamma_tmp.resize(n);
-      carre_du_champ(mesh, U.col(i), U.col(l), 0.0f, workspace.gamma_tmp);
+  core::parallel_for_index(
+      0, n1,
+      [&](int i) {
+        Eigen::VectorXf gamma_local(n);
+        for (int l = i; l < n1; ++l) {
+          carre_du_champ(mesh, U.col(i), U.col(l), 0.0f, gamma_local);
 
-      for (int J = 0; J < Ck; ++J) {
-        for (int K = 0; K < Ck; ++K) {
-          float val = 0.0f;
-          if (k == 1) {
-            const auto& gJK = workspace.gamma_coords[J][K];
-            const Eigen::ArrayXf term =
-                (workspace.gamma_tmp.array() * gJK.array()) -
-                (workspace.gamma_mixed[K].col(i).array() * workspace.gamma_mixed[J].col(l).array());
-            val = (term * mu.array()).sum();
-          } else {
-            const auto& row_combo = compounds.indices[static_cast<size_t>(J)];
-            const auto& col_combo = compounds.indices[static_cast<size_t>(K)];
-            for (int p = 0; p < n; ++p) {
-              Eigen::Matrix2f Dm;
-              Dm(0, 0) = workspace.gamma_coords[row_combo[0]][col_combo[0]][p];
-              Dm(0, 1) = workspace.gamma_coords[row_combo[0]][col_combo[1]][p];
-              Dm(1, 0) = workspace.gamma_coords[row_combo[1]][col_combo[0]][p];
-              Dm(1, 1) = workspace.gamma_coords[row_combo[1]][col_combo[1]][p];
+          for (int J = 0; J < Ck; ++J) {
+            const int k_begin = (i == l) ? J : 0;
+            for (int K = k_begin; K < Ck; ++K) {
+              float val = 0.0f;
+              if (k == 1) {
+                const auto& gJK = workspace.gamma_coords[J][K];
+                const Eigen::ArrayXf term =
+                    (gamma_local.array() * gJK.array()) - (workspace.gamma_mixed[K].col(i).array() *
+                                                           workspace.gamma_mixed[J].col(l).array());
+                val = (term * mu.array()).sum();
+              } else {
+                const auto& row_combo = compounds.indices[static_cast<size_t>(J)];
+                const auto& col_combo = compounds.indices[static_cast<size_t>(K)];
+                for (int p = 0; p < n; ++p) {
+                  const float a = workspace.gamma_coords[row_combo[0]][col_combo[0]][p];
+                  const float b = workspace.gamma_coords[row_combo[0]][col_combo[1]][p];
+                  const float c = workspace.gamma_coords[row_combo[1]][col_combo[0]][p];
+                  const float d = workspace.gamma_coords[row_combo[1]][col_combo[1]][p];
+                  const float detD = a * d - b * c;
 
-              const float detD = Dm.determinant();
+                  float det_bDv = 0.0f;
+                  if (std::abs(detD) > 1e-8f) {
+                    const float c0 = workspace.gamma_mixed[row_combo[0]](p, l);
+                    const float c1 = workspace.gamma_mixed[row_combo[1]](p, l);
+                    const float b0 = workspace.gamma_mixed[col_combo[0]](p, i);
+                    const float b1 = workspace.gamma_mixed[col_combo[1]](p, i);
 
-              Eigen::Vector2f c_vec;
-              c_vec[0] = workspace.gamma_mixed[row_combo[0]](p, l);
-              c_vec[1] = workspace.gamma_mixed[row_combo[1]](p, l);
+                    const float adj_c0 = d * c0 - b * c1;
+                    const float adj_c1 = -c * c0 + a * c1;
+                    det_bDv = (b0 * adj_c0) + (b1 * adj_c1);
+                  }
 
-              Eigen::Vector2f b_vec;
-              b_vec[0] = workspace.gamma_mixed[col_combo[0]](p, i);
-              b_vec[1] = workspace.gamma_mixed[col_combo[1]](p, i);
+                  val += mu[p] * ((detD * gamma_local[p]) - det_bDv);
+                }
+              }
 
-              const Eigen::Vector2f solved = solve_stable_2x2(Dm, c_vec);
-              const float bDv = b_vec.dot(solved);
-              val += mu[p] * detD * (workspace.gamma_tmp[p] - bDv);
+              L(i * Ck + J, l * Ck + K) = val;
             }
           }
-
-          const int row = i * Ck + J;
-          const int col = l * Ck + K;
-          L(row, col) = val;
-          if (row != col) {
-            L(col, row) = val;
-          }
         }
-      }
-    }
-  }
+      },
+      4);
 
-  return L;
+  return Eigen::MatrixXf(L.selfadjointView<Eigen::Upper>());
 }
 
 /**
@@ -578,9 +719,9 @@ Eigen::MatrixXf compute_down_laplacian_matrix(const MeshT& mesh, int k, int n_co
 
   const Eigen::MatrixXf D_prev =
       compute_weak_exterior_derivative(mesh, k - 1, n_coefficients, workspace);
-  const Eigen::MatrixXf G_prev = compute_kform_gram_matrix(mesh, k - 1, n_coefficients, workspace);
-  const Eigen::MatrixXf G_prev_inv = pseudo_inverse_symmetric(G_prev, 1e-5f);
-  return D_prev * G_prev_inv * D_prev.transpose();
+  const Eigen::MatrixXf G_prev_inv =
+      compute_kform_gram_inverse(mesh, k - 1, n_coefficients, workspace, 1e-5f);
+  return assemble_down_laplacian_matrix_from_previous(D_prev, G_prev_inv);
 }
 
 /**
@@ -608,6 +749,36 @@ inline Eigen::MatrixXf assemble_hodge_laplacian_matrix(const Eigen::MatrixXf& up
 }
 
 /**
+ * \brief Try a direct Cholesky whitening path for dense generalized spectra.
+ * \param laplacian Symmetric operator matrix.
+ * \param mass_matrix Symmetric positive-definite mass matrix.
+ * \return Pair `(eigenvalues, eigenvectors)`, or empty matrices on failure.
+ */
+inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
+try_generalized_spectrum_cholesky(const Eigen::MatrixXf& laplacian,
+                                  const Eigen::MatrixXf& mass_matrix) {
+  if (laplacian.rows() == 0 || laplacian.rows() != laplacian.cols() ||
+      mass_matrix.rows() != mass_matrix.cols() || laplacian.rows() != mass_matrix.rows()) {
+    return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
+  }
+
+  Eigen::LLT<Eigen::MatrixXf> mass_chol(mass_matrix);
+  if (mass_chol.info() != Eigen::Success) {
+    return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
+  }
+
+  Eigen::MatrixXf phi =
+      mass_chol.matrixU().solve(Eigen::MatrixXf::Identity(mass_matrix.rows(), mass_matrix.cols()));
+  const Eigen::MatrixXf restricted = phi.transpose() * laplacian * phi;
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> solver(restricted);
+  if (solver.info() != Eigen::Success) {
+    return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
+  }
+
+  return std::make_pair(solver.eigenvalues(), phi * solver.eigenvectors());
+}
+
+/**
  * \brief Solve generalized eigenproblem for form Laplacian and mass matrix.
  * \param laplacian Form Laplacian matrix.
  * \param mass_matrix Form mass matrix.
@@ -617,6 +788,11 @@ inline Eigen::MatrixXf assemble_hodge_laplacian_matrix(const Eigen::MatrixXf& up
 inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
 compute_form_spectrum(const Eigen::MatrixXf& laplacian, const Eigen::MatrixXf& mass_matrix,
                       float rcond = 1e-5f) {
+  auto fast = try_generalized_spectrum_cholesky(laplacian, mass_matrix);
+  if (fast.first.size() != 0 && fast.second.cols() != 0) {
+    return fast;
+  }
+
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> mass_solver(mass_matrix);
   if (mass_solver.info() != Eigen::Success) {
     return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());

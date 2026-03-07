@@ -145,32 +145,118 @@ struct DiscreteExteriorCalculus {
     const size_t n_faces = num_faces();
 
     vertex_face_offsets.assign(num_vertices + 1, 0);
-    for (size_t f = 0; f < n_faces; ++f) {
-      const uint32_t a = face_v0[f];
-      const uint32_t b = face_v1[f];
-      const uint32_t c = face_v2[f];
 
-      if (a < num_vertices)
-        vertex_face_offsets[a + 1]++;
-      if (b < num_vertices)
-        vertex_face_offsets[b + 1]++;
-      if (c < num_vertices)
-        vertex_face_offsets[c + 1]++;
-    }
+    constexpr size_t kParallelFaceIncidenceThreshold = 200000;
+    if (num_vertices >= kParallelFaceIncidenceThreshold &&
+        n_faces >= kParallelFaceIncidenceThreshold) {
+      const int block_count = std::max(1, std::min(core::compute_thread_count(), 8));
+      const size_t stride = num_vertices;
+      std::vector<uint32_t> block_counts(static_cast<size_t>(block_count) * stride, 0);
 
-    for (size_t i = 0; i < num_vertices; ++i) {
-      vertex_face_offsets[i + 1] += vertex_face_offsets[i];
-    }
+      core::parallel_for_index(
+          0, block_count,
+          [&](int block_idx) {
+            const size_t face_begin =
+                (n_faces * static_cast<size_t>(block_idx)) / static_cast<size_t>(block_count);
+            const size_t face_end =
+                (n_faces * static_cast<size_t>(block_idx + 1)) / static_cast<size_t>(block_count);
+            uint32_t* counts = block_counts.data() + (static_cast<size_t>(block_idx) * stride);
 
-    vertex_face_data.resize(n_faces * 3);
-    std::vector<uint32_t> face_write_head = vertex_face_offsets;
+            for (size_t f = face_begin; f < face_end; ++f) {
+              const uint32_t a = face_v0[f];
+              const uint32_t b = face_v1[f];
+              const uint32_t c = face_v2[f];
 
-    for (uint32_t f = 0; f < n_faces; ++f) {
-      const uint32_t corners[3] = {face_v0[f], face_v1[f], face_v2[f]};
-      for (uint32_t v : corners) {
-        if (v < num_vertices) {
-          const uint32_t pos = face_write_head[v]++;
-          vertex_face_data[pos] = f;
+              if (a < num_vertices)
+                counts[a]++;
+              if (b < num_vertices)
+                counts[b]++;
+              if (c < num_vertices)
+                counts[c]++;
+            }
+          },
+          1);
+
+      core::parallel_for_index(
+          0, static_cast<int>(num_vertices),
+          [&](int vertex_idx) {
+            const size_t v = static_cast<size_t>(vertex_idx);
+            uint32_t total = 0;
+            for (int block_idx = 0; block_idx < block_count; ++block_idx) {
+              total += block_counts[(static_cast<size_t>(block_idx) * stride) + v];
+            }
+            vertex_face_offsets[v + 1] = total;
+          },
+          32768);
+
+      for (size_t i = 0; i < num_vertices; ++i) {
+        vertex_face_offsets[i + 1] += vertex_face_offsets[i];
+      }
+
+      vertex_face_data.resize(n_faces * 3);
+
+      core::parallel_for_index(
+          0, static_cast<int>(num_vertices),
+          [&](int vertex_idx) {
+            const size_t v = static_cast<size_t>(vertex_idx);
+            uint32_t base = vertex_face_offsets[v];
+            for (int block_idx = 0; block_idx < block_count; ++block_idx) {
+              const size_t idx = (static_cast<size_t>(block_idx) * stride) + v;
+              const uint32_t count = block_counts[idx];
+              block_counts[idx] = base;
+              base += count;
+            }
+          },
+          32768);
+
+      core::parallel_for_index(
+          0, block_count,
+          [&](int block_idx) {
+            const size_t face_begin =
+                (n_faces * static_cast<size_t>(block_idx)) / static_cast<size_t>(block_count);
+            const size_t face_end =
+                (n_faces * static_cast<size_t>(block_idx + 1)) / static_cast<size_t>(block_count);
+            uint32_t* write_head = block_counts.data() + (static_cast<size_t>(block_idx) * stride);
+
+            for (uint32_t f = static_cast<uint32_t>(face_begin);
+                 f < static_cast<uint32_t>(face_end); ++f) {
+              const uint32_t corners[3] = {face_v0[f], face_v1[f], face_v2[f]};
+              for (uint32_t v : corners) {
+                if (v < num_vertices) {
+                  vertex_face_data[write_head[v]++] = f;
+                }
+              }
+            }
+          },
+          1);
+    } else {
+      for (size_t f = 0; f < n_faces; ++f) {
+        const uint32_t a = face_v0[f];
+        const uint32_t b = face_v1[f];
+        const uint32_t c = face_v2[f];
+
+        if (a < num_vertices)
+          vertex_face_offsets[a + 1]++;
+        if (b < num_vertices)
+          vertex_face_offsets[b + 1]++;
+        if (c < num_vertices)
+          vertex_face_offsets[c + 1]++;
+      }
+
+      for (size_t i = 0; i < num_vertices; ++i) {
+        vertex_face_offsets[i + 1] += vertex_face_offsets[i];
+      }
+
+      vertex_face_data.resize(n_faces * 3);
+      std::vector<uint32_t> face_write_head = vertex_face_offsets;
+
+      for (uint32_t f = 0; f < n_faces; ++f) {
+        const uint32_t corners[3] = {face_v0[f], face_v1[f], face_v2[f]};
+        for (uint32_t v : corners) {
+          if (v < num_vertices) {
+            const uint32_t pos = face_write_head[v]++;
+            vertex_face_data[pos] = f;
+          }
         }
       }
     }

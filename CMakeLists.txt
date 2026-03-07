@@ -98,6 +98,9 @@ target_link_libraries(bench_dod PRIVATE igneous benchmark::benchmark)
 add_executable(bench_pipelines benches/bench_pipelines.cpp)
 target_link_libraries(bench_pipelines PRIVATE igneous benchmark::benchmark)
 
+add_executable(bench_diffgeo benches/bench_diffgeo.cpp)
+target_link_libraries(bench_diffgeo PRIVATE igneous benchmark::benchmark)
+
 add_executable(igneous-mesh src/main_mesh.cpp)
 target_link_libraries(igneous-mesh PRIVATE igneous fmt::fmt)
 

@@ -88,6 +88,10 @@ struct DiffusionGeometry {
   std::vector<int> symmetric_col_indices;
   /// \brief CSR values for symmetric kernel matrix.
   std::vector<float> symmetric_values;
+  /// \brief Cached CSR values for the normalized symmetric kernel.
+  std::vector<float> symmetric_normalized_values;
+  /// \brief Cached inverse square-root row sums for normalized spectral solves.
+  Eigen::VectorXf symmetric_inv_sqrt_rows;
 
   /**
    * \brief Number of points represented by the CSR graph.
@@ -128,6 +132,8 @@ struct DiffusionGeometry {
     symmetric_row_offsets.clear();
     symmetric_col_indices.clear();
     symmetric_values.clear();
+    symmetric_normalized_values.clear();
+    symmetric_inv_sqrt_rows.resize(0);
   }
 
   /// \brief nanoflann adaptor over the SoA coordinate spans.
@@ -193,14 +199,18 @@ struct DiffusionGeometry {
     std::vector<float> averages(static_cast<size_t>(e_count), 0.0f);
     const float inv_nk = 1.0f / static_cast<float>(std::max(1, n * k));
 
-    for (int e = 0; e < e_count; ++e) {
-      const float epsilon = std::max(epsilons[static_cast<size_t>(e)], 1e-12f);
-      float sum = 0.0f;
-      for (float value : entries) {
-        sum += std::exp(-value / epsilon);
-      }
-      averages[static_cast<size_t>(e)] = sum * inv_nk;
-    }
+    core::parallel_for_index(
+        0, e_count,
+        [&](int e) {
+          const float epsilon = std::max(epsilons[static_cast<size_t>(e)], 1e-12f);
+          const float inv_epsilon = 1.0f / epsilon;
+          float sum = 0.0f;
+          for (float value : entries) {
+            sum += std::exp(-value * inv_epsilon);
+          }
+          averages[static_cast<size_t>(e)] = sum * inv_nk;
+        },
+        8);
 
     int best_idx = 0;
     float best_criterion = -std::numeric_limits<float>::infinity();
@@ -243,16 +253,20 @@ struct DiffusionGeometry {
 
     const int end = std::max(2, std::min(knn_bandwidth, k));
     const int count = std::max(1, end - 1);
-    for (int i = 0; i < n; ++i) {
-      const size_t base = static_cast<size_t>(i) * static_cast<size_t>(k);
-      float accum = 0.0f;
-      for (int idx = 1; idx < end; ++idx) {
-        const float d = nbr_distances[base + static_cast<size_t>(idx)];
-        accum += d * d;
-      }
-      const float rms = std::sqrt(accum / static_cast<float>(count));
-      bandwidths_out[i] = std::max(rms, 1e-8f);
-    }
+
+    core::parallel_for_index(
+        0, n,
+        [&](int i) {
+          const size_t base = static_cast<size_t>(i) * static_cast<size_t>(k);
+          float accum = 0.0f;
+          for (int idx = 1; idx < end; ++idx) {
+            const float d = nbr_distances[base + static_cast<size_t>(idx)];
+            accum += d * d;
+          }
+          const float rms = std::sqrt(accum / static_cast<float>(count));
+          bandwidths_out[i] = std::max(rms, 1e-8f);
+        },
+        256);
   }
 
   /**
@@ -327,82 +341,97 @@ struct DiffusionGeometry {
     compute_local_bandwidths(knn_distances, n, k_neighbors, knn_bandwidth, bandwidths_A);
 
     std::vector<float> kernel_entries_A(row_capacity, 0.0f);
-    for (int i = 0; i < n; ++i) {
-      const size_t base = static_cast<size_t>(i) * row_stride;
-      const float bw_i = std::max(bandwidths_A[i], 1e-8f);
-      for (int k = 0; k < k_neighbors; ++k) {
-        const int j = knn_indices[base + static_cast<size_t>(k)];
-        const float bw_j = std::max(bandwidths_A[j], 1e-8f);
-        const float dist = knn_distances[base + static_cast<size_t>(k)];
-        kernel_entries_A[base + static_cast<size_t>(k)] = (dist * dist) / (bw_j * bw_i);
-      }
-    }
+    core::parallel_for_index(
+        0, n,
+        [&](int i) {
+          const size_t base = static_cast<size_t>(i) * row_stride;
+          const float bw_i = std::max(bandwidths_A[i], 1e-8f);
+          for (int k = 0; k < k_neighbors; ++k) {
+            const int j = knn_indices[base + static_cast<size_t>(k)];
+            const float bw_j = std::max(bandwidths_A[j], 1e-8f);
+            const float dist = knn_distances[base + static_cast<size_t>(k)];
+            kernel_entries_A[base + static_cast<size_t>(k)] = (dist * dist) / (bw_j * bw_i);
+          }
+        },
+        64);
 
     const std::vector<float> epsilons = build_epsilons();
     const auto [epsilon_A, dim_A] = tune_kernel(kernel_entries_A, n, k_neighbors, epsilons);
+    const float safe_epsilon_A = std::max(epsilon_A, 1e-12f);
+    const float inv_epsilon_A = 1.0f / safe_epsilon_A;
 
     constexpr float kPi = 3.14159265358979323846f;
-    const float kernel_A_norm = std::pow(kPi * std::max(epsilon_A, 1e-12f), dim_A * 0.5f);
+    const float kernel_A_norm = std::pow(kPi * safe_epsilon_A, dim_A * 0.5f);
     Eigen::VectorXf density_estimate_A(n);
     density_estimate_A.setZero();
-    for (int i = 0; i < n; ++i) {
-      const size_t base = static_cast<size_t>(i) * row_stride;
-      float row_sum = 0.0f;
-      for (int k = 0; k < k_neighbors; ++k) {
-        row_sum += std::exp(-kernel_entries_A[base + static_cast<size_t>(k)] /
-                            std::max(epsilon_A, 1e-12f));
-      }
-      const float bw = std::max(bandwidths_A[i], 1e-8f);
-      density_estimate_A[i] = (row_sum / std::max(kernel_A_norm, 1e-12f)) /
-                              (static_cast<float>(n) * std::pow(bw, dim_A));
-      density_estimate_A[i] = std::max(density_estimate_A[i], 1e-12f);
-    }
+    core::parallel_for_index(
+        0, n,
+        [&](int i) {
+          const size_t base = static_cast<size_t>(i) * row_stride;
+          float row_sum = 0.0f;
+          for (int k = 0; k < k_neighbors; ++k) {
+            row_sum += std::exp(-kernel_entries_A[base + static_cast<size_t>(k)] * inv_epsilon_A);
+          }
+          const float bw = std::max(bandwidths_A[i], 1e-8f);
+          density_estimate_A[i] = (row_sum / std::max(kernel_A_norm, 1e-12f)) /
+                                  (static_cast<float>(n) * std::pow(bw, dim_A));
+          density_estimate_A[i] = std::max(density_estimate_A[i], 1e-12f);
+        },
+        64);
 
     Eigen::VectorXf bandwidths_B(n);
-    for (int i = 0; i < n; ++i) {
-      bandwidths_B[i] = std::pow(density_estimate_A[i], input.bandwidth_variability);
-    }
     std::vector<float> bw_values(static_cast<size_t>(n));
-    for (int i = 0; i < n; ++i) {
-      bw_values[static_cast<size_t>(i)] = bandwidths_B[i];
-    }
+    core::parallel_for_index(
+        0, n,
+        [&](int i) {
+          const float bandwidth = std::pow(density_estimate_A[i], input.bandwidth_variability);
+          bandwidths_B[i] = bandwidth;
+          bw_values[static_cast<size_t>(i)] = bandwidth;
+        },
+        256);
     const float bw_median = std::max(vector_median(std::move(bw_values)), 1e-8f);
     bandwidths_B /= bw_median;
 
     std::vector<float> kernel_entries_B(row_capacity, 0.0f);
-    for (int i = 0; i < n; ++i) {
-      const size_t base = static_cast<size_t>(i) * row_stride;
-      const float bw_i = std::max(bandwidths_B[i], 1e-8f);
-      for (int k = 0; k < k_neighbors; ++k) {
-        const int j = knn_indices[base + static_cast<size_t>(k)];
-        const float bw_j = std::max(bandwidths_B[j], 1e-8f);
-        const float dist = knn_distances[base + static_cast<size_t>(k)];
-        kernel_entries_B[base + static_cast<size_t>(k)] = (dist * dist) / (bw_j * bw_i);
-      }
-    }
+    core::parallel_for_index(
+        0, n,
+        [&](int i) {
+          const size_t base = static_cast<size_t>(i) * row_stride;
+          const float bw_i = std::max(bandwidths_B[i], 1e-8f);
+          for (int k = 0; k < k_neighbors; ++k) {
+            const int j = knn_indices[base + static_cast<size_t>(k)];
+            const float bw_j = std::max(bandwidths_B[j], 1e-8f);
+            const float dist = knn_distances[base + static_cast<size_t>(k)];
+            kernel_entries_B[base + static_cast<size_t>(k)] = (dist * dist) / (bw_j * bw_i);
+          }
+        },
+        64);
 
     const auto [epsilon_B, dim_B] = tune_kernel(kernel_entries_B, n, k_neighbors, epsilons);
+    const float safe_epsilon_B = std::max(epsilon_B, 1e-12f);
+    const float inv_epsilon_B = 1.0f / safe_epsilon_B;
 
     Eigen::VectorXf density_estimate_B(n);
     density_estimate_B.setZero();
-    for (int i = 0; i < n; ++i) {
-      const size_t base = static_cast<size_t>(i) * row_stride;
-      float row_sum = 0.0f;
-      for (int k = 0; k < k_neighbors; ++k) {
-        row_sum += std::exp(-kernel_entries_B[base + static_cast<size_t>(k)] /
-                            std::max(epsilon_B, 1e-12f));
-      }
-      const float bw = std::max(bandwidths_B[i], 1e-8f);
-      density_estimate_B[i] = row_sum / std::pow(bw, dim_B);
-      density_estimate_B[i] = std::max(density_estimate_B[i], 1e-12f);
-    }
+    core::parallel_for_index(
+        0, n,
+        [&](int i) {
+          const size_t base = static_cast<size_t>(i) * row_stride;
+          float row_sum = 0.0f;
+          for (int k = 0; k < k_neighbors; ++k) {
+            row_sum += std::exp(-kernel_entries_B[base + static_cast<size_t>(k)] * inv_epsilon_B);
+          }
+          const float bw = std::max(bandwidths_B[i], 1e-8f);
+          density_estimate_B[i] = row_sum / std::pow(bw, dim_B);
+          density_estimate_B[i] = std::max(density_estimate_B[i], 1e-12f);
+        },
+        64);
 
     const float alpha =
         1.0f - (input.c * 0.5f) + input.bandwidth_variability * ((dim_B * 0.5f) + 1.0f);
     Eigen::VectorXf density_alpha(n);
-    for (int i = 0; i < n; ++i) {
-      density_alpha[i] = std::pow(density_estimate_B[i], -alpha);
-    }
+    core::parallel_for_index(
+        0, n, [&](int i) { density_alpha[i] = std::pow(density_estimate_B[i], -alpha); }, 256);
 
     markov_row_offsets.resize(static_cast<size_t>(n) + 1);
     for (int i = 0; i <= n; ++i) {
@@ -410,60 +439,81 @@ struct DiffusionGeometry {
     }
     markov_col_indices = knn_indices;
     markov_values.assign(row_capacity, 0.0f);
+    local_bandwidths.resize(n);
+    immersion_coords.resize(n, 3);
+    core::parallel_for_index(
+        0, n,
+        [&](int i) {
+          const size_t base = static_cast<size_t>(i) * row_stride;
+          const float bw_i = std::max(bandwidths_B[i], 1e-8f);
+          local_bandwidths[i] = (safe_epsilon_B * bw_i * bw_i) / 4.0f;
 
-    for (int i = 0; i < n; ++i) {
-      const size_t base = static_cast<size_t>(i) * row_stride;
-      float row_sum = 0.0f;
-      for (int k = 0; k < k_neighbors; ++k) {
-        const int j = knn_indices[base + static_cast<size_t>(k)];
-        const float kernel_B = std::exp(-kernel_entries_B[base + static_cast<size_t>(k)] /
-                                        std::max(epsilon_B, 1e-12f));
-        const float val = kernel_B * density_alpha[i] * density_alpha[j];
-        markov_values[base + static_cast<size_t>(k)] = val;
-        row_sum += val;
-      }
-
-      if (row_sum <= 1e-30f) {
-        int self_idx = -1;
-        for (int k = 0; k < k_neighbors; ++k) {
-          if (knn_indices[base + static_cast<size_t>(k)] == i) {
-            self_idx = k;
-            break;
+          float row_sum = 0.0f;
+          for (int k = 0; k < k_neighbors; ++k) {
+            const int j = knn_indices[base + static_cast<size_t>(k)];
+            const float kernel_B =
+                std::exp(-kernel_entries_B[base + static_cast<size_t>(k)] * inv_epsilon_B);
+            const float val = kernel_B * density_alpha[i] * density_alpha[j];
+            markov_values[base + static_cast<size_t>(k)] = val;
+            row_sum += val;
           }
-        }
-        if (self_idx < 0) {
-          self_idx = 0;
-        }
-        for (int k = 0; k < k_neighbors; ++k) {
-          markov_values[base + static_cast<size_t>(k)] = (k == self_idx) ? 1.0f : 0.0f;
-        }
-        knn_kernel[base + static_cast<size_t>(self_idx)] = 1.0f;
-        for (int k = 0; k < k_neighbors; ++k) {
-          if (k != self_idx) {
-            knn_kernel[base + static_cast<size_t>(k)] = 0.0f;
+
+          if (row_sum <= 1e-30f) {
+            int self_idx = -1;
+            for (int k = 0; k < k_neighbors; ++k) {
+              if (knn_indices[base + static_cast<size_t>(k)] == i) {
+                self_idx = k;
+                break;
+              }
+            }
+            if (self_idx < 0) {
+              self_idx = 0;
+            }
+            for (int k = 0; k < k_neighbors; ++k) {
+              const size_t idx = base + static_cast<size_t>(k);
+              const float value = (k == self_idx) ? 1.0f : 0.0f;
+              markov_values[idx] = value;
+              knn_kernel[idx] = value;
+            }
+            immersion_coords(i, 0) = input.x[static_cast<size_t>(i)];
+            immersion_coords(i, 1) = input.y[static_cast<size_t>(i)];
+            immersion_coords(i, 2) = input.z[static_cast<size_t>(i)];
+            return;
           }
-        }
-        continue;
-      }
 
-      const float inv_row_sum = 1.0f / row_sum;
-      for (int k = 0; k < k_neighbors; ++k) {
-        const size_t idx = base + static_cast<size_t>(k);
-        markov_values[idx] *= inv_row_sum;
-        knn_kernel[idx] = markov_values[idx];
-      }
-    }
+          const float inv_row_sum = 1.0f / row_sum;
+          float rx = 0.0f;
+          float ry = 0.0f;
+          float rz = 0.0f;
+          for (int k = 0; k < k_neighbors; ++k) {
+            const size_t idx = base + static_cast<size_t>(k);
+            const int j = knn_indices[idx];
+            const float normalized = markov_values[idx] * inv_row_sum;
+            markov_values[idx] = normalized;
+            knn_kernel[idx] = normalized;
+            rx += normalized * input.x[static_cast<size_t>(j)];
+            ry += normalized * input.y[static_cast<size_t>(j)];
+            rz += normalized * input.z[static_cast<size_t>(j)];
+          }
 
-    std::vector<Eigen::Triplet<float>> markov_triplets;
-    markov_triplets.reserve(row_capacity);
-    for (int i = 0; i < n; ++i) {
-      const int begin = markov_row_offsets[static_cast<size_t>(i)];
-      const int end = markov_row_offsets[static_cast<size_t>(i) + 1];
-      for (int idx = begin; idx < end; ++idx) {
-        markov_triplets.emplace_back(i, markov_col_indices[static_cast<size_t>(idx)],
-                                     markov_values[static_cast<size_t>(idx)]);
-      }
-    }
+          immersion_coords(i, 0) = rx;
+          immersion_coords(i, 1) = ry;
+          immersion_coords(i, 2) = rz;
+        },
+        64);
+
+    std::vector<Eigen::Triplet<float>> markov_triplets(row_capacity);
+    core::parallel_for_index(
+        0, n,
+        [&](int i) {
+          const size_t base = static_cast<size_t>(i) * row_stride;
+          for (int k = 0; k < k_neighbors; ++k) {
+            const size_t idx = base + static_cast<size_t>(k);
+            markov_triplets[idx] =
+                Eigen::Triplet<float>(i, markov_col_indices[idx], markov_values[idx]);
+          }
+        },
+        64);
 
     Eigen::SparseMatrix<float, Eigen::RowMajor> P_row(n, n);
     P_row.setFromTriplets(markov_triplets.begin(), markov_triplets.end());
@@ -476,9 +526,21 @@ struct DiffusionGeometry {
     P_row *= 0.5f;
     P_row.makeCompressed();
 
-    const Eigen::VectorXf ones = Eigen::VectorXf::Ones(n);
-    symmetric_row_sums = P_row * ones;
-    symmetric_row_sums = symmetric_row_sums.array().max(1e-12f).matrix();
+    symmetric_row_sums.resize(n);
+    const int* outer = P_row.outerIndexPtr();
+    const float* values = P_row.valuePtr();
+    core::parallel_for_index(
+        0, n,
+        [&](int i) {
+          float row_sum = 0.0f;
+          const int begin = outer[static_cast<size_t>(i)];
+          const int end = outer[static_cast<size_t>(i) + 1];
+          for (int idx = begin; idx < end; ++idx) {
+            row_sum += values[static_cast<size_t>(idx)];
+          }
+          symmetric_row_sums[i] = std::max(row_sum, 1e-12f);
+        },
+        64);
 
     const float mu_sum = symmetric_row_sums.sum();
     if (mu_sum > 1e-12f) {
@@ -487,38 +549,11 @@ struct DiffusionGeometry {
       mu = Eigen::VectorXf::Constant(n, 1.0f / static_cast<float>(n));
     }
 
-    const int* outer = P_row.outerIndexPtr();
     const int* inner = P_row.innerIndexPtr();
-    const float* values = P_row.valuePtr();
     const int nnz_sym = P_row.nonZeros();
     symmetric_row_offsets.assign(outer, outer + (n + 1));
     symmetric_col_indices.assign(inner, inner + nnz_sym);
     symmetric_values.assign(values, values + nnz_sym);
-
-    local_bandwidths.resize(n);
-    for (int i = 0; i < n; ++i) {
-      const float bw = std::max(bandwidths_B[i], 1e-8f);
-      local_bandwidths[i] = (std::max(epsilon_B, 1e-12f) * bw * bw) / 4.0f;
-    }
-
-    immersion_coords.resize(n, 3);
-    for (int i = 0; i < n; ++i) {
-      float rx = 0.0f;
-      float ry = 0.0f;
-      float rz = 0.0f;
-      const int begin = markov_row_offsets[static_cast<size_t>(i)];
-      const int end = markov_row_offsets[static_cast<size_t>(i) + 1];
-      for (int idx = begin; idx < end; ++idx) {
-        const int j = markov_col_indices[static_cast<size_t>(idx)];
-        const float w = markov_values[static_cast<size_t>(idx)];
-        rx += w * input.x[static_cast<size_t>(j)];
-        ry += w * input.y[static_cast<size_t>(j)];
-        rz += w * input.z[static_cast<size_t>(j)];
-      }
-      immersion_coords(i, 0) = rx;
-      immersion_coords(i, 1) = ry;
-      immersion_coords(i, 2) = rz;
-    }
 
     if (std::getenv("IGNEOUS_BENCH_MODE") == nullptr) {
       std::cout << "[Diffusion] Built reference-style kernel for " << n_verts

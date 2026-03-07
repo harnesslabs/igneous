@@ -14,6 +14,13 @@
 
 namespace igneous::ops::diffusion {
 
+inline constexpr float kSpectralDefaultTolerance = 1e-10f;
+inline constexpr float kSpectralSmallBasisTolerance = 1e-6f;
+
+inline float spectral_solver_tolerance(int n_eigenvectors) {
+  return n_eigenvectors <= 16 ? kSpectralSmallBasisTolerance : kSpectralDefaultTolerance;
+}
+
 /**
  * \brief Spectra-compatible matrix product wrapper over Markov CSR data.
  *
@@ -313,6 +320,7 @@ template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvector
 
   const auto solve_with_op = [&](auto& op) {
     using OpType = std::decay_t<decltype(op)>;
+    const float solver_tol = spectral_solver_tolerance(n_eigenvectors);
 
     const int full_ncv = std::min(n, std::max(2 * n_eigenvectors + 1, 20));
     const bool try_compact = n_eigenvectors >= 32;
@@ -320,13 +328,13 @@ template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvector
 
     Spectra::GenEigsSolver<OpType> eigs(op, n_eigenvectors, compact_ncv);
     eigs.init();
-    int nconv = eigs.compute(Spectra::SortRule::LargestReal);
+    int nconv = eigs.compute(Spectra::SortRule::LargestReal, 1000, solver_tol);
 
     if (try_compact && (eigs.info() != Spectra::CompInfo::Successful || nconv < n_eigenvectors) &&
         full_ncv > compact_ncv) {
       Spectra::GenEigsSolver<OpType> fallback(op, n_eigenvectors, full_ncv);
       fallback.init();
-      nconv = fallback.compute(Spectra::SortRule::LargestReal);
+      nconv = fallback.compute(Spectra::SortRule::LargestReal, 1000, solver_tol);
 
       if (fallback.info() == Spectra::CompInfo::Successful) {
         mesh.structure.eigen_basis = fallback.eigenvectors(nconv).real();
@@ -364,30 +372,51 @@ template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvector
                   mesh.structure.symmetric_row_offsets;
                   mesh.structure.symmetric_col_indices;
                   mesh.structure.symmetric_values;
+                  mesh.structure.symmetric_normalized_values;
+                  mesh.structure.symmetric_inv_sqrt_rows;
                   mesh.structure.symmetric_row_sums;
                 }) {
     const auto& sym_row_offsets = mesh.structure.symmetric_row_offsets;
     const auto& sym_col_indices = mesh.structure.symmetric_col_indices;
     const auto& sym_values = mesh.structure.symmetric_values;
+    auto& sym_normalized_values = mesh.structure.symmetric_normalized_values;
+    auto& inv_sqrt_rows = mesh.structure.symmetric_inv_sqrt_rows;
     const auto& row_sums = mesh.structure.symmetric_row_sums;
     if (!sym_row_offsets.empty() && static_cast<int>(sym_row_offsets.size()) == n + 1 &&
         row_sums.size() == n) {
       const int k_eval = std::max(1, std::min(n_eigenvectors, std::max(1, n - 1)));
+      const float solver_tol = spectral_solver_tolerance(k_eval);
       const int full_ncv = std::min(n, std::max(2 * k_eval + 1, 20));
       const bool try_compact = k_eval >= 32;
       const int compact_ncv = try_compact ? std::min(n, std::max(k_eval + 16, 20)) : full_ncv;
 
-      Eigen::VectorXf inv_sqrt_rows(n);
-      for (int i = 0; i < n; ++i) {
-        inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
+      if (inv_sqrt_rows.size() != n || sym_normalized_values.size() != sym_values.size()) {
+        inv_sqrt_rows.resize(n);
+        for (int i = 0; i < n; ++i) {
+          inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
+        }
+
+        sym_normalized_values.resize(sym_values.size());
+        core::parallel_for_index(
+            0, n,
+            [&](int i) {
+              const float row_scale = inv_sqrt_rows[i];
+              const int begin = sym_row_offsets[static_cast<size_t>(i)];
+              const int end = sym_row_offsets[static_cast<size_t>(i) + 1];
+              for (int idx = begin; idx < end; ++idx) {
+                const int j = sym_col_indices[static_cast<size_t>(idx)];
+                sym_normalized_values[static_cast<size_t>(idx)] =
+                    sym_values[static_cast<size_t>(idx)] * row_scale * inv_sqrt_rows[j];
+              }
+            },
+            8192);
       }
 
-      NormalizedSymmetricKernelCsrMatProd op(sym_row_offsets, sym_col_indices, sym_values,
-                                             inv_sqrt_rows, n);
+      SymmetricKernelCsrMatProd op(sym_row_offsets, sym_col_indices, sym_normalized_values, n);
       const auto solve_symmetric = [&](int ncv) -> bool {
-        Spectra::SymEigsSolver<NormalizedSymmetricKernelCsrMatProd> eigs(op, k_eval, ncv);
+        Spectra::SymEigsSolver<SymmetricKernelCsrMatProd> eigs(op, k_eval, ncv);
         eigs.init();
-        const int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
+        const int nconv = eigs.compute(Spectra::SortRule::LargestMagn, 1000, solver_tol);
         if (eigs.info() != Spectra::CompInfo::Successful || nconv <= 0) {
           return false;
         }
