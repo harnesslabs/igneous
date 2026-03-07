@@ -61,10 +61,13 @@ template <typename MeshT> struct HodgeWorkspace {
 /// \brief Reusable buffers for circular-coordinate assembly on a fixed mesh/basis state.
 template <typename MeshT> struct CircularCoordinateWorkspace {
   std::array<Eigen::VectorXf, 3> coords;
+  std::array<Eigen::VectorXf, 3> coord_means;
   std::array<Eigen::MatrixXf, 3> gamma_x_phi_mat;
   Eigen::MatrixXf weighted_u;
   Eigen::MatrixXf function_gram;
   Eigen::MatrixXf laplacian0_weak;
+  Eigen::MatrixXf markov_basis;
+  Eigen::MatrixXf markov_tmp;
   Eigen::MatrixXf alpha_mat;
   Eigen::MatrixXf q;
   Eigen::MatrixXf weighted_gamma;
@@ -84,6 +87,37 @@ template <typename MeshT> struct CircularCoordinateWorkspace {
 };
 
 template <typename MeshT>
+void apply_markov_transition_matrix(const MeshT& mesh, const Eigen::MatrixXf& input,
+                                    Eigen::MatrixXf& output) {
+  const int n_verts = static_cast<int>(mesh.num_points());
+  const int n_cols = input.cols();
+  output.resize(n_verts, n_cols);
+
+  const auto& row_offsets = mesh.structure.markov_row_offsets;
+  const auto& col_indices = mesh.structure.markov_col_indices;
+  const auto& weights = mesh.structure.markov_values;
+
+  core::parallel_for_index(
+      0, n_verts,
+      [&](int row_idx) {
+        thread_local Eigen::RowVectorXf accum;
+        if (accum.size() != n_cols) {
+          accum.resize(n_cols);
+        }
+        accum.setZero();
+
+        const int begin = row_offsets[static_cast<size_t>(row_idx)];
+        const int end = row_offsets[static_cast<size_t>(row_idx) + 1];
+        for (int idx = begin; idx < end; ++idx) {
+          accum.noalias() += weights[static_cast<size_t>(idx)] *
+                             input.row(col_indices[static_cast<size_t>(idx)]);
+        }
+        output.row(row_idx) = accum;
+      },
+      128);
+}
+
+template <typename MeshT>
 void prepare_circular_coordinate_workspace(const MeshT& mesh, float bandwidth,
                                           CircularCoordinateWorkspace<MeshT>& workspace) {
   const auto& U = mesh.structure.eigen_basis;
@@ -98,31 +132,88 @@ void prepare_circular_coordinate_workspace(const MeshT& mesh, float bandwidth,
 
   fill_coordinate_vectors(mesh, workspace.coords);
 
-  for (int a = 0; a < 3; ++a) {
-    workspace.gamma_x_phi_mat[a].resize(n_verts, n0);
-    core::parallel_for_index(
-        0, n0,
-        [&](int t) {
-          carre_du_champ(mesh, workspace.coords[a], U.col(t), bandwidth,
-                         workspace.gamma_x_phi_mat[a].col(t));
-        },
-        8);
-  }
-
   workspace.weighted_u.resize(n_verts, n0);
   workspace.weighted_u = U.array().colwise() * mu.array();
 
   workspace.function_gram.resize(n0, n0);
   workspace.function_gram.noalias() = U.transpose() * workspace.weighted_u;
 
-  workspace.laplacian0_weak.setZero(n0, n0);
-  workspace.gamma_local.resize(n_verts);
-  for (int i = 0; i < n0; ++i) {
-    for (int j = i; j < n0; ++j) {
-      carre_du_champ(mesh, U.col(i), U.col(j), bandwidth, workspace.gamma_local);
-      const float val = (workspace.gamma_local.array() * mu.array()).sum();
-      workspace.laplacian0_weak(i, j) = val;
-      workspace.laplacian0_weak(j, i) = val;
+  const bool use_mean_centres = [&]() {
+    if constexpr (requires { mesh.structure.use_mean_centres; }) {
+      return mesh.structure.use_mean_centres;
+    }
+    return false;
+  }();
+
+  if (use_mean_centres) {
+    workspace.markov_basis.resize(n_verts, n0);
+    apply_markov_transition_matrix(mesh, U, workspace.markov_basis);
+
+    Eigen::VectorXf b(n_verts);
+    Eigen::VectorXf inv_gamma_denom(n_verts);
+    for (int i = 0; i < n_verts; ++i) {
+      float denom = 2.0f;
+      if constexpr (requires { mesh.structure.local_bandwidths; }) {
+        if (mesh.structure.local_bandwidths.size() == n_verts) {
+          denom =
+              2.0f * std::max(mesh.structure.local_bandwidths[static_cast<size_t>(i)], 1e-8f);
+        }
+      }
+      b[i] = mu[i] / denom;
+      inv_gamma_denom[i] = 1.0f / denom;
+    }
+
+    Eigen::VectorXf ptb = Eigen::VectorXf::Zero(n_verts);
+    const auto& row_offsets = mesh.structure.markov_row_offsets;
+    const auto& col_indices = mesh.structure.markov_col_indices;
+    const auto& weights = mesh.structure.markov_values;
+    for (int i = 0; i < n_verts; ++i) {
+      const int begin = row_offsets[static_cast<size_t>(i)];
+      const int end = row_offsets[static_cast<size_t>(i) + 1];
+      const float bi = b[i];
+      for (int idx = begin; idx < end; ++idx) {
+        ptb[col_indices[static_cast<size_t>(idx)]] += weights[static_cast<size_t>(idx)] * bi;
+      }
+    }
+
+    for (int a = 0; a < 3; ++a) {
+      workspace.coord_means[a].resize(n_verts);
+      apply_markov_transition(mesh, workspace.coords[a], workspace.coord_means[a]);
+      workspace.markov_tmp.resize(n_verts, n0);
+      workspace.markov_tmp = U.array().colwise() * workspace.coords[a].array();
+      apply_markov_transition_matrix(mesh, workspace.markov_tmp, workspace.gamma_x_phi_mat[a]);
+      workspace.gamma_x_phi_mat[a].array() -=
+          workspace.markov_basis.array().colwise() * workspace.coord_means[a].array();
+      workspace.gamma_x_phi_mat[a].array().colwise() *= inv_gamma_denom.array();
+    }
+
+    workspace.laplacian0_weak.resize(n0, n0);
+    workspace.markov_tmp = U.array().colwise() * ptb.array();
+    workspace.laplacian0_weak.noalias() = U.transpose() * workspace.markov_tmp;
+    workspace.markov_tmp = workspace.markov_basis.array().colwise() * b.array();
+    workspace.laplacian0_weak.noalias() -= workspace.markov_basis.transpose() * workspace.markov_tmp;
+    workspace.laplacian0_weak = 0.5f * (workspace.laplacian0_weak + workspace.laplacian0_weak.transpose());
+  } else {
+    for (int a = 0; a < 3; ++a) {
+      workspace.gamma_x_phi_mat[a].resize(n_verts, n0);
+      core::parallel_for_index(
+          0, n0,
+          [&](int t) {
+            carre_du_champ(mesh, workspace.coords[a], U.col(t), bandwidth,
+                           workspace.gamma_x_phi_mat[a].col(t));
+          },
+          8);
+    }
+
+    workspace.laplacian0_weak.setZero(n0, n0);
+    workspace.gamma_local.resize(n_verts);
+    for (int i = 0; i < n0; ++i) {
+      for (int j = i; j < n0; ++j) {
+        carre_du_champ(mesh, U.col(i), U.col(j), bandwidth, workspace.gamma_local);
+        const float val = (workspace.gamma_local.array() * mu.array()).sum();
+        workspace.laplacian0_weak(i, j) = val;
+        workspace.laplacian0_weak(j, i) = val;
+      }
     }
   }
 
