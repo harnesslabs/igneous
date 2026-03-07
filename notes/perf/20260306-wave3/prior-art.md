@@ -38,6 +38,13 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Replacing the symmetric normalized-kernel solver with Spectra's Davidson path; it remained much slower than the accepted Lanczos solver even with a direct CSR adapter.
 - Matrixizing `Gamma(data_coord, immersion_coord)` for diffgeo reconstruction; the diffgeo pipeline stayed effectively flat, so that precompute is not worth revisiting on the current head.
 - Matrixizing the mean-centered `DiffusionFormWorkspace` mixed-gamma cache fill; the diffgeo pipeline regressed and the operator-phase movement was too noisy to justify the larger cache rewrite.
+- Weighted coordinate seeds for the large-basis symmetric diffusion eigensolve; they regressed the 64-mode hodge/diffgeo guards.
+- CPU Markov multi-step copy-avoidance rewrites that change ping/pong ownership; they only help isolated large microcases and regress the higher-priority pipeline guard.
+- Early serial short-circuiting inside `parallel_for_index`; the env/backend lookup overhead is not the dominant sparse-eigensolve cost on the current head.
+- Hoisting CPU Markov repeated-step dispatch into a parallel row helper; it helps one large microbenchmark but regresses the diffusion pipeline guards.
+- Parallel row-sweep versions of `carre_du_champ`; they interact badly with nested worker-pool usage in the generic form path.
+- Scalarized ambient reconstruction for diffgeo/hodge export paths; it regressed the diffgeo pipeline and app guard on the current head.
+- Caching `IGNEOUS_BACKEND` / `IGNEOUS_NUM_THREADS` once per process; it regressed the 64-mode spectral/hodge/diffgeo guard path.
 
 ## New Focus
 - Benchmark and optimize the generic k-form pipeline, which was added after most of the earlier perf work.

@@ -120,3 +120,44 @@ Using the Wave 3 artifacts in this directory:
   - a new eigensolver trade that improves diffusion eigenbasis without shifting too much cost back into diffusion build,
   - a mathematically exact reduction of the remaining scalar spectrum/reconstruction overhead,
   - or another order-preserving data-oriented rewrite outside diffusion geometry like the accepted DEC face-incidence pass.
+
+## Post-PR Continuation
+
+### Kept Since The PR Was Opened
+- `cf653c4` `ci(perf): add diffgeo coverage to smoke and deep reports`
+- `59336a7` `perf(dec): specialize curvature traversal for DEC storage`
+
+### Current Additional Gains
+- DEC curvature:
+  - `bench_curvature_kernel/400`: `888653 ns -> 816836 ns` CPU (`-8.08%`)
+  - `bench_geometry` `Grid 1000x1000` curvature: `5.716 ms -> 5.358 ms` (`-6.26%`)
+  - `bench_geometry` `Grid 1000x1000` structure: `14.516 ms -> 13.661 ms` (`-5.89%`)
+
+### New Rejections
+- Weighted coordinate seed for the large-basis symmetric eigensolve.
+- CPU Markov multi-step copy-avoidance rewrite.
+- Early serial short-circuit in `parallel_for_index`.
+
+### Current Read Of The Remaining Work
+- The large sparse diffusion eigensolve is still the biggest shared runtime cost.
+- The geometry/DEC path still has room for order-preserving data-oriented rewrites, but the wins are now single-digit rather than order-of-magnitude.
+- GitHub perf smoke/deep will now surface `bench_diffgeo` even when the baseline branch predates that benchmark target.
+
+## Continuation Outcome
+
+### Additional Rejections After The DEC Curvature Pass
+- Hoisted/parallel CPU Markov repeated-step helper: improved one large microbenchmark but regressed both diffusion pipeline guards.
+- Parallel `carre_du_champ` row sweeps: helped some hodge-side phases but appears unsafe under diffgeo due to nested worker-pool behavior.
+- Scalarized ambient reconstruction in diffgeo/hodge apps and benches: regressed both the diffgeo benchmark guard and the diffgeo app wall-time guard.
+- Cached backend/thread env lookups in `parallel_for_index`: regressed the 64-mode spectral/hodge/diffgeo guard path.
+
+### New Profile Artifact
+- Current diffgeo pipeline sample:
+  - `notes/perf/20260306-wave3/profiles/20260307-154012-diffgeo-pipeline/sample.txt`
+- Readout:
+  - The large sparse diffusion eigensolve is still the dominant remaining shared cost.
+  - The next most likely wins require a deeper solver/orthogonalization change rather than another local cache or loop rewrite.
+
+### Stop Condition
+- This continuation hit multiple consecutive rejected fronts after the accepted DEC curvature pass.
+- The remaining plausible wins are now mostly in the large-basis eigensolver path, where the recent profiler-guided experiments did not clear the guard thresholds.
