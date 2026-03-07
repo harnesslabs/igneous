@@ -258,7 +258,7 @@ Use one entry per optimization hypothesis.
 
 ## 2026-03-06 Parallel Upper-Triangle Up-Laplacian Assembly
 - Timestamp: 2026-03-07T00:38:00Z
-- Commit: pending
+- Commit: `2a6213d`
 - Primary target:
   - `bench_diffgeo_phase_k2_up/4000/64/32/32`
   - `bench_diffgeo_phase_k1_up/4000/64/32/32`
@@ -318,3 +318,40 @@ Use one entry per optimization hypothesis.
 - Notes:
   - The large win came from parallelizing the basis-pair sweep without introducing races: only the upper triangle is assembled in parallel, then reflected through `selfadjointView<Eigen::Upper>()`.
   - This is an exact implementation change; no operator math changed, and the existing diffgeo tests continued to pass.
+
+## 2026-03-06 Circular Mass-Space Standard Solve
+- Timestamp: 2026-03-07T00:41:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_diffgeo_phase_circular/4000/64/32/32`
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+  - `bench_hodge_phase_circular`
+- Hypothesis:
+  - Reuse the scalar function-Gram factorization inside `compute_circular_coordinates()` and solve the equivalent standard eigenproblem instead of refactoring the same generalized mass matrix twice per pipeline.
+- Files touched:
+  - `include/igneous/ops/diffusion/hodge.hpp`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/1000/50/32/32|bench_diffgeo_phase_circular/1000/50/32/32|bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_circular|bench_hodge_phase_eigenbasis|bench_hodge_phase_structure_build' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - Baseline head before the patch from `results/bench_diffgeo_up_parallel_20260306-173505.txt` and `results/bench_pipelines_circular_20260306-172407.txt`:
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `444.296 ms` CPU
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `272.185 ms`
+    - `bench_hodge_phase_circular`: `274.345 ms`
+    - `bench_pipeline_hodge_main`: `476.473 ms`
+  - Current patch:
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `454.459 ms` (`+2.29%`)
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `271.329 ms` (`-0.31%`)
+    - `bench_hodge_phase_circular`: `273.415 ms` (`-0.34%`)
+    - `bench_pipeline_hodge_main`: `475.289 ms` (`-0.25%`)
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - `igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>` stayed at `real 0.13`, which matched the current head and did not provide an additional reason to keep the patch
+- Test results:
+  - not run; rejected before correctness gating
+- Decision: `rejected`
+- Rejected because:
+  - The solver rewrite only moved the isolated circular phase at noise level while regressing the diffgeo pipeline by about `2.3%`, so it did not justify a riskier solver change.
+- Notes:
+  - The existing generalized solver is likely not the dominant circular bottleneck anymore after the shared setup reuse; most of the remaining cost appears to come from the solve itself rather than duplicated mass-matrix preparation.

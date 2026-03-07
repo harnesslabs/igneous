@@ -20,6 +20,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - The rejected 1-form block-GEMM rewrite as-is.
 - Low-value curl-energy micro-tweaks that only move isolated kernels without pipeline wins.
 - Precomputing normalized symmetric-kernel CSR values during diffusion build; it improved isolated eigenbasis solves but failed the build-vs-pipeline trade.
+- Replacing the circular generalized solve with a cached mass-space standard solve; it only moved the phase at noise level and regressed the diffgeo pipeline.
 
 ## New Focus
 - Benchmark and optimize the generic k-form pipeline, which was added after most of the earlier perf work.
