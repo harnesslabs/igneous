@@ -88,6 +88,10 @@ struct DiffusionGeometry {
   std::vector<int> symmetric_col_indices;
   /// \brief CSR values for symmetric kernel matrix.
   std::vector<float> symmetric_values;
+  /// \brief Cached CSR values for the normalized symmetric kernel.
+  std::vector<float> symmetric_normalized_values;
+  /// \brief Cached inverse square-root row sums for normalized spectral solves.
+  Eigen::VectorXf symmetric_inv_sqrt_rows;
 
   /**
    * \brief Number of points represented by the CSR graph.
@@ -128,6 +132,8 @@ struct DiffusionGeometry {
     symmetric_row_offsets.clear();
     symmetric_col_indices.clear();
     symmetric_values.clear();
+    symmetric_normalized_values.clear();
+    symmetric_inv_sqrt_rows.resize(0);
   }
 
   /// \brief nanoflann adaptor over the SoA coordinate spans.

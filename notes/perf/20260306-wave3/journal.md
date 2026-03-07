@@ -355,3 +355,110 @@ Use one entry per optimization hypothesis.
   - The solver rewrite only moved the isolated circular phase at noise level while regressing the diffgeo pipeline by about `2.3%`, so it did not justify a riskier solver change.
 - Notes:
   - The existing generalized solver is likely not the dominant circular bottleneck anymore after the shared setup reuse; most of the remaining cost appears to come from the solve itself rather than duplicated mass-matrix preparation.
+
+## 2026-03-06 Direct CSR Symmetrization For Diffusion Build
+- Timestamp: 2026-03-07T00:48:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_diffusion_build/2000`
+  - `bench_hodge_phase_structure_build`
+  - `bench_diffgeo_phase_structure_build/4000/64/32/32`
+- Hypothesis:
+  - Replace the `triplets -> Eigen SparseMatrix -> transpose -> average -> extract CSR` symmetrization path with a direct transpose-and-merge CSR builder, and fold immersion accumulation into the Markov normalization pass.
+- Files touched:
+  - `include/igneous/data/structures/diffusion_geometry.hpp`
+- Benchmark commands:
+  - Candidate worktree:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_eigenbasis/2000/16' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_diffusion_main/20|bench_pipeline_diffusion_main/100|bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_structure_build|bench_hodge_phase_eigenbasis|bench_hodge_phase_circular' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_structure_build/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - Baseline worktree:
+    - `git worktree add --detach /tmp/igneous-wave3-buildcmp-175611 2a6213d`
+    - same benchmark filters with `--benchmark_min_time=0.1s` against `/tmp/igneous-wave3-buildcmp-175611/build/*`
+- Smoke results:
+  - Candidate:
+    - `bench_diffusion_build/2000`: `17.720 ms` CPU
+    - `bench_pipeline_spectral_main`: `45.418 ms`
+    - `bench_hodge_phase_structure_build`: `33.333 ms`
+    - `bench_diffgeo_phase_structure_build/4000/64/32/32`: `33.778 ms`
+- Deep results:
+  - Exact A/B against commit `2a6213d`:
+    - `bench_diffusion_build/2000`: `17.231 ms` -> `17.720 ms` (`+2.84%`)
+    - `bench_pipeline_diffusion_main/20`: `20.885 ms` -> `21.526 ms` (`+3.07%`)
+    - `bench_pipeline_spectral_main`: `48.374 ms` -> `45.418 ms` (`-6.11%`)
+    - `bench_pipeline_hodge_main`: `478.812 ms` -> `472.301 ms` (`-1.36%`)
+    - `bench_hodge_phase_structure_build`: `34.648 ms` -> `33.333 ms` (`-3.79%`)
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `453.130 ms` -> `466.470 ms` (`+2.95%`)
+    - `bench_diffgeo_phase_structure_build/4000/64/32/32`: `34.433 ms` -> `33.778 ms` (`-1.90%`)
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `117.071 ms` -> `126.877 ms` (`+8.38%`)
+- App/runtime checks:
+  - `igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`: `real 0.14`
+- Test results:
+  - not run; rejected before correctness gating
+- Decision: `rejected`
+- Rejected because:
+  - The build rewrite improved some structure-heavy paths, but the exact compare regressed `bench_pipeline_diffusion_main/20` above the threshold and materially worsened the diffgeo eigenbasis phase, so the net pipeline trade was not acceptable.
+- Notes:
+  - The most likely issue is not raw build cost but the downstream spectral behavior of the alternate symmetric CSR layout as implemented here.
+
+## 2026-03-06 Lazy Normalized Symmetric-Kernel Cache
+- Timestamp: 2026-03-07T01:00:00Z
+- Commit: pending
+- Primary target:
+  - `bench_eigenbasis/2000/16`
+  - `bench_hodge_phase_eigenbasis`
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`
+- Hypothesis:
+  - Keep the accepted symmetric-kernel eigensolver path, but cache the normalized CSR values lazily on first eigensolve so the operator stops reapplying row-normalization inside every matvec without charging that work to diffusion build.
+- Files touched:
+  - `include/igneous/data/structures/diffusion_geometry.hpp`
+  - `include/igneous/ops/diffusion/spectral.hpp`
+- Benchmark commands:
+  - Candidate recorded artifacts:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_eigenbasis/2000/16' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_dod_lazy_norm_20260306-180012.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_dod_lazy_norm_20260306-180012.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_diffusion_main/20|bench_pipeline_diffusion_main/100|bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_structure_build|bench_hodge_phase_eigenbasis|bench_hodge_phase_circular' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_pipelines_lazy_norm_20260306-180012.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_pipelines_lazy_norm_20260306-180012.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_structure_build/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_diffgeo_lazy_norm_20260306-180012.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_diffgeo_lazy_norm_20260306-180012.txt'`
+  - Baseline exact A/B artifacts:
+    - `results/lazy_norm_baseline_dod_2a6213d.txt`
+    - `results/lazy_norm_baseline_pipelines_2a6213d.txt`
+    - `results/lazy_norm_baseline_diffgeo_2a6213d.txt`
+  - Tests:
+    - `ctest --test-dir build --output-on-failure -R 'test_structure_diffusion_geometry|test_ops_spectral_geometry|test_io_meshes|test_ops_hodge|test_hodge_cli_outputs|test_diffgeo_cli_outputs'`
+    - `ctest --test-dir build --output-on-failure -j8`
+- Smoke results:
+  - Current patch at `0.05s` min time:
+    - `bench_diffusion_build/2000`: `17.810 ms` CPU
+    - `bench_eigenbasis/2000/16`: `11.693 ms`
+    - `bench_pipeline_spectral_main`: `42.170 ms`
+    - `bench_pipeline_hodge_main`: `463.560 ms`
+    - `bench_hodge_phase_eigenbasis`: `117.206 ms`
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `441.865 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `103.004 ms`
+- Deep results:
+  - Exact A/B against commit `2a6213d`:
+    - `bench_diffusion_build/2000`: `17.231 ms` -> `17.710 ms` (`+2.78%`)
+    - `bench_eigenbasis/2000/16`: `14.319 ms` -> `11.705 ms` (`-18.25%`)
+    - `bench_pipeline_diffusion_main/20`: `20.885 ms` -> `21.401 ms` (`+2.47%`)
+    - `bench_pipeline_diffusion_main/100`: `22.973 ms` -> `23.126 ms` (`+0.67%`)
+    - `bench_pipeline_spectral_main`: `48.374 ms` -> `42.071 ms` (`-13.03%`)
+    - `bench_pipeline_hodge_main`: `478.812 ms` -> `458.640 ms` (`-4.21%`)
+    - `bench_hodge_phase_structure_build`: `34.648 ms` -> `34.230 ms` (`-1.21%`)
+    - `bench_hodge_phase_eigenbasis`: `131.694 ms` -> `117.106 ms` (`-11.08%`)
+    - `bench_hodge_phase_circular`: `272.253 ms` -> `267.809 ms` (`-1.63%`)
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `453.130 ms` -> `443.189 ms` (`-2.19%`)
+    - `bench_diffgeo_phase_structure_build/4000/64/32/32`: `34.433 ms` -> `34.655 ms` (`+0.65%`)
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `117.071 ms` -> `106.943 ms` (`-8.65%`)
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `272.623 ms` -> `271.797 ms` (`-0.30%`)
+- App/runtime checks:
+  - `env IGNEOUS_BENCH_MODE=1 ./build/igneous-spectral assets/bunny.obj`: `real 0.07`, `user 0.05`, `sys 0.00`
+  - `env IGNEOUS_BENCH_MODE=1 ./build/igneous-hodge --output-dir <tempdir> --no-ply`: `real 0.11`, `user 0.15`, `sys 0.00`
+  - `./build/igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`: `real 0.13`, `user 0.24`, `sys 0.01`
+- Test results:
+  - Targeted spectral/structure/hodge/diffgeo suite: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - This keeps the existing symmetric-kernel eigensolver policy and only removes repeated row-normalization work inside the operator.
+  - The small build regression stayed below the campaign guard while the primary eigenbasis targets all improved materially.

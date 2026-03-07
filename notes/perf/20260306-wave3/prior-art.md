@@ -21,9 +21,11 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Low-value curl-energy micro-tweaks that only move isolated kernels without pipeline wins.
 - Precomputing normalized symmetric-kernel CSR values during diffusion build; it improved isolated eigenbasis solves but failed the build-vs-pipeline trade.
 - Replacing the circular generalized solve with a cached mass-space standard solve; it only moved the phase at noise level and regressed the diffgeo pipeline.
+- The direct CSR symmetrization rewrite tested in Wave 3 improved some structure phases but regressed downstream spectral/pipeline behavior; do not reuse that exact formulation.
 
 ## New Focus
 - Benchmark and optimize the generic k-form pipeline, which was added after most of the earlier perf work.
 - Reuse already-computed 1-form operators inside the 2-form path.
 - Remove exact recomputation before trying lower-level loop tuning.
-- Revisit scalar diffusion eigenbasis or diffusion build only if they remain dominant after the circular and up-Laplacian passes.
+- Preserve the lazy normalized symmetric-kernel cache inside eigensolve; it is the accepted spectral improvement over the rejected build-time precompute.
+- Revisit diffusion build, circular solve internals, or non-diffusion geometry kernels only if they can beat the current head without shifting cost into downstream spectral behavior.

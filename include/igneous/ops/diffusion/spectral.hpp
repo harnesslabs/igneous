@@ -364,11 +364,15 @@ template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvector
                   mesh.structure.symmetric_row_offsets;
                   mesh.structure.symmetric_col_indices;
                   mesh.structure.symmetric_values;
+                  mesh.structure.symmetric_normalized_values;
+                  mesh.structure.symmetric_inv_sqrt_rows;
                   mesh.structure.symmetric_row_sums;
                 }) {
     const auto& sym_row_offsets = mesh.structure.symmetric_row_offsets;
     const auto& sym_col_indices = mesh.structure.symmetric_col_indices;
     const auto& sym_values = mesh.structure.symmetric_values;
+    auto& sym_normalized_values = mesh.structure.symmetric_normalized_values;
+    auto& inv_sqrt_rows = mesh.structure.symmetric_inv_sqrt_rows;
     const auto& row_sums = mesh.structure.symmetric_row_sums;
     if (!sym_row_offsets.empty() && static_cast<int>(sym_row_offsets.size()) == n + 1 &&
         row_sums.size() == n) {
@@ -377,15 +381,32 @@ template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvector
       const bool try_compact = k_eval >= 32;
       const int compact_ncv = try_compact ? std::min(n, std::max(k_eval + 16, 20)) : full_ncv;
 
-      Eigen::VectorXf inv_sqrt_rows(n);
-      for (int i = 0; i < n; ++i) {
-        inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
+      if (inv_sqrt_rows.size() != n ||
+          sym_normalized_values.size() != sym_values.size()) {
+        inv_sqrt_rows.resize(n);
+        for (int i = 0; i < n; ++i) {
+          inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
+        }
+
+        sym_normalized_values.resize(sym_values.size());
+        core::parallel_for_index(
+            0, n,
+            [&](int i) {
+              const float row_scale = inv_sqrt_rows[i];
+              const int begin = sym_row_offsets[static_cast<size_t>(i)];
+              const int end = sym_row_offsets[static_cast<size_t>(i) + 1];
+              for (int idx = begin; idx < end; ++idx) {
+                const int j = sym_col_indices[static_cast<size_t>(idx)];
+                sym_normalized_values[static_cast<size_t>(idx)] =
+                    sym_values[static_cast<size_t>(idx)] * row_scale * inv_sqrt_rows[j];
+              }
+            },
+            8192);
       }
 
-      NormalizedSymmetricKernelCsrMatProd op(sym_row_offsets, sym_col_indices, sym_values,
-                                             inv_sqrt_rows, n);
+      SymmetricKernelCsrMatProd op(sym_row_offsets, sym_col_indices, sym_normalized_values, n);
       const auto solve_symmetric = [&](int ncv) -> bool {
-        Spectra::SymEigsSolver<NormalizedSymmetricKernelCsrMatProd> eigs(op, k_eval, ncv);
+        Spectra::SymEigsSolver<SymmetricKernelCsrMatProd> eigs(op, k_eval, ncv);
         eigs.init();
         const int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
         if (eigs.info() != Spectra::CompInfo::Successful || nconv <= 0) {
