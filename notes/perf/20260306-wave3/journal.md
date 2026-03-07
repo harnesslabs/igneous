@@ -1,0 +1,73 @@
+# Wave 3 Journal
+
+Use one entry per optimization hypothesis.
+
+## Entry Template
+- Timestamp:
+- Commit:
+- Primary target:
+- Hypothesis:
+- Files touched:
+- Benchmark commands:
+- Smoke results:
+- Deep results:
+- App/runtime checks:
+- Test results:
+- Decision: `kept` | `rejected` | `deferred`
+- Rejected because:
+- Notes:
+
+## 2026-03-06 Diffgeo Operator Reuse + Closed-Form 2-Form Up Term
+- Timestamp: 2026-03-07T00:05:00Z
+- Commit: pending
+- Primary target:
+  - `bench_diffgeo_phase_k2_up/4000/64/32/32`
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+- Hypothesis:
+  - Reuse the already-computed 1-form derivative and Gram inverse inside the 2-form down-Laplacian path, then replace the per-point `2x2` solve in the 2-form up-Laplacian with the exact closed-form `det(D) * D^{-1}` adjugate arithmetic.
+- Files touched:
+  - `include/igneous/ops/diffusion/forms.hpp`
+  - `src/main_diffusion_geometry.cpp`
+  - `benches/bench_diffgeo.cpp`
+  - `notes/perf/20260306-wave3/*`
+  - `scripts/perf/*`
+  - `CMakeLists.txt`
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/1000/50/32/32|bench_diffgeo_phase_k2_down/1000/50/32/32|bench_diffgeo_phase_k2_up/1000/50/32/32|bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_k2_down/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32' --benchmark_min_time=0.02s --benchmark_repetitions=3 --benchmark_report_aggregates_only=true`
+  - `ctest --test-dir build --output-on-failure -R 'test_ops_diffusion_forms|test_ops_diffusion_wedge|test_structure_diffusion_geometry|test_ops_spectral_geometry|test_io_meshes|test_diffgeo_cli_outputs'`
+  - `ctest --test-dir build --output-on-failure -j8`
+- Smoke results:
+  - Initial harness smoke before the reuse/closed-form pass:
+    - `bench_diffgeo_pipeline/1000/50/32/32`: `796.924 ms` CPU
+    - `bench_diffgeo_phase_structure_build/1000/50/32/32`: `38.771 ms` CPU
+    - `bench_diffgeo_phase_k2_down/1000/50/32/32`: `87.193 ms` CPU (cold path; before hot-stage benchmark split)
+  - After the first reuse pass:
+    - `bench_diffgeo_pipeline/1000/50/32/32`: `759.782 ms`
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `4398.229 ms`
+    - `bench_diffgeo_phase_k2_up/1000/50/32/32`: `152.766 ms`
+    - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `632.350 ms`
+    - `bench_diffgeo_phase_k2_down/1000/50/32/32`: `186.006 us`
+    - `bench_diffgeo_phase_k2_down/4000/64/32/32`: `183.391 us`
+  - Final kept pass:
+    - `bench_diffgeo_pipeline/1000/50/32/32`: `744.778 ms` (`-6.54%` vs initial harness smoke, `-1.98%` vs reuse-only pass)
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `4243.404 ms` (`-3.52%` vs reuse-only pass)
+    - `bench_diffgeo_phase_k2_up/1000/50/32/32`: `113.205 ms` (`-25.90%` vs reuse-only pass)
+    - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `446.447 ms` (`-29.40%` vs reuse-only pass)
+    - `bench_diffgeo_phase_k2_down/1000/50/32/32`: `180.274 us` (noise-level change)
+    - `bench_diffgeo_phase_k2_down/4000/64/32/32`: `180.274 us` (`-1.70%` vs reuse-only pass)
+- Deep results:
+  - Wave baseline artifacts were captured after the kept patch:
+    - `results/bench_diffgeo_20260306-170545.json`
+    - `results/bench_pipelines_20260306-170545.json`
+    - `results/bench_dod_20260306-170545.json`
+- App/runtime checks:
+  - `igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`: `real 1.40`, `user 1.22`, `sys 0.07`
+- Test results:
+  - Targeted diffgeo/spectral/io suite: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - `bench_diffgeo_phase_k2_down` now intentionally measures the reused hot stage after 1-form operators are available, which better matches the actual pipeline reuse target.
+  - The biggest remaining diffgeo hotspot is now circular-coordinate assembly, followed by eigenbasis and the 2-form up-Laplacian.

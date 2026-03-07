@@ -389,6 +389,10 @@ int main(int argc, char** argv) {
 
   // 1-forms
   const Eigen::MatrixXf G1 = ops::diffusion::compute_kform_gram_matrix(mesh, 1, n_coeff, forms_ws);
+  const Eigen::MatrixXf G1_inv =
+      ops::diffusion::compute_kform_gram_inverse(mesh, 1, n_coeff, forms_ws);
+  const Eigen::MatrixXf D1 =
+      ops::diffusion::compute_weak_exterior_derivative(mesh, 1, n_coeff, forms_ws);
   const Eigen::MatrixXf down1 =
       ops::diffusion::compute_down_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
   const Eigen::MatrixXf up1 =
@@ -429,7 +433,7 @@ int main(int argc, char** argv) {
   // 2-forms
   const Eigen::MatrixXf G2 = ops::diffusion::compute_kform_gram_matrix(mesh, 2, n_coeff, forms_ws);
   const Eigen::MatrixXf down2 =
-      ops::diffusion::compute_down_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
+      ops::diffusion::assemble_down_laplacian_matrix_from_previous(D1, G1_inv);
   const Eigen::MatrixXf up2 =
       ops::diffusion::compute_up_laplacian_matrix(mesh, 2, n_coeff, forms_ws);
   const Eigen::MatrixXf L2 = ops::diffusion::assemble_hodge_laplacian_matrix(up2, down2);

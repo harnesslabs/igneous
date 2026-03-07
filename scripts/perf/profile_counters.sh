@@ -9,8 +9,9 @@ fi
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+NOTES_DIR="${IGNEOUS_PERF_NOTES_DIR:-notes/perf}"
 TS="$(date +%Y%m%d-%H%M%S)"
-OUT_DIR="notes/perf/profiles/$TS"
+OUT_DIR="${NOTES_DIR}/profiles/${TS}"
 mkdir -p "$OUT_DIR"
 
 xctrace record \
