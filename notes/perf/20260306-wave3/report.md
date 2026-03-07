@@ -3,7 +3,7 @@
 ## Outcome
 - Status: active.
 - Current focus: large-basis diffusion eigenbasis time first, then remaining diffgeo spectrum/reconstruction overhead.
-- Current branch head: `5e07f81`.
+- Current branch head: `49b3bd3`.
 
 ## Kept Improvements
 1. `2c56f6d` `perf(diffgeo): add wave3 harness and reuse form operators`
@@ -29,6 +29,8 @@
    - Relaxed the Spectra convergence tolerance only for `n_eigenvectors <= 16`, cutting the scalar spectral path without moving the 64-mode hodge/diffgeo guards.
 11. `5e07f81` `perf(hodge): matrixize curl energy assembly`
    - Replaced the mean-centered Hodge curl-energy basis-pair sweeps with exact dense block contractions over cached Markov and gamma data.
+12. `49b3bd3` `perf(spectral): use cholesky whitening for dense solves`
+   - Added a direct Cholesky whitening fast path for dense generalized form/Hodge spectra with exact fallback to the older mass-eigenspace regularization path.
 
 ## Rejected Fronts
 - Normalized symmetric-kernel precompute during diffusion build.
@@ -52,26 +54,30 @@
   - Helped the 16-mode scalar spectral path but regressed the 64-mode hodge eigensolve.
 - Davidson symmetric eigensolver.
   - The JD solver family was dramatically slower than the accepted symmetric Lanczos path on the 64-mode target.
+- Matrix diffgeo gamma-data immersion.
+  - The exact covariance rewrite for `Gamma(data_coord, immersion_coord)` did not move the end-to-end diffgeo pipeline enough to keep.
 
 ## Final Headline Numbers
 Using the Wave 3 artifacts in this directory:
 - Diffgeo pipeline:
   - Baseline after Wave 3 harness landed: `bench_diffgeo_pipeline/4000/64/32/32 = 4169.532 ms` in `baseline.md`
-  - Current head: `147.268 ms` CPU in `bench_diffgeo_circularprep_candidate_20260306-192320.txt`
+  - Current head: `145.730 ms` CPU in `bench_diffgeo_form_spectrum_cholesky_candidate_20260307-025546.txt`
 - Diffgeo circular phase:
   - Baseline: `2416.567 ms` in `baseline.md`
   - Current head: `3.821 ms` CPU in `bench_diffgeo_circularprep_candidate_20260306-192320.txt`
 - Diffgeo eigenbasis phase:
   - Baseline after the harness landed: `893.912 ms` in `baseline.md`
-  - Current head: `107.143 ms` CPU in `bench_diffgeo_circularprep_candidate_20260306-192320.txt`
+  - Current head: `107.411 ms` CPU in `bench_diffgeo_form_spectrum_cholesky_candidate_20260307-025546.txt`
 - Hodge pipeline:
-  - Current head: `150.060 ms` CPU in `bench_pipelines_hodge_curl_matrix_candidate_20260307-024447.txt`
+  - Current head: `149.293 ms` CPU in `bench_pipelines_form_spectrum_cholesky_candidate_20260307-025546.txt`
 - Hodge circular phase:
   - Current head: `4.034 ms` CPU in `bench_pipelines_hodge_curl_matrix_candidate_20260307-024447.txt`
 - Hodge eigenbasis phase:
-  - Current head: `116.601 ms` CPU in `bench_pipelines_hodge_curl_matrix_candidate_20260307-024447.txt`
+  - Current head: `115.785 ms` CPU in `bench_pipelines_form_spectrum_cholesky_candidate_20260307-025546.txt`
 - Hodge curl-energy phase:
   - Current head: `10.199 ms` CPU in `bench_pipelines_hodge_curl_matrix_candidate_20260307-024447.txt`
+- Hodge dense solve phase:
+  - Current head: `2.151 ms` CPU in `bench_pipelines_form_spectrum_cholesky_candidate_20260307-025546.txt`
 - Spectral pipeline:
   - Current head: `16.783 ms` CPU in `bench_pipelines_small_spectral_tol_candidate_20260307-023622.txt`
 - Small spectral eigensolve:
@@ -103,6 +109,7 @@ Using the Wave 3 artifacts in this directory:
 - The matrix circular-prep rewrite removed the dominant remaining circular hotspot without changing solver behavior, which reset the hotspot ranking.
 - The small-basis spectral path still had oversolve headroom, and relaxing its convergence target reclaimed that without moving the higher-priority 64-mode guards.
 - The exact matrix curl-energy rewrite removed most of the remaining non-eigenbasis Hodge cost without moving the eigensolve or circular guards.
+- The dense generalized-solve fast path now removes a large fraction of the remaining Hodge solve overhead while keeping the diffgeo pipeline within guard.
 - The main remaining shared cost is still the large-basis diffusion eigenbasis solve; after that, the pipelines are mostly diffgeo spectrum/reconstruction overhead rather than Hodge or circular assembly.
 - The new DEC face-incidence rewrite and the circular-prep rewrite both came from replacing large scalar sweeps with exact matrix formulations that preserve downstream behavior.
 

@@ -1154,3 +1154,88 @@ Use one entry per optimization hypothesis.
 - Notes:
   - On the mean-centered path, the weighted `Gamma(phi_k, phi_l)` term can be written exactly as `U^T diag(P^T c) U - (P U)^T diag(c) (P U)` with `c = mu * Gamma(x_a, x_b) / denom`, which removes the expensive per-pair scalar sweeps.
   - The cross term is exactly `Gamma(x_b, phi)^T diag(mu) Gamma(x_a, phi)`, so the whole curl block can be assembled from cached dense blocks and a final symmetrization step.
+
+## 2026-03-06 Matrix Diffgeo Gamma-Data Immersion
+- Timestamp: 2026-03-07T02:52:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+- Hypothesis:
+  - Replace the `Gamma(data_coord, immersion_coord)` reconstruction precompute with exact mean-centered matrix formulas so the diffgeo pipeline stops paying nine scalar `carre_du_champ` sweeps before reconstructing ambient fields.
+- Files touched:
+  - `benches/bench_diffgeo.cpp`
+  - `src/main_diffusion_geometry.cpp`
+- Benchmark commands:
+  - Smoke only:
+    - `cmake --build build --target bench_diffgeo igneous-diffusion-geometry test_ops_diffusion_forms test_ops_diffusion_wedge -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `146.086 ms`
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `106.173 ms`
+  - `bench_diffgeo_phase_circular/4000/64/32/32`: `3.831 ms`
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run
+- Test results:
+  - not run
+- Decision: `rejected`
+- Rejected because:
+  - The end-to-end diffgeo pipeline stayed effectively flat, so the reconstruction gamma-data precompute is not a worthwhile bottleneck on the current head.
+- Notes:
+  - This narrows the remaining diffgeo residual further toward dense form-spectrum work and reconstruction itself rather than the `Gamma(data, immersion)` precompute.
+
+## 2026-03-06 Dense Generalized Spectrum Cholesky Whitening
+- Timestamp: 2026-03-07T02:56:38Z
+- Commit: `49b3bd3`
+- Primary target:
+  - `bench_hodge_phase_solve`
+  - `bench_pipeline_hodge_main`
+- Hypothesis:
+  - For dense generalized spectra with SPD mass matrices, replace the mass-eigendecomposition whitening path with direct Cholesky whitening and fall back to the old regularized mass-eigenspace path only when the Cholesky factorization fails.
+- Files touched:
+  - `include/igneous/ops/diffusion/forms.hpp`
+  - `include/igneous/ops/diffusion/hodge.hpp`
+- Benchmark commands:
+  - Exact baseline on the reverted `5e07f81` worktree:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_hodge_phase_solve' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_pipelines_form_spectrum_cholesky_baseline_20260307-025546.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_diffgeo_form_spectrum_cholesky_baseline_20260307-025546.txt'`
+  - Candidate:
+    - `cmake --build build --target bench_pipelines bench_diffgeo test_ops_hodge test_ops_diffusion_forms test_ops_diffusion_wedge test_ops_spectral_geometry igneous-hodge igneous-diffusion-geometry -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_hodge_phase_solve' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_pipelines_form_spectrum_cholesky_candidate_20260307-025546.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_diffgeo_form_spectrum_cholesky_candidate_20260307-025546.txt'`
+    - `ctest --test-dir build --output-on-failure -R 'test_ops_hodge|test_ops_diffusion_forms|test_ops_diffusion_wedge|test_ops_spectral_geometry|test_hodge_cli_outputs|test_diffgeo_cli_outputs'`
+    - `ctest --test-dir build --output-on-failure -j8`
+- Smoke results:
+  - `bench_pipeline_hodge_main`: `150.555 ms`
+  - `bench_hodge_phase_eigenbasis`: `117.141 ms`
+  - `bench_hodge_phase_solve`: `2.169 ms`
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `148.712 ms`
+  - isolated diffgeo rerun:
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `146.660 ms`
+- Deep results:
+  - Exact A/B artifacts:
+    - `notes/perf/20260306-wave3/results/bench_pipelines_form_spectrum_cholesky_baseline_20260307-025546.txt`
+    - `notes/perf/20260306-wave3/results/bench_pipelines_form_spectrum_cholesky_candidate_20260307-025546.txt`
+    - `notes/perf/20260306-wave3/results/bench_diffgeo_form_spectrum_cholesky_baseline_20260307-025546.txt`
+    - `notes/perf/20260306-wave3/results/bench_diffgeo_form_spectrum_cholesky_candidate_20260307-025546.txt`
+  - `bench_pipeline_hodge_main`: `150.572 ms` -> `149.293 ms` CPU (`-0.85%`)
+  - `bench_hodge_phase_eigenbasis`: `116.737 ms` -> `115.785 ms` CPU (`-0.82%`)
+  - `bench_hodge_phase_solve`: `3.460 ms` -> `2.151 ms` CPU (`-37.82%`)
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `146.518 ms` -> `145.730 ms` CPU (`-0.54%`)
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `106.471 ms` -> `107.411 ms` CPU (`+0.88%`)
+- App/runtime checks:
+  - not run; benchmark and test coverage were sufficient for this dense internal solver change
+- Test results:
+  - `test_ops_hodge`: pass
+  - `test_ops_diffusion_forms`: pass
+  - `test_ops_diffusion_wedge`: pass
+  - `test_ops_spectral_geometry`: pass
+  - `test_hodge_cli_outputs`: pass
+  - `test_diffgeo_cli_outputs`: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - The dense generalized form and Hodge solves use SPD mass matrices on the current workloads, so Cholesky whitening avoids the full mass-eigendecomposition cost while preserving the old path as a fallback for degenerate cases.

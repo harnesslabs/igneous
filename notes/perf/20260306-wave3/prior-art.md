@@ -15,6 +15,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Matrix-form circular workspace preparation on the mean-centered diffusion path; keep the exact covariance formulas for `Gamma(x, phi)` and the scalar weak Laplacian instead of reverting to pairwise scalar `carre_du_champ` sweeps.
 - Relaxed Spectra tolerance only for small-basis solves (`n_eigenvectors <= 16`); the 16-mode scalar spectral path benefits, but the 64-mode hodge/diffgeo guards should stay on the stricter convergence target.
 - Matrix-form Hodge curl-energy assembly on the mean-centered path; keep the exact `U^T diag(P^T c) U - (P U)^T diag(c) (P U)` formulation plus the weighted mixed-gamma cross term instead of the old basis-pair `carre_du_champ` sweeps.
+- Cholesky whitening for dense generalized form/Hodge spectra with fallback to the old mass-eigenspace path; this is the accepted fast path for the current SPD mass matrices.
 
 ## Do Not Repeat
 - Tightening Arnoldi subspace below the current accepted compact fallback.
@@ -35,6 +36,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Lowering the spectral CSR matvec parallel threshold to force parallel row sweeps at `n ~= 2k-4k`; the worker-pool overhead regressed the eigensolve-heavy paths.
 - Relaxing the Spectra tolerance globally on large-basis solves; it helps the 16-mode scalar spectral path but regresses the 64-mode hodge guard.
 - Replacing the symmetric normalized-kernel solver with Spectra's Davidson path; it remained much slower than the accepted Lanczos solver even with a direct CSR adapter.
+- Matrixizing `Gamma(data_coord, immersion_coord)` for diffgeo reconstruction; the diffgeo pipeline stayed effectively flat, so that precompute is not worth revisiting on the current head.
 
 ## New Focus
 - Benchmark and optimize the generic k-form pipeline, which was added after most of the earlier perf work.
@@ -43,3 +45,4 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Preserve the lazy normalized symmetric-kernel cache inside eigensolve; it is the accepted spectral improvement over the rejected build-time precompute.
 - Revisit diffusion build, circular solve internals, or non-diffusion geometry kernels only if they can beat the current head without shifting cost into downstream spectral behavior.
 - Treat the 16-mode scalar spectral path separately from the 64-mode hodge/diffgeo guard path when changing solver tolerances or policy.
+- Treat dense generalized spectra separately from the large sparse diffusion eigensolve; the dense form/Hodge solve now has an accepted Cholesky fast path and should not be conflated with the sparse basis extraction problem.
