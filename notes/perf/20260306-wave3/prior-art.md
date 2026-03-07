@@ -37,6 +37,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Relaxing the Spectra tolerance globally on large-basis solves; it helps the 16-mode scalar spectral path but regresses the 64-mode hodge guard.
 - Replacing the symmetric normalized-kernel solver with Spectra's Davidson path; it remained much slower than the accepted Lanczos solver even with a direct CSR adapter.
 - Matrixizing `Gamma(data_coord, immersion_coord)` for diffgeo reconstruction; the diffgeo pipeline stayed effectively flat, so that precompute is not worth revisiting on the current head.
+- Matrixizing the mean-centered `DiffusionFormWorkspace` mixed-gamma cache fill; the diffgeo pipeline regressed and the operator-phase movement was too noisy to justify the larger cache rewrite.
 
 ## New Focus
 - Benchmark and optimize the generic k-form pipeline, which was added after most of the earlier perf work.

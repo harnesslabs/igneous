@@ -56,6 +56,8 @@
   - The JD solver family was dramatically slower than the accepted symmetric Lanczos path on the 64-mode target.
 - Matrix diffgeo gamma-data immersion.
   - The exact covariance rewrite for `Gamma(data_coord, immersion_coord)` did not move the end-to-end diffgeo pipeline enough to keep.
+- Matrix diffgeo mixed-gamma cache.
+  - The mean-centered matrix rewrite for the generic form mixed-gamma cache regressed the end-to-end diffgeo pipeline and was rejected at smoke.
 
 ## Final Headline Numbers
 Using the Wave 3 artifacts in this directory:

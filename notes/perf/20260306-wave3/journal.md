@@ -1239,3 +1239,45 @@ Use one entry per optimization hypothesis.
   - n/a
 - Notes:
   - The dense generalized form and Hodge solves use SPD mass matrices on the current workloads, so Cholesky whitening avoids the full mass-eigendecomposition cost while preserving the old path as a fallback for degenerate cases.
+
+## 2026-03-06 Matrix Diffgeo Mixed-Gamma Cache
+- Timestamp: 2026-03-07T03:00:44Z
+- Commit: n/a
+- Primary target:
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+  - `bench_diffgeo_phase_k1_up/4000/64/32/32`
+  - `bench_diffgeo_phase_k2_up/4000/64/32/32`
+- Hypothesis:
+  - Replace the mean-centered `DiffusionFormWorkspace` mixed-gamma cache fill with exact matrix formulas over `P U` and `P coords`, so the pipeline stops paying `3 * n_coeff` scalar `carre_du_champ` sweeps every time `forms_ws.reset_cache()` is hit.
+- Files touched:
+  - `include/igneous/ops/diffusion/geometry.hpp`
+  - `include/igneous/ops/diffusion/forms.hpp`
+  - `include/igneous/ops/diffusion/hodge.hpp`
+- Benchmark commands:
+  - Smoke only:
+    - `cmake --build build --target bench_diffgeo bench_pipelines test_ops_diffusion_forms test_ops_diffusion_wedge test_ops_hodge igneous-diffusion-geometry igneous-hodge -j8`
+    - `ctest --test-dir build --output-on-failure -R 'test_ops_diffusion_forms|test_ops_diffusion_wedge|test_ops_hodge|test_diffgeo_cli_outputs|test_hodge_cli_outputs'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_k1_gram/4000/64/32/32|bench_diffgeo_phase_k1_up/4000/64/32/32|bench_diffgeo_phase_k2_gram/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `149.011 ms`
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `106.862 ms`
+  - `bench_diffgeo_phase_k1_gram/4000/64/32/32`: `1.862 ms`
+  - `bench_diffgeo_phase_k1_up/4000/64/32/32`: `7.372 ms`
+  - `bench_diffgeo_phase_k2_gram/4000/64/32/32`: `1.846 ms`
+  - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `8.821 ms`
+  - `bench_diffgeo_phase_circular/4000/64/32/32`: `3.877 ms`
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run
+- Test results:
+  - `test_ops_diffusion_forms`: pass
+  - `test_ops_diffusion_wedge`: pass
+  - `test_ops_hodge`: pass
+  - `test_diffgeo_cli_outputs`: pass
+  - `test_hodge_cli_outputs`: pass
+- Decision: `rejected`
+- Rejected because:
+  - The end-to-end diffgeo pipeline regressed and the operator-phase movement was too noisy to justify keeping a larger cache/matrixization rewrite.
+- Notes:
+  - The accepted Hodge mixed-gamma matrixization did not carry over cleanly to the generic form workspace; the remaining diffgeo bottleneck is not simply the mixed-gamma cache fill.
