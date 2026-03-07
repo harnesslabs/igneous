@@ -1104,3 +1104,53 @@ Use one entry per optimization hypothesis.
   - n/a
 - Notes:
   - The previous rejected global-tolerance passes showed that the 64-mode hodge/diffgeo solve really does need the stricter convergence target. Restricting the looser tolerance to the 16-mode path preserves the high-priority guards while reclaiming the wasted work in the scalar spectral pipeline.
+
+## 2026-03-06 Matrix Hodge Curl-Energy Assembly
+- Timestamp: 2026-03-07T02:46:27Z
+- Commit: `5e07f81`
+- Primary target:
+  - `bench_hodge_phase_curl_energy`
+  - `bench_pipeline_hodge_main`
+- Hypothesis:
+  - Replace the mean-centered Hodge curl-energy assembly with exact matrix formulas over `P U`, `Gamma(x_a, phi)`, and `Gamma(x_a, x_b)` so the phase stops recomputing `Gamma(phi_k, phi_l)` with thousands of scalar `carre_du_champ` sweeps.
+- Files touched:
+  - `include/igneous/ops/diffusion/hodge.hpp`
+- Benchmark commands:
+  - Exact baseline on the reverted `2a24aef` worktree:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_hodge_phase_gram|bench_hodge_phase_weak_derivative|bench_hodge_phase_curl_energy|bench_hodge_phase_circular' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_pipelines_hodge_curl_matrix_baseline_20260307-024447.txt'`
+  - Candidate:
+    - `cmake --build build --target bench_pipelines test_ops_hodge igneous-hodge -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_hodge_phase_gram|bench_hodge_phase_weak_derivative|bench_hodge_phase_curl_energy|bench_hodge_phase_circular' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_pipelines_hodge_curl_matrix_candidate_20260307-024447.txt'`
+    - `ctest --test-dir build --output-on-failure -R 'test_ops_hodge|test_hodge_cli_outputs'`
+    - `ctest --test-dir build --output-on-failure -j8`
+    - `env IGNEOUS_BENCH_MODE=1 /usr/bin/time -p ./build/igneous-hodge --output-dir <tempdir> --no-ply`
+- Smoke results:
+  - `bench_pipeline_hodge_main`: `156.093 ms`
+  - `bench_hodge_phase_eigenbasis`: `118.986 ms`
+  - `bench_hodge_phase_gram`: `1.449 ms`
+  - `bench_hodge_phase_weak_derivative`: `1.101 ms`
+  - `bench_hodge_phase_curl_energy`: `10.651 ms`
+  - `bench_hodge_phase_circular`: `4.159 ms`
+- Deep results:
+  - Exact A/B artifacts:
+    - `notes/perf/20260306-wave3/results/bench_pipelines_hodge_curl_matrix_baseline_20260307-024447.txt`
+    - `notes/perf/20260306-wave3/results/bench_pipelines_hodge_curl_matrix_candidate_20260307-024447.txt`
+  - `bench_pipeline_hodge_main`: `165.269 ms` -> `150.060 ms` CPU (`-9.20%`)
+  - `bench_hodge_phase_eigenbasis`: `116.382 ms` -> `116.601 ms` CPU (`+0.19%`)
+  - `bench_hodge_phase_gram`: `1.410 ms` -> `1.418 ms` CPU (`+0.55%`)
+  - `bench_hodge_phase_weak_derivative`: `1.058 ms` -> `1.059 ms` CPU (`+0.13%`)
+  - `bench_hodge_phase_curl_energy`: `25.729 ms` -> `10.199 ms` CPU (`-60.36%`)
+  - `bench_hodge_phase_circular`: `4.028 ms` -> `4.034 ms` CPU (`+0.16%`)
+- App/runtime checks:
+  - `env IGNEOUS_BENCH_MODE=1 ./build/igneous-hodge --output-dir <tempdir> --no-ply`: `real 0.05`, `user 0.05`, `sys 0.01`
+  - Recorded artifact: `notes/perf/20260306-wave3/results/app_hodge_curl_matrix_20260307-024447.txt`
+- Test results:
+  - `test_ops_hodge`: pass
+  - `test_hodge_cli_outputs`: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - On the mean-centered path, the weighted `Gamma(phi_k, phi_l)` term can be written exactly as `U^T diag(P^T c) U - (P U)^T diag(c) (P U)` with `c = mu * Gamma(x_a, x_b) / denom`, which removes the expensive per-pair scalar sweeps.
+  - The cross term is exactly `Gamma(x_b, phi)^T diag(mu) Gamma(x_a, phi)`, so the whole curl block can be assembled from cached dense blocks and a final symmetrization step.

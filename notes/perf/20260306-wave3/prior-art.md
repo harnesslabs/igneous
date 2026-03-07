@@ -14,6 +14,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Stable block-prefix DEC face-incidence construction for large meshes; it preserves per-vertex face order while removing the large-mesh serial bottleneck.
 - Matrix-form circular workspace preparation on the mean-centered diffusion path; keep the exact covariance formulas for `Gamma(x, phi)` and the scalar weak Laplacian instead of reverting to pairwise scalar `carre_du_champ` sweeps.
 - Relaxed Spectra tolerance only for small-basis solves (`n_eigenvectors <= 16`); the 16-mode scalar spectral path benefits, but the 64-mode hodge/diffgeo guards should stay on the stricter convergence target.
+- Matrix-form Hodge curl-energy assembly on the mean-centered path; keep the exact `U^T diag(P^T c) U - (P U)^T diag(c) (P U)` formulation plus the weighted mixed-gamma cross term instead of the old basis-pair `carre_du_champ` sweeps.
 
 ## Do Not Repeat
 - Tightening Arnoldi subspace below the current accepted compact fallback.

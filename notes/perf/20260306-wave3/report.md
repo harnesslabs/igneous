@@ -2,8 +2,8 @@
 
 ## Outcome
 - Status: active.
-- Current focus: large-basis diffusion eigenbasis time first, then remaining spectrum/reconstruction overhead.
-- Current branch head: `2a24aef`.
+- Current focus: large-basis diffusion eigenbasis time first, then remaining diffgeo spectrum/reconstruction overhead.
+- Current branch head: `5e07f81`.
 
 ## Kept Improvements
 1. `2c56f6d` `perf(diffgeo): add wave3 harness and reuse form operators`
@@ -27,6 +27,8 @@
    - Replaced the mean-centered circular workspace preparation sweeps with exact matrix formulas for `Gamma(x, phi)` and the scalar weak Laplacian.
 10. `2a24aef` `perf(spectral): loosen tolerance for small basis solves`
    - Relaxed the Spectra convergence tolerance only for `n_eigenvectors <= 16`, cutting the scalar spectral path without moving the 64-mode hodge/diffgeo guards.
+11. `5e07f81` `perf(hodge): matrixize curl energy assembly`
+   - Replaced the mean-centered Hodge curl-energy basis-pair sweeps with exact dense block contractions over cached Markov and gamma data.
 
 ## Rejected Fronts
 - Normalized symmetric-kernel precompute during diffusion build.
@@ -63,11 +65,13 @@ Using the Wave 3 artifacts in this directory:
   - Baseline after the harness landed: `893.912 ms` in `baseline.md`
   - Current head: `107.143 ms` CPU in `bench_diffgeo_circularprep_candidate_20260306-192320.txt`
 - Hodge pipeline:
-  - Current head: `164.629 ms` CPU in `bench_pipelines_circularprep_candidate_20260306-192320.txt`
+  - Current head: `150.060 ms` CPU in `bench_pipelines_hodge_curl_matrix_candidate_20260307-024447.txt`
 - Hodge circular phase:
-  - Current head: `4.074 ms` CPU in `bench_pipelines_circularprep_candidate_20260306-192320.txt`
+  - Current head: `4.034 ms` CPU in `bench_pipelines_hodge_curl_matrix_candidate_20260307-024447.txt`
 - Hodge eigenbasis phase:
-  - Current head: `116.807 ms` CPU in `bench_pipelines_circularprep_candidate_20260306-192320.txt`
+  - Current head: `116.601 ms` CPU in `bench_pipelines_hodge_curl_matrix_candidate_20260307-024447.txt`
+- Hodge curl-energy phase:
+  - Current head: `10.199 ms` CPU in `bench_pipelines_hodge_curl_matrix_candidate_20260307-024447.txt`
 - Spectral pipeline:
   - Current head: `16.783 ms` CPU in `bench_pipelines_small_spectral_tol_candidate_20260307-023622.txt`
 - Small spectral eigensolve:
@@ -91,14 +95,15 @@ Using the Wave 3 artifacts in this directory:
 
 ### Hodge
 - `eigenbasis`
-- remaining spectrum/curl overhead
+- remaining spectrum overhead
 
 ## Assessment
 - The high-confidence, behavior-preserving wins in diffusion build, generic form assembly, and Hodge gamma reuse have been taken.
 - Build-heavy workloads are no longer the main problem.
 - The matrix circular-prep rewrite removed the dominant remaining circular hotspot without changing solver behavior, which reset the hotspot ranking.
 - The small-basis spectral path still had oversolve headroom, and relaxing its convergence target reclaimed that without moving the higher-priority 64-mode guards.
-- The main remaining shared cost is still the large-basis diffusion eigenbasis solve; after that, the pipelines are mostly spectrum/reconstruction overhead rather than circular-coordinate assembly.
+- The exact matrix curl-energy rewrite removed most of the remaining non-eigenbasis Hodge cost without moving the eigensolve or circular guards.
+- The main remaining shared cost is still the large-basis diffusion eigenbasis solve; after that, the pipelines are mostly diffgeo spectrum/reconstruction overhead rather than Hodge or circular assembly.
 - The new DEC face-incidence rewrite and the circular-prep rewrite both came from replacing large scalar sweeps with exact matrix formulations that preserve downstream behavior.
 
 ## Recommended Next Wave
