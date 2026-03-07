@@ -3,7 +3,7 @@
 ## Outcome
 - Status: paused after the latest kept hodge pass.
 - Stop reason: the remaining dominant cost is now circular plus eigensolve, and the next credible wins appear to require more invasive solver/formulation changes than the high-confidence internal refactors used in this wave.
-- Current branch head: `89e82be`.
+- Current branch head: `5d0f4db`.
 
 ## Kept Improvements
 1. `2c56f6d` `perf(diffgeo): add wave3 harness and reuse form operators`
@@ -21,6 +21,8 @@
    - Parallelized and fused the post-kNN diffusion-build passes while keeping the accepted sparse symmetrization path intact.
 7. `89e82be` `perf(hodge): cache gamma assembly in workspace`
    - Reused mixed gamma and coordinate gamma inside `HodgeWorkspace`, then reset the workspace explicitly in rebuild-heavy loops.
+8. `5d0f4db` `perf(dec): parallelize stable face-incidence build`
+   - Replaced the large-mesh serial DEC face-incidence count/write passes with a stable block-prefix build that preserves per-vertex face order.
 
 ## Rejected Fronts
 - Normalized symmetric-kernel precompute during diffusion build.
@@ -32,6 +34,12 @@
   - `LargestAlge` and `sqrt(row_sums)` seeding improved some scalar spectral cases but regressed higher-rank hodge/diffgeo eigensolve targets.
 - Large-mesh atomic DEC face incidence.
   - Improved isolated structure build but hurt large-grid curvature/flow locality enough to lose the overall geometry benchmark.
+- Symmetric trivial-mode deflation in the normalized-kernel eigensolver.
+  - Did not produce a clear repeatable win across the spectral, hodge, and diffgeo pipeline guards.
+- Accelerate-backed circular generalized eigensolve.
+  - Barely moved the circular phase and added an Apple-only code path.
+- Batched paired circular assembly.
+  - Removed duplicated operator setup work on paper, but did not materially reduce the actual circular phase.
 
 ## Final Headline Numbers
 Using the Wave 3 artifacts in this directory:
@@ -57,6 +65,11 @@ Using the Wave 3 artifacts in this directory:
   - Early Wave 3 head: `real 1.40`
   - Current head: `real 0.11`
   - `igneous-hodge --no-ply`: current head `real 0.10`
+- Geometry large-grid guard:
+  - `bench_geometry` `Grid 1000x1000`
+  - structure: `17.288 ms -> 14.532 ms`
+  - curvature: `5.450 ms -> 5.048 ms`
+  - flow: `0.904 ms -> 0.879 ms`
 
 ## Current Hotspot Order
 ### Diffgeo
@@ -75,6 +88,7 @@ Using the Wave 3 artifacts in this directory:
 - Build-heavy workloads are no longer the main problem.
 - Both the hodge and diffgeo pipelines are now dominated by circular-coordinate solves and scalar eigensolve time.
 - The most recent rejected experiments were on symmetric eigensolver control and DEC structure locality, which is a useful signal that the easy internal refactors are mostly exhausted.
+- The new DEC face-incidence rewrite shows there is still room outside diffusion geometry when the change preserves downstream traversal order.
 
 ## Recommended Next Wave
 - Only continue if one of these is acceptable:

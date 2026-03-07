@@ -704,3 +704,177 @@ Use one entry per optimization hypothesis.
 - Notes:
   - `HodgeWorkspace::reset_cache()` is now required when the mesh/build/eigenbasis state changes and the same workspace instance is reused. Internal rebuild-heavy benchmark loops were updated accordingly.
   - The main single-call win comes from reusing weak-derivative mixed gamma inside curl-energy assembly and from only computing the symmetric coordinate gamma tensor once per fixed workspace state.
+
+## 2026-03-06 Symmetric Trivial-Mode Deflation
+- Timestamp: 2026-03-07T02:00:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_eigenbasis/2000/16`
+  - `bench_hodge_phase_eigenbasis`
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`
+  - `bench_pipeline_hodge_main`
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+- Hypothesis:
+  - Deflate the known trivial normalized-kernel diffusion mode and let Spectra solve only for the remaining nontrivial modes, then prepend the constant mode explicitly.
+- Files touched:
+  - `include/igneous/ops/diffusion/spectral.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_eigenbasis/2000/16' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_hodge_phase_circular' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - Candidate only:
+    - `bench_eigenbasis/2000/16`: `12.062 ms` CPU
+    - `bench_pipeline_spectral_main`: `23.712 ms`
+    - `bench_pipeline_hodge_main`: `427.435 ms`
+    - `bench_hodge_phase_eigenbasis`: `114.011 ms`
+    - `bench_hodge_phase_circular`: `271.619 ms`
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `419.282 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `101.487 ms`
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `276.308 ms`
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run
+- Test results:
+  - not run
+- Decision: `rejected`
+- Rejected because:
+  - The patch changed the symmetric-kernel solve behavior without producing a clear, repeatable improvement across both hodge and diffgeo pipelines, so it did not clear the keep bar.
+- Notes:
+  - This is distinct from the previously rejected sort-rule and init-vector changes, but it still belongs in the same family of spectral control rewrites that need stronger evidence before revisiting.
+
+## 2026-03-06 Accelerate Circular Generalized Solve
+- Timestamp: 2026-03-07T02:05:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_hodge_phase_circular`
+  - `bench_diffgeo_phase_circular/4000/64/32/32`
+  - `bench_pipeline_hodge_main`
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+- Hypothesis:
+  - Replace Eigen's dense generalized eigensolver inside `compute_circular_coordinates()` with the macOS Accelerate/LAPACK path while keeping the same operator and mode-selection logic.
+- Files touched:
+  - `CMakeLists.txt` (reverted)
+  - `include/igneous/ops/diffusion/hodge.hpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_circular|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - Candidate only:
+    - `bench_pipeline_hodge_main`: `433.196 ms`
+    - `bench_hodge_phase_eigenbasis`: `119.385 ms`
+    - `bench_hodge_phase_circular`: `270.282 ms`
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `419.902 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `109.391 ms`
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `275.749 ms`
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run
+- Test results:
+  - not run
+- Decision: `rejected`
+- Rejected because:
+  - The circular phase barely moved, which showed that the remaining circular cost is not dominated by Eigen's dense generalized eigensolver implementation itself.
+- Notes:
+  - The experiment also introduced an Apple-only code path and deprecated CLAPACK entry points, so it needed a much stronger payoff than the measured noise-level movement.
+
+## 2026-03-06 Batched Paired Circular Assembly
+- Timestamp: 2026-03-07T02:09:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_hodge_phase_circular`
+  - `bench_diffgeo_phase_circular/4000/64/32/32`
+  - `bench_pipeline_hodge_main`
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+- Hypothesis:
+  - Batch the two back-to-back circular-coordinate operator assemblies so the paired harmonic-mode solves share the dense `U`/`Gamma(x, phi)` work instead of rebuilding it twice.
+- Files touched:
+  - `include/igneous/ops/diffusion/hodge.hpp` (reverted)
+  - `src/main_hodge.cpp` (reverted)
+  - `src/main_diffusion_geometry.cpp` (reverted)
+  - `benches/bench_pipelines.cpp` (reverted)
+  - `benches/bench_diffgeo.cpp` (reverted)
+- Benchmark commands:
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_circular|bench_hodge_phase_eigenbasis' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - Candidate only:
+    - `bench_pipeline_hodge_main`: `432.693 ms`
+    - `bench_hodge_phase_eigenbasis`: `119.347 ms`
+    - `bench_hodge_phase_circular`: `272.862 ms`
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `420.794 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `109.734 ms`
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `275.774 ms`
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run
+- Test results:
+  - not run
+- Decision: `rejected`
+- Rejected because:
+  - Sharing the paired operator assembly did not materially reduce the circular phase, so the duplicated two-call setup was not the dominant remaining cost.
+- Notes:
+  - This removes another plausible circular hotspot from the search space; the next circular pass should start with finer measurement before attempting another algebraic rewrite.
+
+## 2026-03-06 Stable Parallel DEC Face-Incidence Build
+- Timestamp: 2026-03-07T02:12:00Z
+- Commit: `5d0f4db`
+- Primary target:
+  - `bench_geometry` large-grid structure phase
+  - `bench_mesh_structure_build/400`
+- Hypothesis:
+  - Parallelize DEC face-incidence CSR construction with a stable block-prefix build so large meshes stop paying the serial count/write cost while preserving the face order seen by downstream curvature and flow kernels.
+- Files touched:
+  - `include/igneous/data/structures/discrete_exterior_calculus.hpp`
+- Benchmark commands:
+  - Exact baseline on the reverted worktree:
+    - `cmake --build build --target bench_geometry bench_dod -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_mesh_structure_build/400|bench_curvature_kernel/400|bench_flow_kernel/400' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_dod_dec_face_incidence_baseline_20260306-190831.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_geometry > 'notes/perf/20260306-wave3/results/bench_geometry_dec_face_incidence_baseline_20260306-190831.txt'`
+  - Candidate:
+    - `cmake --build build --target bench_geometry bench_dod test_structure_dec test_ops_curvature_flow -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_mesh_structure_build/400|bench_curvature_kernel/400|bench_flow_kernel/400' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_dod_dec_face_incidence_candidate_20260306-190850.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_geometry > 'notes/perf/20260306-wave3/results/bench_geometry_dec_face_incidence_candidate_20260306-190850.txt'`
+    - `./build/test_structure_dec`
+    - `./build/test_ops_curvature_flow`
+    - `ctest --test-dir build --output-on-failure -j8`
+- Smoke results:
+  - `bench_geometry`:
+    - `Grid 1000x1000` structure: `18.600 ms` -> `16.034 ms` (`-13.80%`)
+    - `Grid 1000x1000` curvature: `6.951 ms` -> `5.956 ms` (`-14.32%`)
+    - `Grid 1000x1000` flow: `1.137 ms` -> `0.981 ms` (`-13.72%`)
+  - `bench_dod`:
+    - `bench_mesh_structure_build/400`: `2.904 ms` -> `2.502 ms` (`-13.84%`)
+    - `bench_curvature_kernel/400`: `1.008 ms` -> `0.830 ms` (`-17.66%`)
+    - `bench_flow_kernel/400`: `0.222 ms` -> `0.195 ms` (`-12.02%`)
+- Deep results:
+  - Exact A/B artifacts:
+    - `notes/perf/20260306-wave3/results/bench_dod_dec_face_incidence_baseline_20260306-190831.txt`
+    - `notes/perf/20260306-wave3/results/bench_dod_dec_face_incidence_candidate_20260306-190850.txt`
+    - `notes/perf/20260306-wave3/results/bench_geometry_dec_face_incidence_baseline_20260306-190831.txt`
+    - `notes/perf/20260306-wave3/results/bench_geometry_dec_face_incidence_candidate_20260306-190850.txt`
+  - `bench_mesh_structure_build/400`: `2.545 ms` -> `2.558 ms` CPU (`+0.50%`)
+  - `bench_curvature_kernel/400`: `0.839 ms` -> `0.833 ms` CPU (`-0.74%`)
+  - `bench_flow_kernel/400`: `0.197 ms` -> `0.196 ms` CPU (`-0.53%`)
+  - `bench_geometry`:
+    - `Grid 500x500` structure: `4.263 ms` -> `4.021 ms` (`-5.68%`)
+    - `Grid 500x500` curvature: `1.395 ms` -> `1.314 ms` (`-5.81%`)
+    - `Grid 500x500` flow: `0.312 ms` -> `0.308 ms` (`-1.28%`)
+    - `Grid 1000x1000` structure: `17.288 ms` -> `14.532 ms` (`-15.94%`)
+    - `Grid 1000x1000` curvature: `5.450 ms` -> `5.048 ms` (`-7.38%`)
+    - `Grid 1000x1000` flow: `0.904 ms` -> `0.879 ms` (`-2.77%`)
+- App/runtime checks:
+  - not run; geometry benchmark coverage was sufficient for this internal DEC build change
+- Test results:
+  - `test_structure_dec`: pass
+  - `test_ops_curvature_flow`: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - The stable block-prefix construction keeps per-vertex face order intact, which avoided the locality regressions seen in the rejected atomic face-incidence rewrite.
+  - The 400-mesh DOD structure microbenchmark stayed effectively flat on exact A/B, but the larger geometry workloads cleared the keep bar and improved the downstream kernels at the same time.

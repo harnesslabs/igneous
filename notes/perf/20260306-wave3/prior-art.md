@@ -11,6 +11,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Parallel upper-triangle assembly for generic form up-Laplacians; it preserved outputs and removed the serial bottleneck in the basis-pair sweep.
 - Parallelized/fused post-kNN diffusion-build passes while keeping the existing Eigen sparse symmetrization path; this is the accepted build optimization over the rejected direct CSR rewrite.
 - Hodge workspace gamma-cache reuse within a fixed mesh/eigenbasis state; if the workspace is reused across rebuilds, reset it explicitly first.
+- Stable block-prefix DEC face-incidence construction for large meshes; it preserves per-vertex face order while removing the large-mesh serial bottleneck.
 
 ## Do Not Repeat
 - Tightening Arnoldi subspace below the current accepted compact fallback.
@@ -23,6 +24,9 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Low-value curl-energy micro-tweaks that only move isolated kernels without pipeline wins.
 - Precomputing normalized symmetric-kernel CSR values during diffusion build; it improved isolated eigenbasis solves but failed the build-vs-pipeline trade.
 - Replacing the circular generalized solve with a cached mass-space standard solve; it only moved the phase at noise level and regressed the diffgeo pipeline.
+- Deflating the trivial normalized-kernel diffusion mode inside the symmetric Spectra path; it did not produce a clear, repeatable pipeline win.
+- Replacing the circular generalized eigensolver with the macOS Accelerate/CLAPACK path; it only moved the circular phase at noise level and added platform-specific complexity.
+- Batching the paired circular-operator assembly; it did not materially reduce the remaining circular phase.
 - The direct CSR symmetrization rewrite tested in Wave 3 improved some structure phases but regressed downstream spectral/pipeline behavior; do not reuse that exact formulation.
 - Treat the `4000/64` diffgeo torus eigensolve as a guard when changing diffusion build internals; the accepted post-kNN fusion pass already spends some of that headroom.
 
