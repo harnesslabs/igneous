@@ -941,3 +941,166 @@ Use one entry per optimization hypothesis.
 - Notes:
   - The key identity on the mean-centered path is that `Gamma(x, phi)` is a row-wise covariance under the Markov kernel, and the scalar weak Laplacian is `U^T diag(P^T b) U - (P U)^T diag(b) (P U)` with `b = mu / (2 * local_bandwidth)`.
   - This changed only the preparation path. The generalized eigensolve and circular mode-selection logic stayed unchanged, which is why the eigenbasis guard benchmarks remained flat while the circular phase collapsed.
+
+## 2026-03-06 Spectral Matvec Parallel Threshold
+- Timestamp: 2026-03-07T02:31:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_hodge_phase_eigenbasis`
+  - `bench_pipeline_hodge_main`
+  - `bench_pipeline_spectral_main`
+- Hypothesis:
+  - Lower the spectral CSR matvec parallel threshold from `8192` rows to `1024` so the 2503-point and 4000-point eigensolves stop running their `perform_op()` calls serially.
+- Files touched:
+  - `include/igneous/ops/diffusion/spectral.hpp`
+- Benchmark commands:
+  - Smoke only:
+    - `cmake --build build --target bench_pipelines bench_diffgeo test_ops_spectral_geometry test_ops_hodge test_ops_diffusion_forms test_ops_diffusion_wedge test_structure_diffusion_geometry igneous-hodge igneous-diffusion-geometry -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_hodge_phase_circular|bench_pipeline_diffusion_main' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_pipeline_diffusion_main/20`: `4.019 ms`
+  - `bench_pipeline_diffusion_main/100`: `5.685 ms`
+  - `bench_pipeline_spectral_main`: `36.193 ms`
+  - `bench_pipeline_hodge_main`: `184.869 ms`
+  - `bench_hodge_phase_eigenbasis`: `137.289 ms`
+  - `bench_hodge_phase_circular`: `4.154 ms`
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run
+- Test results:
+  - not run
+- Decision: `rejected`
+- Rejected because:
+  - The extra worker-pool overhead outweighed the saved scalar work at these matrix sizes, so the eigensolve-heavy paths regressed sharply instead of speeding up.
+- Notes:
+  - This confirms that the spectral bottleneck is not just “matvecs are accidentally serial”; the remaining cost is dominated by solver behavior and dense orthogonalization work, not by row-level CSR scheduling.
+
+## 2026-03-06 Global Spectral Tolerance Relaxation
+- Timestamp: 2026-03-07T02:34:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_pipeline_spectral_main`
+  - `bench_hodge_phase_eigenbasis`
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`
+- Hypothesis:
+  - Relax the Spectra convergence tolerance globally so the eigensolver stops oversolving far beyond single-precision accuracy.
+- Files touched:
+  - `include/igneous/ops/diffusion/spectral.hpp`
+- Benchmark commands:
+  - Smoke only:
+    - `cmake --build build --target bench_pipelines bench_diffgeo test_ops_spectral_geometry test_ops_hodge test_ops_diffusion_forms test_ops_diffusion_wedge test_structure_diffusion_geometry igneous-hodge igneous-diffusion-geometry -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_hodge_phase_circular|bench_pipeline_diffusion_main' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `tol = 1e-6`:
+    - `bench_pipeline_spectral_main`: `17.346 ms`
+    - `bench_pipeline_hodge_main`: `172.763 ms`
+    - `bench_hodge_phase_eigenbasis`: `125.463 ms`
+  - `tol = 1e-8`:
+    - `bench_pipeline_spectral_main`: `21.281 ms`
+    - `bench_pipeline_hodge_main`: `174.647 ms`
+    - `bench_hodge_phase_eigenbasis`: `126.335 ms`
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run
+- Test results:
+  - not run
+- Decision: `rejected`
+- Rejected because:
+  - A looser tolerance helps the 16-mode scalar spectral path, but it consistently regresses the 64-mode hodge eigensolve enough to fail the higher-priority guard.
+- Notes:
+  - The large-basis diffusion eigensolve needs the stricter convergence target, even though the smaller spectral path can tolerate a looser one.
+
+## 2026-03-06 Davidson Symmetric Eigensolver
+- Timestamp: 2026-03-07T02:36:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_hodge_phase_eigenbasis`
+  - `bench_pipeline_hodge_main`
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`
+- Hypothesis:
+  - Replace the large-basis symmetric normalized-kernel solve with Spectra's Davidson solver and a thin CSR adapter so the 64-mode eigensolve converges in fewer iterations than the current Lanczos path.
+- Files touched:
+  - `include/igneous/ops/diffusion/spectral.hpp`
+- Benchmark commands:
+  - Smoke only:
+    - `cmake --build build --target bench_pipelines bench_diffgeo test_ops_spectral_geometry test_ops_hodge test_ops_diffusion_forms test_ops_diffusion_wedge test_structure_diffusion_geometry igneous-hodge igneous-diffusion-geometry -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_hodge_phase_circular|bench_pipeline_diffusion_main' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - `bench_pipeline_diffusion_main/20`: `4.004 ms`
+  - `bench_pipeline_diffusion_main/100`: `5.669 ms`
+  - `bench_pipeline_spectral_main`: `23.791 ms`
+  - `bench_pipeline_hodge_main`: `607.561 ms`
+  - `bench_hodge_phase_eigenbasis`: `535.079 ms`
+  - `bench_hodge_phase_circular`: `4.170 ms`
+- Deep results:
+  - not run; rejected at smoke stage
+- App/runtime checks:
+  - not run
+- Test results:
+  - not run
+- Decision: `rejected`
+- Rejected because:
+  - Even with a direct CSR adapter for diagonal access and block products, the Davidson path was dramatically slower than the current symmetric Lanczos solver on the 64-mode target.
+- Notes:
+  - This closes off the obvious “new symmetric solver family” option available in the current Spectra package; the accepted path should stay on `SymEigsSolver`.
+
+## 2026-03-06 Small-Basis Spectral Tolerance Relaxation
+- Timestamp: 2026-03-07T02:39:50Z
+- Commit: `2a24aef`
+- Primary target:
+  - `bench_eigenbasis/2000/16`
+  - `bench_pipeline_spectral_main`
+- Hypothesis:
+  - Relax the Spectra convergence tolerance only for small-basis solves (`n_eigenvectors <= 16`), where the solver was oversolving relative to float precision, while keeping the existing strict tolerance on the 64-mode hodge/diffgeo guard path.
+- Files touched:
+  - `include/igneous/ops/diffusion/spectral.hpp`
+- Benchmark commands:
+  - Exact baseline on the reverted `a297d22` worktree:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_eigenbasis/2000/16' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_dod_small_spectral_tol_baseline_20260307-023644.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_hodge_phase_circular|bench_pipeline_diffusion_main' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_pipelines_eigen_parallel_baseline_20260307-022901.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_structure_build/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_diffgeo_eigen_parallel_baseline_20260307-022901.txt'`
+  - Candidate:
+    - `cmake --build build --target bench_dod bench_pipelines bench_diffgeo test_ops_spectral_geometry test_ops_hodge test_ops_diffusion_forms test_ops_diffusion_wedge test_structure_diffusion_geometry igneous-hodge igneous-diffusion-geometry -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_eigenbasis/2000/16' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_dod_small_spectral_tol_candidate_20260307-023622.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_spectral_main|bench_pipeline_hodge_main|bench_hodge_phase_eigenbasis|bench_pipeline_diffusion_main' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_pipelines_small_spectral_tol_candidate_20260307-023622.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true > 'notes/perf/20260306-wave3/results/bench_diffgeo_small_spectral_tol_candidate_20260307-023622.txt'`
+    - `ctest --test-dir build --output-on-failure -R 'test_structure_diffusion_geometry|test_ops_spectral_geometry|test_io_meshes|test_ops_hodge'`
+    - `ctest --test-dir build --output-on-failure -j8`
+- Smoke results:
+  - Initial mixed smoke:
+    - `bench_eigenbasis/2000/16`: `8.794 ms`
+    - `bench_pipeline_spectral_main`: `18.093 ms`
+    - `bench_pipeline_hodge_main`: `167.124 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `106.695 ms`
+  - Isolated hodge guard rerun before deep A/B:
+    - `bench_pipeline_hodge_main`: `166.755 ms`
+    - `bench_hodge_phase_eigenbasis`: `117.075 ms`
+- Deep results:
+  - Exact A/B artifacts:
+    - `notes/perf/20260306-wave3/results/bench_dod_small_spectral_tol_baseline_20260307-023644.txt`
+    - `notes/perf/20260306-wave3/results/bench_dod_small_spectral_tol_candidate_20260307-023622.txt`
+    - `notes/perf/20260306-wave3/results/bench_pipelines_eigen_parallel_baseline_20260307-022901.txt`
+    - `notes/perf/20260306-wave3/results/bench_pipelines_small_spectral_tol_candidate_20260307-023622.txt`
+    - `notes/perf/20260306-wave3/results/bench_diffgeo_eigen_parallel_baseline_20260307-022901.txt`
+    - `notes/perf/20260306-wave3/results/bench_diffgeo_small_spectral_tol_candidate_20260307-023622.txt`
+  - `bench_eigenbasis/2000/16`: `11.368 ms` -> `8.199 ms` CPU (`-27.88%`)
+  - `bench_pipeline_spectral_main`: `22.638 ms` -> `16.783 ms` CPU (`-25.86%`)
+  - `bench_pipeline_hodge_main`: `165.927 ms` -> `166.413 ms` CPU (`+0.29%`)
+  - `bench_hodge_phase_eigenbasis`: `117.285 ms` -> `117.205 ms` CPU (`-0.07%`)
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `147.701 ms` -> `147.002 ms` CPU (`-0.47%`)
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `106.773 ms` -> `106.752 ms` CPU (`-0.02%`)
+- App/runtime checks:
+  - not run; benchmark and test coverage was sufficient for this internal solver-policy change
+- Test results:
+  - `test_structure_diffusion_geometry`: pass
+  - `test_ops_spectral_geometry`: pass
+  - `test_io_meshes`: pass
+  - `test_ops_hodge`: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - The previous rejected global-tolerance passes showed that the 64-mode hodge/diffgeo solve really does need the stricter convergence target. Restricting the looser tolerance to the 16-mode path preserves the high-priority guards while reclaiming the wasted work in the scalar spectral pipeline.

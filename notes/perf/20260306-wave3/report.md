@@ -2,8 +2,8 @@
 
 ## Outcome
 - Status: active.
-- Current focus: diffusion eigenbasis time first, then remaining spectrum/reconstruction overhead.
-- Current branch head: `907b8ac`.
+- Current focus: large-basis diffusion eigenbasis time first, then remaining spectrum/reconstruction overhead.
+- Current branch head: `2a24aef`.
 
 ## Kept Improvements
 1. `2c56f6d` `perf(diffgeo): add wave3 harness and reuse form operators`
@@ -25,6 +25,8 @@
    - Replaced the large-mesh serial DEC face-incidence count/write passes with a stable block-prefix build that preserves per-vertex face order.
 9. `907b8ac` `perf(circular): matrixize workspace preparation`
    - Replaced the mean-centered circular workspace preparation sweeps with exact matrix formulas for `Gamma(x, phi)` and the scalar weak Laplacian.
+10. `2a24aef` `perf(spectral): loosen tolerance for small basis solves`
+   - Relaxed the Spectra convergence tolerance only for `n_eigenvectors <= 16`, cutting the scalar spectral path without moving the 64-mode hodge/diffgeo guards.
 
 ## Rejected Fronts
 - Normalized symmetric-kernel precompute during diffusion build.
@@ -42,6 +44,12 @@
   - Barely moved the circular phase and added an Apple-only code path.
 - Batched paired circular assembly.
   - Removed duplicated operator setup work on paper, but did not materially reduce the actual circular phase.
+- Lower spectral matvec parallel threshold.
+  - Forcing worker-pool parallelism inside the CSR matvec regressed the eigensolve-heavy paths.
+- Global spectral tolerance relaxation.
+  - Helped the 16-mode scalar spectral path but regressed the 64-mode hodge eigensolve.
+- Davidson symmetric eigensolver.
+  - The JD solver family was dramatically slower than the accepted symmetric Lanczos path on the 64-mode target.
 
 ## Final Headline Numbers
 Using the Wave 3 artifacts in this directory:
@@ -61,7 +69,9 @@ Using the Wave 3 artifacts in this directory:
 - Hodge eigenbasis phase:
   - Current head: `116.807 ms` CPU in `bench_pipelines_circularprep_candidate_20260306-192320.txt`
 - Spectral pipeline:
-  - Current head: `22.367 ms` in the current three-repetition rerank
+  - Current head: `16.783 ms` CPU in `bench_pipelines_small_spectral_tol_candidate_20260307-023622.txt`
+- Small spectral eigensolve:
+  - `bench_eigenbasis/2000/16`: `11.368 ms` -> `8.199 ms` CPU
 - App guard:
   - `igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`
   - Early Wave 3 head: `real 1.40`
@@ -87,7 +97,8 @@ Using the Wave 3 artifacts in this directory:
 - The high-confidence, behavior-preserving wins in diffusion build, generic form assembly, and Hodge gamma reuse have been taken.
 - Build-heavy workloads are no longer the main problem.
 - The matrix circular-prep rewrite removed the dominant remaining circular hotspot without changing solver behavior, which reset the hotspot ranking.
-- The main remaining shared cost is diffusion eigenbasis time; after that, the pipelines are mostly spectrum/reconstruction overhead rather than circular-coordinate assembly.
+- The small-basis spectral path still had oversolve headroom, and relaxing its convergence target reclaimed that without moving the higher-priority 64-mode guards.
+- The main remaining shared cost is still the large-basis diffusion eigenbasis solve; after that, the pipelines are mostly spectrum/reconstruction overhead rather than circular-coordinate assembly.
 - The new DEC face-incidence rewrite and the circular-prep rewrite both came from replacing large scalar sweeps with exact matrix formulations that preserve downstream behavior.
 
 ## Recommended Next Wave

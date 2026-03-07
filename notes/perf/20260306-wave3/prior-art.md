@@ -13,6 +13,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Hodge workspace gamma-cache reuse within a fixed mesh/eigenbasis state; if the workspace is reused across rebuilds, reset it explicitly first.
 - Stable block-prefix DEC face-incidence construction for large meshes; it preserves per-vertex face order while removing the large-mesh serial bottleneck.
 - Matrix-form circular workspace preparation on the mean-centered diffusion path; keep the exact covariance formulas for `Gamma(x, phi)` and the scalar weak Laplacian instead of reverting to pairwise scalar `carre_du_champ` sweeps.
+- Relaxed Spectra tolerance only for small-basis solves (`n_eigenvectors <= 16`); the 16-mode scalar spectral path benefits, but the 64-mode hodge/diffgeo guards should stay on the stricter convergence target.
 
 ## Do Not Repeat
 - Tightening Arnoldi subspace below the current accepted compact fallback.
@@ -30,6 +31,9 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Batching the paired circular-operator assembly; it did not materially reduce the remaining circular phase.
 - The direct CSR symmetrization rewrite tested in Wave 3 improved some structure phases but regressed downstream spectral/pipeline behavior; do not reuse that exact formulation.
 - Treat the `4000/64` diffgeo torus eigensolve as a guard when changing diffusion build internals; the accepted post-kNN fusion pass already spends some of that headroom.
+- Lowering the spectral CSR matvec parallel threshold to force parallel row sweeps at `n ~= 2k-4k`; the worker-pool overhead regressed the eigensolve-heavy paths.
+- Relaxing the Spectra tolerance globally on large-basis solves; it helps the 16-mode scalar spectral path but regresses the 64-mode hodge guard.
+- Replacing the symmetric normalized-kernel solver with Spectra's Davidson path; it remained much slower than the accepted Lanczos solver even with a direct CSR adapter.
 
 ## New Focus
 - Benchmark and optimize the generic k-form pipeline, which was added after most of the earlier perf work.
@@ -37,3 +41,4 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Remove exact recomputation before trying lower-level loop tuning.
 - Preserve the lazy normalized symmetric-kernel cache inside eigensolve; it is the accepted spectral improvement over the rejected build-time precompute.
 - Revisit diffusion build, circular solve internals, or non-diffusion geometry kernels only if they can beat the current head without shifting cost into downstream spectral behavior.
+- Treat the 16-mode scalar spectral path separately from the 64-mode hodge/diffgeo guard path when changing solver tolerances or policy.
