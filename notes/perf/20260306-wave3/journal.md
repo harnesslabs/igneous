@@ -1281,3 +1281,119 @@ Use one entry per optimization hypothesis.
   - The end-to-end diffgeo pipeline regressed and the operator-phase movement was too noisy to justify keeping a larger cache/matrixization rewrite.
 - Notes:
   - The accepted Hodge mixed-gamma matrixization did not carry over cleanly to the generic form workspace; the remaining diffgeo bottleneck is not simply the mixed-gamma cache fill.
+
+## Hypothesis: add diffgeo coverage to CI smoke and deep perf reports
+- Timestamp: 2026-03-07T15:30:00-07:00
+- Commit: `cf653c4`
+- Primary target:
+  - PR smoke/deep visibility for `bench_diffgeo`
+- Hypothesis:
+  - Add `bench_diffgeo` to the GitHub perf workflows and emit a fallback `not comparable` section when the baseline branch predates the target, so CI keeps showing the diffgeo torus timings instead of dropping them.
+- Files touched:
+  - `.github/workflows/perf-smoke.yml`
+  - `.github/workflows/perf-deep.yml`
+- Validation:
+  - Parsed both workflow YAML files locally.
+  - Simulated the baseline-missing-target path through `scripts/perf/compare_against_main.py` and verified that the generated markdown still emits current `bench_diffgeo` values.
+- Decision: `kept`
+- Notes:
+  - This is instrumentation only; it does not change runtime behavior.
+
+## Hypothesis: weighted coordinate seed for large-basis symmetric eigensolve
+- Timestamp: 2026-03-07T15:31:00-07:00
+- Commit: n/a
+- Primary target:
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`
+  - `bench_hodge_phase_eigenbasis`
+- Hypothesis:
+  - Keep the accepted symmetric Lanczos path but seed the large-basis solve with a row-sum-weighted coordinate vector to reduce restart time.
+- Files touched:
+  - `include/igneous/ops/diffusion/spectral.hpp`
+- Smoke results:
+  - `bench_eigenbasis/2000/16`: `8.422 ms` -> `8.455 ms`
+  - `bench_pipeline_spectral_main`: `17.435 ms` -> `17.815 ms`
+  - `bench_pipeline_hodge_main`: `148.242 ms` -> `164.046 ms`
+  - `bench_hodge_phase_eigenbasis`: `116.248 ms` -> `132.063 ms`
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `148.745 ms` -> `149.748 ms`
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `106.213 ms` -> `111.772 ms`
+- Decision: `rejected`
+- Rejected because:
+  - The actual 64-mode hodge/diffgeo guards regressed materially; the seed quality trade did not pay for the extra movement in restart/orthogonalization.
+
+## Hypothesis: avoid extra copies in CPU Markov multi-step path
+- Timestamp: 2026-03-07T15:32:00-07:00
+- Commit: n/a
+- Primary target:
+  - `bench_markov_multi_step/20000/20`
+  - `bench_pipeline_diffusion_main/100`
+- Hypothesis:
+  - Remove unnecessary whole-vector copies from repeated CPU Markov steps when the input/output buffers are already distinct.
+- Files touched:
+  - `include/igneous/ops/diffusion/geometry.hpp`
+- Smoke results:
+  - `bench_diffusion_build/2000`: `3.449 ms` -> `3.273 ms`
+  - `bench_markov_step/2000`: `16.169 us` -> `18.376 us`
+  - `bench_markov_multi_step/2000/20`: `329.497 us` -> `349.644 us`
+  - `bench_markov_multi_step/20000/20`: `4.356 ms` -> `4.142 ms`
+  - `bench_pipeline_diffusion_main/20`: `4.330 ms` -> `4.199 ms`
+  - `bench_pipeline_diffusion_main/100`: `5.344 ms` -> `5.793 ms`
+- Test results:
+  - `test_structure_diffusion_geometry`: pass
+- Decision: `rejected`
+- Rejected because:
+  - The copy-avoidance path only helped one large microbenchmark and regressed the higher-priority `/100` diffusion pipeline guard.
+
+## Hypothesis: short-circuit serial `parallel_for_index` before env/backend lookup
+- Timestamp: 2026-03-07T15:33:00-07:00
+- Commit: n/a
+- Primary target:
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`
+  - `bench_hodge_phase_eigenbasis`
+- Hypothesis:
+  - Skip the backend/env/thread discovery in `parallel_for_index` whenever the loop is already below the serial threshold, because sample traces showed that overhead inside the sparse eigensolve matvec/restart path.
+- Files touched:
+  - `include/igneous/core/parallel.hpp`
+- Profiling notes:
+  - `sample` on `bench_diffgeo_phase_eigenbasis/4000/64/32/32` showed most time in Spectra restart/lanczos code and Eigen dense matvecs, with smaller but visible `parallel_for_index` env/thread lookup overhead.
+- Smoke results:
+  - `bench_eigenbasis/2000/16`: `8.422 ms` -> `8.574 ms`
+  - `bench_pipeline_spectral_main`: `17.435 ms` -> `17.004 ms`
+  - `bench_pipeline_hodge_main`: `148.242 ms` -> `149.110 ms`
+  - `bench_hodge_phase_eigenbasis`: `116.248 ms` -> `114.631 ms`
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `148.745 ms` -> `155.672 ms`
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `106.213 ms` -> `108.934 ms`
+- Test results:
+  - `test_ops_spectral_geometry`: pass
+  - `test_ops_diffusion_forms`: pass
+  - `test_ops_hodge`: pass
+- Decision: `rejected`
+- Rejected because:
+  - The serial fast-path saved too little in the actual spectral hot loop and regressed the diffgeo eigensolve guard.
+
+## Hypothesis: DEC-specialized curvature kernel over direct SoA/CSR storage
+- Timestamp: 2026-03-07T15:34:00-07:00
+- Commit: pending
+- Primary target:
+  - `bench_curvature_kernel/400`
+  - `bench_geometry` `Grid 1000x1000`
+- Hypothesis:
+  - Specialize `compute_curvature_measures()` for `DiscreteExteriorCalculus` so it traverses `face_v*`, `vertex_face_*`, and `space.x/y/z` directly, removing repeated `get_vec3()` calls, generic face-corner dispatch, and temporary `Vec3` construction while preserving the same curvature formulas.
+- Files touched:
+  - `include/igneous/ops/dec/curvature.hpp`
+- Benchmark commands:
+  - `ctest --test-dir build --output-on-failure -R test_ops_curvature_flow`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_geometry | tee notes/perf/20260306-wave3/results/bench_geometry_dec_curvature_20260307-152340.txt`
+  - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_curvature_kernel/400|bench_flow_kernel/400|bench_mesh_structure_build/400|bench_markov_step/2000|bench_markov_multi_step/2000/20|bench_markov_multi_step/20000/20' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true | tee notes/perf/20260306-wave3/results/bench_dod_dec_curvature_20260307-152340.txt`
+  - `ctest --test-dir build --output-on-failure -j8`
+- Smoke results:
+  - `bench_curvature_kernel/400`: `888653 ns` -> `816836 ns` CPU (`-8.08%`)
+  - `bench_geometry` `Grid 1000x1000` curvature: `5.716 ms` -> `5.358 ms` (`-6.26%`)
+  - `bench_geometry` `Grid 1000x1000` structure: `14.516 ms` -> `13.661 ms` (`-5.89%`)
+  - `bench_flow_kernel/400`: `196297 ns` -> `195466 ns` CPU (`-0.42%`)
+  - `bench_markov_multi_step/20000/20`: `4.356 ms` -> `4.099 ms` (`-5.88%`, guard unchanged by unrelated variance)
+- Test results:
+  - `test_ops_curvature_flow`: pass
+  - full `ctest`: `14/14` pass
+- Decision: `kept`
+- Notes:
+  - The first single `bench_geometry` rerun was noisy on the 1e6-vertex case; follow-up repetitions settled in below the pre-change baseline, so the isolated DOD kernel and large-grid geometry guard both moved in the right direction.

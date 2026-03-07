@@ -44,6 +44,130 @@ void compute_curvature_measures(const data::Space<StructureT>& space, std::vecto
 
   workspace.face_normals.resize(num_faces);
 
+  if constexpr (std::is_same_v<StructureT, data::DiscreteExteriorCalculus>) {
+    const auto& x = space.x;
+    const auto& y = space.y;
+    const auto& z = space.z;
+    const auto& face_v0 = structure.face_v0;
+    const auto& face_v1 = structure.face_v1;
+    const auto& face_v2 = structure.face_v2;
+    const auto& vertex_face_offsets = structure.vertex_face_offsets;
+    const auto& vertex_face_data = structure.vertex_face_data;
+
+    core::parallel_for_index(
+        0, static_cast<int>(num_faces),
+        [&](int face_idx) {
+          const size_t f = static_cast<size_t>(face_idx);
+          const uint32_t i0 = face_v0[f];
+          const uint32_t i1 = face_v1[f];
+          const uint32_t i2 = face_v2[f];
+
+          const float e10x = x[i1] - x[i0];
+          const float e10y = y[i1] - y[i0];
+          const float e10z = z[i1] - z[i0];
+          const float e20x = x[i2] - x[i0];
+          const float e20y = y[i2] - y[i0];
+          const float e20z = z[i2] - z[i0];
+
+          workspace.face_normals[f] = {
+              e10x * e20y - e10y * e20x,
+              e10y * e20z - e10z * e20y,
+              e10z * e20x - e10x * e20z,
+          };
+        },
+        256);
+
+    core::parallel_for_index(
+        0, static_cast<int>(num_verts),
+        [&](int vertex_idx) {
+          const size_t i = static_cast<size_t>(vertex_idx);
+          const uint32_t begin = vertex_face_offsets[i];
+          const uint32_t end = vertex_face_offsets[i + 1];
+          if (begin == end) {
+            return;
+          }
+
+          float angle_sum = 0.0f;
+          float area_sum = 0.0f;
+
+          float n_xy = 0.0f;
+          float n_yz = 0.0f;
+          float n_zx = 0.0f;
+
+          float sum_x = 0.0f;
+          float sum_y = 0.0f;
+          float sum_z = 0.0f;
+
+          const float px = x[i];
+          const float py = y[i];
+          const float pz = z[i];
+
+          for (uint32_t idx = begin; idx < end; ++idx) {
+            const uint32_t f_idx = vertex_face_data[idx];
+            const core::Bivec3 fn = workspace.face_normals[f_idx];
+            n_xy += fn.xy;
+            n_yz += fn.yz;
+            n_zx += fn.zx;
+
+            const uint32_t i0 = face_v0[f_idx];
+            const uint32_t i1 = face_v1[f_idx];
+            const uint32_t i2 = face_v2[f_idx];
+
+            uint32_t a = i0;
+            uint32_t b = i1;
+            if (i0 == i) {
+              a = i1;
+              b = i2;
+            } else if (i1 == i) {
+              a = i2;
+              b = i0;
+            }
+
+            const float ux = x[a] - px;
+            const float uy = y[a] - py;
+            const float uz = z[a] - pz;
+            const float vx = x[b] - px;
+            const float vy = y[b] - py;
+            const float vz = z[b] - pz;
+
+            const float dot = ux * vx + uy * vy + uz * vz;
+            const float wedge_xy = ux * vy - uy * vx;
+            const float wedge_yz = uy * vz - uz * vy;
+            const float wedge_zx = uz * vx - ux * vz;
+            const float wedge_mag =
+                std::sqrt(wedge_xy * wedge_xy + wedge_yz * wedge_yz + wedge_zx * wedge_zx);
+
+            angle_sum += std::atan2(wedge_mag, dot);
+            area_sum += 0.5f * wedge_mag;
+
+            sum_x += x[a] + x[b];
+            sum_y += y[a] + y[b];
+            sum_z += z[a] + z[b];
+          }
+
+          if (area_sum > 1e-12f) {
+            K[i] = static_cast<float>((2.0 * std::numbers::pi_v<double> - angle_sum) /
+                                      (static_cast<double>(area_sum) / 3.0));
+          }
+
+          const float n_mag_sq = n_xy * n_xy + n_yz * n_yz + n_zx * n_zx;
+          const float n_inv = (n_mag_sq > 1e-12f) ? 1.0f / std::sqrt(n_mag_sq) : 0.0f;
+
+          const float normal_x = n_yz * n_inv;
+          const float normal_y = n_zx * n_inv;
+          const float normal_z = n_xy * n_inv;
+
+          const float inv_c = 0.5f / static_cast<float>(end - begin);
+          const float laplacian_x = sum_x * inv_c - px;
+          const float laplacian_y = sum_y * inv_c - py;
+          const float laplacian_z = sum_z * inv_c - pz;
+
+          H[i] = laplacian_x * normal_x + laplacian_y * normal_y + laplacian_z * normal_z;
+        },
+        128);
+    return;
+  }
+
   const auto get_face_vertex = [&](size_t face_idx, int corner) -> uint32_t {
     if constexpr (std::is_same_v<StructureT, data::DiscreteExteriorCalculus>) {
       if (corner == 0)
