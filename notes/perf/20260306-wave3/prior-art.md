@@ -8,6 +8,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Symmetric-kernel eigensolver path and current compact-plus-fallback Arnoldi policy.
 - Corrected generic k-form semantics from the diffusion-geometry parity work.
 - Shared circular-coordinate setup reuse within a single pipeline call; keep the existing mode ordering and selection semantics unchanged.
+- Parallel upper-triangle assembly for generic form up-Laplacians; it preserved outputs and removed the serial bottleneck in the basis-pair sweep.
 
 ## Do Not Repeat
 - Tightening Arnoldi subspace below the current accepted compact fallback.
@@ -18,9 +19,10 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Naive circular-coordinate cache reuse.
 - The rejected 1-form block-GEMM rewrite as-is.
 - Low-value curl-energy micro-tweaks that only move isolated kernels without pipeline wins.
+- Precomputing normalized symmetric-kernel CSR values during diffusion build; it improved isolated eigenbasis solves but failed the build-vs-pipeline trade.
 
 ## New Focus
 - Benchmark and optimize the generic k-form pipeline, which was added after most of the earlier perf work.
 - Reuse already-computed 1-form operators inside the 2-form path.
 - Remove exact recomputation before trying lower-level loop tuning.
-- Revisit `k2_up`, scalar diffusion eigenbasis, or diffusion build only if they remain dominant after the circular pass.
+- Revisit scalar diffusion eigenbasis or diffusion build only if they remain dominant after the circular and up-Laplacian passes.

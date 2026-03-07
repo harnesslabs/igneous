@@ -128,7 +128,7 @@ Use one entry per optimization hypothesis.
 
 ## 2026-03-06 Shared Circular Workspace + Dense X Operator
 - Timestamp: 2026-03-07T00:25:00Z
-- Commit: pending
+- Commit: `2810304`
 - Primary target:
   - `bench_diffgeo_phase_circular/4000/64/32/32`
   - `bench_diffgeo_pipeline/4000/64/32/32`
@@ -203,3 +203,118 @@ Use one entry per optimization hypothesis.
   - This keeps circular mode-selection semantics intact; the sort criteria and positive-imaginary mode selection are unchanged.
   - The remaining isolated `k2_up` regression is above `3%`, but it is not an equal-or-higher-priority benchmark for this hypothesis, while both end-to-end pipelines improved materially.
   - The `1000`-point circular phase dropped sharply because the dense `X_op` contraction removed the fixed per-call setup cost that dominated the smaller problem.
+
+## 2026-03-06 Normalized Symmetric-Kernel Precompute
+- Timestamp: 2026-03-07T00:33:00Z
+- Commit: n/a
+- Primary target:
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`
+  - `bench_hodge_phase_eigenbasis`
+  - `bench_eigenbasis/2000/16`
+- Hypothesis:
+  - Precompute the normalized symmetric-kernel CSR values during diffusion build so the eigensolver runs against a plain symmetric operator instead of applying row-normalization inside every matvec.
+- Files touched:
+  - `include/igneous/data/structures/diffusion_geometry.hpp`
+  - `include/igneous/ops/diffusion/spectral.hpp`
+- Benchmark commands:
+  - Candidate worktree:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_structure_build/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_hodge_main|bench_hodge_phase_structure_build|bench_hodge_phase_eigenbasis|bench_hodge_phase_circular' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000|bench_eigenbasis/2000/16' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - Baseline worktree:
+    - `git worktree add --detach /tmp/igneous-wave3-eig-2810304-172915 2810304`
+    - `cmake -S /tmp/igneous-wave3-eig-2810304-172915 -B /tmp/igneous-wave3-eig-2810304-172915/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=/opt/homebrew/bin/ninja -DCMAKE_TOOLCHAIN_FILE=/Users/autoparallel/vcpkg/scripts/buildsystems/vcpkg.cmake`
+    - `cmake --build /tmp/igneous-wave3-eig-2810304-172915/build -j8 --target bench_diffgeo bench_pipelines bench_dod`
+    - same benchmark filters against `/tmp/igneous-wave3-eig-2810304-172915/build/*`
+- Smoke results:
+  - Candidate:
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `600.634 ms` CPU
+    - `bench_diffgeo_phase_structure_build/4000/64/32/32`: `34.492 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `103.127 ms`
+    - `bench_hodge_phase_eigenbasis`: `117.290 ms`
+    - `bench_pipeline_hodge_main`: `469.732 ms`
+    - `bench_diffusion_build/2000`: `18.172 ms`
+    - `bench_eigenbasis/2000/16`: `11.729 ms`
+- Deep results:
+  - Baseline artifacts copied under `results/eigenbasis_precompute_baseline_*_20260306-172915.txt`
+  - Candidate snapshot copied under `results/eigenbasis_precompute_candidate_20260306-172915.md`
+  - Exact A/B against commit `2810304`:
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `598.600 ms` -> `598.738 ms` (`+0.02%`)
+    - `bench_diffgeo_phase_structure_build/4000/64/32/32`: `34.139 ms` -> `34.983 ms` (`+2.47%`)
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `114.823 ms` -> `102.576 ms` (`-10.67%`)
+    - `bench_hodge_phase_eigenbasis`: `127.735 ms` -> `117.831 ms` (`-7.75%`)
+    - `bench_pipeline_hodge_main`: `469.551 ms` -> `465.402 ms` (`-0.88%`)
+    - `bench_diffusion_build/2000`: `17.176 ms` -> `18.172 ms` (`+5.80%`)
+    - `bench_eigenbasis/2000/16`: `14.252 ms` -> `11.729 ms` (`-17.70%`)
+- App/runtime checks:
+  - not run; the benchmark gate was sufficient to reject
+- Test results:
+  - not run; rejected before correctness gating
+- Decision: `rejected`
+- Rejected because:
+  - The isolated eigenbasis kernel improved, but the exact A/B showed no meaningful diffgeo pipeline gain and `bench_diffusion_build/2000` regressed by more than `3%`, so the change failed the campaign keep threshold.
+- Notes:
+  - This result suggests that moving normalization work from the operator into build can pay on the eigensolver microbenchmark while still losing the end-to-end trade once build cost is accounted for.
+
+## 2026-03-06 Parallel Upper-Triangle Up-Laplacian Assembly
+- Timestamp: 2026-03-07T00:38:00Z
+- Commit: pending
+- Primary target:
+  - `bench_diffgeo_phase_k2_up/4000/64/32/32`
+  - `bench_diffgeo_phase_k1_up/4000/64/32/32`
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+- Hypothesis:
+  - The generic up-Laplacian assembly is still serial over the `(i,l)` basis-pair sweep. Filling only the upper triangle in parallel and materializing the symmetric matrix at the end should preserve exact values while finally using the worker pool on the dominant remaining 1-form and 2-form up terms.
+- Files touched:
+  - `include/igneous/ops/diffusion/forms.hpp`
+- Benchmark commands:
+  - Smoke:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/1000/50/32/32|bench_diffgeo_phase_k1_up/1000/50/32/32|bench_diffgeo_phase_k2_up/1000/50/32/32|bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_k1_up/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.05s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true`
+  - Recorded deep artifacts:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/1000/50/32/32|bench_diffgeo_phase_k1_up/1000/50/32/32|bench_diffgeo_phase_k2_up/1000/50/32/32|bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_k1_up/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_diffgeo_up_parallel_20260306-173505.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_diffgeo_up_parallel_20260306-173505.txt'`
+  - App/runtime:
+    - `/usr/bin/time -p ./build/igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`
+  - Tests:
+    - `ctest --test-dir build --output-on-failure -R 'test_ops_diffusion_forms|test_ops_diffusion_wedge|test_diffgeo_cli_outputs'`
+    - `ctest --test-dir build --output-on-failure -j8`
+- Smoke results:
+  - Baseline head before the patch from `results/bench_diffgeo_circular_20260306-172407.txt` and `results/bench_diffgeo_20260306-171657.txt`:
+    - `bench_diffgeo_pipeline/1000/50/32/32`: `114.638 ms` CPU
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `609.250 ms`
+    - `bench_diffgeo_phase_k1_up/1000/50/32/32`: `18.575 ms`
+    - `bench_diffgeo_phase_k1_up/4000/64/32/32`: `73.024 ms`
+    - `bench_diffgeo_phase_k2_up/1000/50/32/32`: `23.456 ms`
+    - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `102.051 ms`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `118.593 ms`
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `274.345 ms`
+  - Current patch smoke:
+    - `bench_diffgeo_pipeline/1000/50/32/32`: `75.445 ms` (`-34.19%`)
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `446.456 ms` (`-26.72%`)
+    - `bench_diffgeo_phase_k1_up/1000/50/32/32`: `1.755 ms` (`-90.55%`)
+    - `bench_diffgeo_phase_k1_up/4000/64/32/32`: `6.848 ms` (`-90.62%`)
+    - `bench_diffgeo_phase_k2_up/1000/50/32/32`: `2.229 ms` (`-90.50%`)
+    - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `9.249 ms` (`-90.94%`)
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `116.945 ms` (`-1.39%`)
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `268.028 ms` (`-2.30%`)
+- Deep results:
+  - Recorded artifacts: `results/bench_diffgeo_up_parallel_20260306-173505.{txt,json}`
+  - `bench_diffgeo_pipeline/1000/50/32/32`: `73.999 ms` CPU (`-35.45%` vs baseline head)
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `444.296 ms` (`-27.08%`)
+  - `bench_diffgeo_phase_k1_up/1000/50/32/32`: `1.739 ms` (`-90.64%`)
+  - `bench_diffgeo_phase_k1_up/4000/64/32/32`: `6.498 ms` (`-91.10%`)
+  - `bench_diffgeo_phase_k2_up/1000/50/32/32`: `2.160 ms` (`-90.79%`)
+  - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `8.692 ms` (`-91.48%`)
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `114.250 ms` (`-3.66%`)
+  - `bench_diffgeo_phase_circular/4000/64/32/32`: `272.185 ms` (`-0.79%`)
+- App/runtime checks:
+  - Head before patch: `real 0.24`, `user 0.21`, `sys 0.01`
+  - Current patch: `real 0.13`, `user 0.24`, `sys 0.01`
+- Test results:
+  - Targeted diffgeo suite: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - The large win came from parallelizing the basis-pair sweep without introducing races: only the upper triangle is assembled in parallel, then reflected through `selfadjointView<Eigen::Upper>()`.
+  - This is an exact implementation change; no operator math changed, and the existing diffgeo tests continued to pass.

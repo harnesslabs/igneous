@@ -616,76 +616,75 @@ Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT& mesh, int k, int n_coef
 
   if (k == 0) {
     Eigen::MatrixXf L = Eigen::MatrixXf::Zero(n1, n1);
-    for (int i = 0; i < n1; ++i) {
-      for (int l = i; l < n1; ++l) {
-        workspace.gamma_tmp.resize(n);
-        carre_du_champ(mesh, U.col(i), U.col(l), 0.0f, workspace.gamma_tmp);
-        const float val = (workspace.gamma_tmp.array() * mu.array()).sum();
-        L(i, l) = val;
-        if (i != l) {
-          L(l, i) = val;
-        }
-      }
-    }
-    return L;
+    core::parallel_for_index(
+        0, n1,
+        [&](int i) {
+          Eigen::VectorXf gamma_local(n);
+          for (int l = i; l < n1; ++l) {
+            carre_du_champ(mesh, U.col(i), U.col(l), 0.0f, gamma_local);
+            L(i, l) = (gamma_local.array() * mu.array()).sum();
+          }
+        },
+        4);
+    return Eigen::MatrixXf(L.selfadjointView<Eigen::Upper>());
   }
 
   const auto compounds = compute_compound_determinants(mesh, k, workspace);
   const int Ck = compounds.n_components;
   Eigen::MatrixXf L = Eigen::MatrixXf::Zero(n1 * Ck, n1 * Ck);
 
-  for (int i = 0; i < n1; ++i) {
-    for (int l = i; l < n1; ++l) {
-      workspace.gamma_tmp.resize(n);
-      carre_du_champ(mesh, U.col(i), U.col(l), 0.0f, workspace.gamma_tmp);
+  core::parallel_for_index(
+      0, n1,
+      [&](int i) {
+        Eigen::VectorXf gamma_local(n);
+        for (int l = i; l < n1; ++l) {
+          carre_du_champ(mesh, U.col(i), U.col(l), 0.0f, gamma_local);
 
-      for (int J = 0; J < Ck; ++J) {
-        for (int K = 0; K < Ck; ++K) {
-          float val = 0.0f;
-          if (k == 1) {
-            const auto& gJK = workspace.gamma_coords[J][K];
-            const Eigen::ArrayXf term =
-                (workspace.gamma_tmp.array() * gJK.array()) -
-                (workspace.gamma_mixed[K].col(i).array() * workspace.gamma_mixed[J].col(l).array());
-            val = (term * mu.array()).sum();
-          } else {
-            const auto& row_combo = compounds.indices[static_cast<size_t>(J)];
-            const auto& col_combo = compounds.indices[static_cast<size_t>(K)];
-            for (int p = 0; p < n; ++p) {
-              const float a = workspace.gamma_coords[row_combo[0]][col_combo[0]][p];
-              const float b = workspace.gamma_coords[row_combo[0]][col_combo[1]][p];
-              const float c = workspace.gamma_coords[row_combo[1]][col_combo[0]][p];
-              const float d = workspace.gamma_coords[row_combo[1]][col_combo[1]][p];
-              const float detD = a * d - b * c;
+          for (int J = 0; J < Ck; ++J) {
+            const int k_begin = (i == l) ? J : 0;
+            for (int K = k_begin; K < Ck; ++K) {
+              float val = 0.0f;
+              if (k == 1) {
+                const auto& gJK = workspace.gamma_coords[J][K];
+                const Eigen::ArrayXf term =
+                    (gamma_local.array() * gJK.array()) -
+                    (workspace.gamma_mixed[K].col(i).array() *
+                     workspace.gamma_mixed[J].col(l).array());
+                val = (term * mu.array()).sum();
+              } else {
+                const auto& row_combo = compounds.indices[static_cast<size_t>(J)];
+                const auto& col_combo = compounds.indices[static_cast<size_t>(K)];
+                for (int p = 0; p < n; ++p) {
+                  const float a = workspace.gamma_coords[row_combo[0]][col_combo[0]][p];
+                  const float b = workspace.gamma_coords[row_combo[0]][col_combo[1]][p];
+                  const float c = workspace.gamma_coords[row_combo[1]][col_combo[0]][p];
+                  const float d = workspace.gamma_coords[row_combo[1]][col_combo[1]][p];
+                  const float detD = a * d - b * c;
 
-              float det_bDv = 0.0f;
-              if (std::abs(detD) > 1e-8f) {
-                const float c0 = workspace.gamma_mixed[row_combo[0]](p, l);
-                const float c1 = workspace.gamma_mixed[row_combo[1]](p, l);
-                const float b0 = workspace.gamma_mixed[col_combo[0]](p, i);
-                const float b1 = workspace.gamma_mixed[col_combo[1]](p, i);
+                  float det_bDv = 0.0f;
+                  if (std::abs(detD) > 1e-8f) {
+                    const float c0 = workspace.gamma_mixed[row_combo[0]](p, l);
+                    const float c1 = workspace.gamma_mixed[row_combo[1]](p, l);
+                    const float b0 = workspace.gamma_mixed[col_combo[0]](p, i);
+                    const float b1 = workspace.gamma_mixed[col_combo[1]](p, i);
 
-                const float adj_c0 = d * c0 - b * c1;
-                const float adj_c1 = -c * c0 + a * c1;
-                det_bDv = (b0 * adj_c0) + (b1 * adj_c1);
+                    const float adj_c0 = d * c0 - b * c1;
+                    const float adj_c1 = -c * c0 + a * c1;
+                    det_bDv = (b0 * adj_c0) + (b1 * adj_c1);
+                  }
+
+                  val += mu[p] * ((detD * gamma_local[p]) - det_bDv);
+                }
               }
 
-              val += mu[p] * ((detD * workspace.gamma_tmp[p]) - det_bDv);
+              L(i * Ck + J, l * Ck + K) = val;
             }
           }
-
-          const int row = i * Ck + J;
-          const int col = l * Ck + K;
-          L(row, col) = val;
-          if (row != col) {
-            L(col, row) = val;
-          }
         }
-      }
-    }
-  }
+      },
+      4);
 
-  return L;
+  return Eigen::MatrixXf(L.selfadjointView<Eigen::Upper>());
 }
 
 /**
