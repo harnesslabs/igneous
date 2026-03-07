@@ -514,6 +514,11 @@ inline Eigen::MatrixXf compute_hodge_laplacian_matrix(const Eigen::MatrixXf& D_w
 inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
 compute_hodge_spectrum(const Eigen::MatrixXf& laplacian, const Eigen::MatrixXf& mass_matrix,
                        float rcond = 1e-5f) {
+  auto fast = try_generalized_spectrum_cholesky(laplacian, mass_matrix);
+  if (fast.first.size() != 0 && fast.second.cols() != 0) {
+    return fast;
+  }
+
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> mass_solver(mass_matrix);
   if (mass_solver.info() != Eigen::Success) {
     return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());

@@ -750,6 +750,36 @@ inline Eigen::MatrixXf assemble_hodge_laplacian_matrix(const Eigen::MatrixXf& up
 }
 
 /**
+ * \brief Try a direct Cholesky whitening path for dense generalized spectra.
+ * \param laplacian Symmetric operator matrix.
+ * \param mass_matrix Symmetric positive-definite mass matrix.
+ * \return Pair `(eigenvalues, eigenvectors)`, or empty matrices on failure.
+ */
+inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
+try_generalized_spectrum_cholesky(const Eigen::MatrixXf& laplacian,
+                                  const Eigen::MatrixXf& mass_matrix) {
+  if (laplacian.rows() == 0 || laplacian.rows() != laplacian.cols() ||
+      mass_matrix.rows() != mass_matrix.cols() || laplacian.rows() != mass_matrix.rows()) {
+    return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
+  }
+
+  Eigen::LLT<Eigen::MatrixXf> mass_chol(mass_matrix);
+  if (mass_chol.info() != Eigen::Success) {
+    return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
+  }
+
+  Eigen::MatrixXf phi =
+      mass_chol.matrixU().solve(Eigen::MatrixXf::Identity(mass_matrix.rows(), mass_matrix.cols()));
+  const Eigen::MatrixXf restricted = phi.transpose() * laplacian * phi;
+  Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> solver(restricted);
+  if (solver.info() != Eigen::Success) {
+    return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
+  }
+
+  return std::make_pair(solver.eigenvalues(), phi * solver.eigenvectors());
+}
+
+/**
  * \brief Solve generalized eigenproblem for form Laplacian and mass matrix.
  * \param laplacian Form Laplacian matrix.
  * \param mass_matrix Form mass matrix.
@@ -759,6 +789,11 @@ inline Eigen::MatrixXf assemble_hodge_laplacian_matrix(const Eigen::MatrixXf& up
 inline std::pair<Eigen::VectorXf, Eigen::MatrixXf>
 compute_form_spectrum(const Eigen::MatrixXf& laplacian, const Eigen::MatrixXf& mass_matrix,
                       float rcond = 1e-5f) {
+  auto fast = try_generalized_spectrum_cholesky(laplacian, mass_matrix);
+  if (fast.first.size() != 0 && fast.second.cols() != 0) {
+    return fast;
+  }
+
   Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> mass_solver(mass_matrix);
   if (mass_solver.info() != Eigen::Success) {
     return std::make_pair(Eigen::VectorXf(), Eigen::MatrixXf());
