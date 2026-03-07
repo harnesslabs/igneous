@@ -362,7 +362,6 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, int k, int n
   }
 
   const auto& U = mesh.structure.eigen_basis;
-  const auto& mu = mesh.structure.mu;
   const int n1 = std::max(1, std::min(n_coefficients, static_cast<int>(U.cols())));
   ensure_gamma_mixed(mesh, n1, workspace);
 
@@ -383,27 +382,26 @@ Eigen::MatrixXf compute_weak_exterior_derivative(const MeshT& mesh, int k, int n
   const auto compounds = compute_compound_determinants(mesh, k, workspace);
   const int Ck = static_cast<int>(kp1.idx_k.size());
   const int Ckp1 = static_cast<int>(kp1.idx_kp1.size());
+  ensure_weighted_u(mesh, n1, workspace);
 
   Eigen::MatrixXf D = Eigen::MatrixXf::Zero(n1 * Ckp1, n1 * Ck);
-  const int n = static_cast<int>(mesh.num_points());
+  for (int Jp = 0; Jp < Ckp1; ++Jp) {
+    for (int J = 0; J < Ck; ++J) {
+      Eigen::MatrixXf coupling = Eigen::MatrixXf::Zero(n1, n1);
 
-  for (int I = 0; I < n1; ++I) {
-    for (int i = 0; i < n1; ++i) {
-      for (int Jp = 0; Jp < Ckp1; ++Jp) {
-        for (int J = 0; J < Ck; ++J) {
-          float accum = 0.0f;
-          for (int p = 0; p < n; ++p) {
-            float laplace_sum = 0.0f;
-            for (int r = 0; r < k + 1; ++r) {
-              const int coord_dim = kp1.idx_kp1[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
-              const int child_idx = kp1.children[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
-              const auto& minor_det = compounds.values[static_cast<size_t>(child_idx * Ck + J)];
-              laplace_sum += static_cast<float>(kp1.signs[static_cast<size_t>(r)]) *
-                             workspace.gamma_mixed[coord_dim](p, i) * minor_det[p];
-            }
-            accum += U(p, I) * laplace_sum * mu[p];
-          }
-          D(I * Ckp1 + Jp, i * Ck + J) = accum;
+      for (int r = 0; r < k + 1; ++r) {
+        const int coord_dim = kp1.idx_kp1[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
+        const int child_idx = kp1.children[static_cast<size_t>(Jp)][static_cast<size_t>(r)];
+        const auto& minor_det = compounds.values[static_cast<size_t>(child_idx * Ck + J)];
+        const Eigen::MatrixXf scaled =
+            workspace.gamma_mixed[coord_dim].array().colwise() * minor_det.array();
+        coupling.noalias() += static_cast<float>(kp1.signs[static_cast<size_t>(r)]) *
+                              (workspace.weighted_u.transpose() * scaled);
+      }
+
+      for (int I = 0; I < n1; ++I) {
+        for (int i = 0; i < n1; ++i) {
+          D(I * Ckp1 + Jp, i * Ck + J) = coupling(I, i);
         }
       }
     }

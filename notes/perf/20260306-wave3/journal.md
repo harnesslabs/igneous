@@ -71,3 +71,57 @@ Use one entry per optimization hypothesis.
 - Notes:
   - `bench_diffgeo_phase_k2_down` now intentionally measures the reused hot stage after 1-form operators are available, which better matches the actual pipeline reuse target.
   - The biggest remaining diffgeo hotspot is now circular-coordinate assembly, followed by eigenbasis and the 2-form up-Laplacian.
+
+## 2026-03-06 Diffgeo Dense Block Weak-Derivative Assembly
+- Timestamp: 2026-03-07T00:16:00Z
+- Commit: pending
+- Primary target:
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+  - `bench_diffgeo_pipeline/1000/50/32/32`
+- Hypothesis:
+  - Replace the generic k-form weak-derivative scalar nesting with dense block couplings over `weighted_u`, `gamma_mixed`, and precomputed minors so the 1-form derivative feeding the diffgeo pipeline is assembled with matrix multiplies instead of repeated per-point scalar accumulation.
+- Files touched:
+  - `include/igneous/ops/diffusion/forms.hpp`
+- Benchmark commands:
+  - Current worktree:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/1000/50/32/32|bench_diffgeo_phase_k1_down/1000/50/32/32|bench_diffgeo_phase_k2_down/1000/50/32/32|bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_k1_down/4000/64/32/32|bench_diffgeo_phase_k2_down/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32' --benchmark_min_time=0.02s --benchmark_repetitions=3 --benchmark_report_aggregates_only=true`
+  - Baseline worktree:
+    - `git worktree add --detach /tmp/igneous-wave3-compare 2c56f6d`
+    - `cmake -S /tmp/igneous-wave3-compare -B /tmp/igneous-wave3-compare/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=/opt/homebrew/bin/ninja -DCMAKE_TOOLCHAIN_FILE=/Users/autoparallel/vcpkg/scripts/buildsystems/vcpkg.cmake`
+    - `cmake --build /tmp/igneous-wave3-compare/build -j8 --target bench_diffgeo`
+    - `IGNEOUS_BENCH_MODE=1 /tmp/igneous-wave3-compare/build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/1000/50/32/32|bench_diffgeo_phase_k1_down/1000/50/32/32|bench_diffgeo_phase_k2_down/1000/50/32/32|bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_k1_down/4000/64/32/32|bench_diffgeo_phase_k2_down/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32' --benchmark_min_time=0.02s --benchmark_repetitions=3 --benchmark_report_aggregates_only=true`
+- Smoke results:
+  - Baseline commit `2c56f6d`:
+    - `bench_diffgeo_pipeline/1000/50/32/32`: `169.400 ms` CPU
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `922.146 ms`
+    - `bench_diffgeo_phase_k1_down/1000/50/32/32`: `83.330 us`
+    - `bench_diffgeo_phase_k1_down/4000/64/32/32`: `319.333 us`
+    - `bench_diffgeo_phase_k2_down/1000/50/32/32`: `35.993 us`
+    - `bench_diffgeo_phase_k2_down/4000/64/32/32`: `36.185 us`
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `114.302 ms`
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `534.145 ms`
+    - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `99.029 ms`
+  - Current patch:
+    - `bench_diffgeo_pipeline/1000/50/32/32`: `158.428 ms` (`-6.48%`)
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `866.611 ms` (`-6.02%`)
+    - `bench_diffgeo_phase_k1_down/1000/50/32/32`: `80.862 us` (`-2.96%`)
+    - `bench_diffgeo_phase_k1_down/4000/64/32/32`: `319.353 us` (`+0.01%`)
+    - `bench_diffgeo_phase_k2_down/1000/50/32/32`: `36.210 us` (`+0.60%`)
+    - `bench_diffgeo_phase_k2_down/4000/64/32/32`: `36.533 us` (`+0.96%`)
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `114.569 ms` (`+0.23%`)
+    - `bench_diffgeo_phase_circular/4000/64/32/32`: `544.763 ms` (`+1.99%`)
+    - `bench_diffgeo_phase_k2_up/4000/64/32/32`: `103.419 ms` (`+4.43%`)
+- Deep results:
+  - not yet captured; next wave step should run the deep suite from the Wave 3 notes directory after this commit
+- App/runtime checks:
+  - baseline app timing from the first kept pass: `real 1.40`
+  - current `igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`: `real 0.27`, `user 0.26`, `sys 0.01`
+- Test results:
+  - targeted diffgeo checks: pass
+  - full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - The isolated `k2_up` regression stayed below the threshold for an equal-or-higher-priority benchmark because the primary end-to-end pipeline target improved by about `6%` on both benchmark sizes and the app-level runtime dropped materially.
+  - This patch should be followed by a focused `k2_up` / circular pass, since those are now the dominant remaining diffgeo costs.
