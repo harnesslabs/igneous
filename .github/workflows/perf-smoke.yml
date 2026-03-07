@@ -92,7 +92,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
             -DVCPKG_TARGET_TRIPLET=x64-linux
-          cmake --build build-release --parallel --target bench_geometry bench_dod bench_pipelines
+          cmake --build build-release --parallel --target bench_geometry bench_dod bench_pipelines bench_diffgeo
 
       - name: Run head smoke benchmarks
         shell: bash
@@ -116,6 +116,14 @@ jobs:
             --benchmark_report_aggregates_only=true \
             --benchmark_out=artifacts/perf/head/bench_pipelines_head.json \
             --benchmark_out_format=json > artifacts/perf/head/bench_pipelines_head.txt
+
+          ./build-release/bench_diffgeo \
+            --benchmark_filter='bench_diffgeo_pipeline/1000/50/32/32|bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_structure_build/1000/50/32/32|bench_diffgeo_phase_structure_build/4000/64/32/32|bench_diffgeo_phase_eigenbasis/1000/50/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_circular/1000/50/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_k1_up/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32' \
+            --benchmark_min_time=0.05s \
+            --benchmark_repetitions=5 \
+            --benchmark_report_aggregates_only=true \
+            --benchmark_out=artifacts/perf/head/bench_diffgeo_head.json \
+            --benchmark_out_format=json > artifacts/perf/head/bench_diffgeo_head.txt
 
       - name: Build and run baseline smoke benchmarks
         shell: bash
@@ -153,6 +161,18 @@ jobs:
               --benchmark_out_format=json > artifacts/perf/base/bench_pipelines_base.txt
           else
             echo "bench_pipelines target not available on baseline ${{ steps.baseline.outputs.base_sha }}" > artifacts/perf/base/bench_pipelines_base.txt
+          fi
+
+          if cmake --build baseline/build-release --parallel --target bench_diffgeo; then
+            ./baseline/build-release/bench_diffgeo \
+              --benchmark_filter='bench_diffgeo_pipeline/1000/50/32/32|bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_structure_build/1000/50/32/32|bench_diffgeo_phase_structure_build/4000/64/32/32|bench_diffgeo_phase_eigenbasis/1000/50/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32|bench_diffgeo_phase_circular/1000/50/32/32|bench_diffgeo_phase_circular/4000/64/32/32|bench_diffgeo_phase_k1_up/4000/64/32/32|bench_diffgeo_phase_k2_up/4000/64/32/32' \
+              --benchmark_min_time=0.05s \
+              --benchmark_repetitions=5 \
+              --benchmark_report_aggregates_only=true \
+              --benchmark_out=artifacts/perf/base/bench_diffgeo_base.json \
+              --benchmark_out_format=json > artifacts/perf/base/bench_diffgeo_base.txt
+          else
+            echo "bench_diffgeo target not available on baseline ${{ steps.baseline.outputs.base_sha }}" > artifacts/perf/base/bench_diffgeo_base.txt
           fi
 
       - name: Compare benchmark deltas
@@ -216,6 +236,24 @@ jobs:
               > artifacts/perf/reports/bench_pipelines_smoke.json
           fi
 
+          if [[ -s artifacts/perf/base/bench_diffgeo_base.json ]]; then
+            python3 scripts/perf/compare_against_main.py \
+              --baseline artifacts/perf/base/bench_diffgeo_base.json \
+              --current artifacts/perf/head/bench_diffgeo_head.json \
+              --baseline-commit "${{ steps.baseline.outputs.base_sha }}" \
+              --label "PR smoke: bench_diffgeo (baseline ${{ steps.baseline.outputs.base_sha }})" \
+              --output-markdown artifacts/perf/reports/bench_diffgeo_smoke.md \
+              --output-json artifacts/perf/reports/bench_diffgeo_smoke.json
+          else
+            python3 scripts/perf/compare_against_main.py \
+              --baseline artifacts/perf/base/bench_diffgeo_base.txt \
+              --current artifacts/perf/head/bench_diffgeo_head.json \
+              --baseline-commit "${{ steps.baseline.outputs.base_sha }}" \
+              --label "PR smoke: bench_diffgeo (baseline ${{ steps.baseline.outputs.base_sha }})" \
+              --output-markdown artifacts/perf/reports/bench_diffgeo_smoke.md \
+              --output-json artifacts/perf/reports/bench_diffgeo_smoke.json
+          fi
+
           {
             echo "# Perf Smoke Report"
             echo
@@ -229,6 +267,8 @@ jobs:
             cat artifacts/perf/reports/bench_dod_smoke.md
             echo
             cat artifacts/perf/reports/bench_pipelines_smoke.md
+            echo
+            cat artifacts/perf/reports/bench_diffgeo_smoke.md
           } > artifacts/perf/reports/smoke-summary.md
 
       - name: Publish job summary
