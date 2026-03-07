@@ -9,6 +9,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Corrected generic k-form semantics from the diffusion-geometry parity work.
 - Shared circular-coordinate setup reuse within a single pipeline call; keep the existing mode ordering and selection semantics unchanged.
 - Parallel upper-triangle assembly for generic form up-Laplacians; it preserved outputs and removed the serial bottleneck in the basis-pair sweep.
+- Parallelized/fused post-kNN diffusion-build passes while keeping the existing Eigen sparse symmetrization path; this is the accepted build optimization over the rejected direct CSR rewrite.
 
 ## Do Not Repeat
 - Tightening Arnoldi subspace below the current accepted compact fallback.
@@ -22,6 +23,7 @@ This campaign should build on previous accepted optimizations and avoid repeatin
 - Precomputing normalized symmetric-kernel CSR values during diffusion build; it improved isolated eigenbasis solves but failed the build-vs-pipeline trade.
 - Replacing the circular generalized solve with a cached mass-space standard solve; it only moved the phase at noise level and regressed the diffgeo pipeline.
 - The direct CSR symmetrization rewrite tested in Wave 3 improved some structure phases but regressed downstream spectral/pipeline behavior; do not reuse that exact formulation.
+- Treat the `4000/64` diffgeo torus eigensolve as a guard when changing diffusion build internals; the accepted post-kNN fusion pass already spends some of that headroom.
 
 ## New Focus
 - Benchmark and optimize the generic k-form pipeline, which was added after most of the earlier perf work.

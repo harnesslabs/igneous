@@ -462,3 +462,69 @@ Use one entry per optimization hypothesis.
 - Notes:
   - This keeps the existing symmetric-kernel eigensolver policy and only removes repeated row-normalization work inside the operator.
   - The small build regression stayed below the campaign guard while the primary eigenbasis targets all improved materially.
+
+## 2026-03-06 Parallel Post-kNN Build Fusion
+- Timestamp: 2026-03-07T01:16:00Z
+- Commit: pending
+- Primary target:
+  - `bench_diffusion_build/2000`
+  - `bench_hodge_phase_structure_build`
+  - `bench_diffgeo_phase_structure_build/4000/64/32/32`
+- Hypothesis:
+  - Keep the accepted sparse symmetrization path, but parallelize the post-kNN scalar passes and fuse the final Markov normalization, local-bandwidth, and immersion accumulation work so diffusion build stops paying for multiple serial full-array sweeps.
+- Files touched:
+  - `include/igneous/data/structures/diffusion_geometry.hpp`
+- Benchmark commands:
+  - Exact baseline worktree at `1425f1f`:
+    - `cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MAKE_PROGRAM=/opt/homebrew/bin/ninja -DCMAKE_TOOLCHAIN_FILE=/Users/autoparallel/vcpkg/scripts/buildsystems/vcpkg.cmake`
+    - `cmake --build build --target bench_dod bench_pipelines bench_diffgeo -j8`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='/Users/autoparallel/Code/igneous/notes/perf/20260306-wave3/results/bench_dod_build_fusion_baseline_20260306-181441.json' --benchmark_out_format=json > '/Users/autoparallel/Code/igneous/notes/perf/20260306-wave3/results/bench_dod_build_fusion_baseline_20260306-181441.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_diffusion_main/20|bench_pipeline_diffusion_main/100|bench_pipeline_hodge_main|bench_hodge_phase_structure_build' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='/Users/autoparallel/Code/igneous/notes/perf/20260306-wave3/results/bench_pipelines_build_fusion_baseline_20260306-181441.json' --benchmark_out_format=json > '/Users/autoparallel/Code/igneous/notes/perf/20260306-wave3/results/bench_pipelines_build_fusion_baseline_20260306-181441.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_structure_build/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='/Users/autoparallel/Code/igneous/notes/perf/20260306-wave3/results/bench_diffgeo_build_fusion_baseline_20260306-181441.json' --benchmark_out_format=json > '/Users/autoparallel/Code/igneous/notes/perf/20260306-wave3/results/bench_diffgeo_build_fusion_baseline_20260306-181441.txt'`
+  - Candidate:
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_dod --benchmark_filter='bench_diffusion_build/2000' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_dod_build_fusion_candidate_20260306-181512.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_dod_build_fusion_candidate_20260306-181512.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_pipelines --benchmark_filter='bench_pipeline_diffusion_main/20|bench_pipeline_diffusion_main/100|bench_pipeline_hodge_main|bench_hodge_phase_structure_build' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_pipelines_build_fusion_candidate_20260306-181512.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_pipelines_build_fusion_candidate_20260306-181512.txt'`
+    - `IGNEOUS_BENCH_MODE=1 ./build/bench_diffgeo --benchmark_filter='bench_diffgeo_pipeline/4000/64/32/32|bench_diffgeo_phase_structure_build/4000/64/32/32|bench_diffgeo_phase_eigenbasis/4000/64/32/32' --benchmark_min_time=0.1s --benchmark_repetitions=5 --benchmark_report_aggregates_only=true --benchmark_out='notes/perf/20260306-wave3/results/bench_diffgeo_build_fusion_candidate_20260306-181512.json' --benchmark_out_format=json > 'notes/perf/20260306-wave3/results/bench_diffgeo_build_fusion_candidate_20260306-181512.txt'`
+    - Guard reruns:
+      - baseline `bench_hodge_phase_eigenbasis`, `bench_diffgeo_phase_eigenbasis/4000/64/32/32`, and `bench_eigenbasis/2000/16` against the `1425f1f` worktree
+      - same three benchmarks on the candidate head
+  - Tests:
+    - `ctest --test-dir build --output-on-failure -R 'test_structure_diffusion_geometry|test_ops_spectral_geometry|test_io_meshes|test_ops_diffusion_forms|test_ops_diffusion_wedge|test_ops_hodge|test_diffgeo_cli_outputs|test_hodge_cli_outputs'`
+    - `ctest --test-dir build --output-on-failure -j8`
+- Smoke results:
+  - Current patch at `0.05s` min time:
+    - `bench_diffusion_build/2000`: `3.636 ms` CPU
+    - `bench_pipeline_diffusion_main/20`: `4.768 ms`
+    - `bench_pipeline_diffusion_main/100`: `6.180 ms`
+    - `bench_pipeline_hodge_main`: `435.631 ms`
+    - `bench_hodge_phase_structure_build`: `5.664 ms`
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `425.181 ms`
+    - `bench_diffgeo_phase_structure_build/4000/64/32/32`: `5.881 ms`
+- Deep results:
+  - Exact A/B against `1425f1f`:
+    - `bench_diffusion_build/2000`: `17.589 ms` -> `3.716 ms` (`-78.87%`)
+    - `bench_pipeline_diffusion_main/20`: `21.434 ms` -> `4.624 ms` (`-78.43%`)
+    - `bench_pipeline_diffusion_main/100`: `22.761 ms` -> `5.822 ms` (`-74.42%`)
+    - `bench_pipeline_hodge_main`: `466.729 ms` -> `442.637 ms` (`-5.16%`)
+    - `bench_hodge_phase_structure_build`: `33.442 ms` -> `5.631 ms` (`-83.16%`)
+    - `bench_diffgeo_pipeline/4000/64/32/32`: `448.958 ms` -> `428.990 ms` (`-4.45%`)
+    - `bench_diffgeo_phase_structure_build/4000/64/32/32`: `35.070 ms` -> `6.109 ms` (`-82.58%`)
+    - `bench_pipeline_spectral_main`: `41.994 ms` -> `22.921 ms` (`-45.42%`) on follow-up guard rerun
+  - Guard follow-up:
+    - `bench_eigenbasis/2000/16`: `11.415 ms` -> `11.401 ms` (`-0.12%`)
+    - `bench_hodge_phase_eigenbasis`: `118.148 ms` -> `118.252 ms` (`+0.09%`)
+    - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `101.441 ms` -> `107.828 ms` (`+6.30%`)
+- App/runtime checks:
+  - `env IGNEOUS_BENCH_MODE=1 ./build/igneous-diffusion assets/bunny.obj`: `real 0.04`, `user 0.03`, `sys 0.01`
+  - `env IGNEOUS_BENCH_MODE=1 ./build/igneous-spectral assets/bunny.obj`: `real 0.05`, `user 0.05`, `sys 0.01`
+  - `env IGNEOUS_BENCH_MODE=1 ./build/igneous-hodge --output-dir <tempdir> --no-ply`: `real 0.10`, `user 0.15`, `sys 0.01`
+  - `./build/igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`: `real 0.11`, `user 0.23`, `sys 0.01`
+- Test results:
+  - Targeted diffusion/spectral/hodge/diffgeo suite: pass
+  - Full `ctest`: `14/14` pass
+- Decision: `kept`
+- Rejected because:
+  - n/a
+- Notes:
+  - The kept change does not alter the accepted sparse symmetrization strategy; it only parallelizes and fuses the scalar post-kNN passes that were still serial.
+  - The canonical spectral guards stayed flat or improved, but the `4000/64` torus eigensolve used by `bench_diffgeo_phase_eigenbasis` consistently regressed by about `6%`. The end-to-end `diffgeo` pipeline still improved by `4.45%`, so this was accepted as a net build-heavy pipeline win rather than a pure spectral win.
