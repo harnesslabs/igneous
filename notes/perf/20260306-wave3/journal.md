@@ -1372,7 +1372,7 @@ Use one entry per optimization hypothesis.
 
 ## Hypothesis: DEC-specialized curvature kernel over direct SoA/CSR storage
 - Timestamp: 2026-03-07T15:34:00-07:00
-- Commit: pending
+- Commit: `59336a7`
 - Primary target:
   - `bench_curvature_kernel/400`
   - `bench_geometry` `Grid 1000x1000`
@@ -1397,3 +1397,106 @@ Use one entry per optimization hypothesis.
 - Decision: `kept`
 - Notes:
   - The first single `bench_geometry` rerun was noisy on the 1e6-vertex case; follow-up repetitions settled in below the pre-change baseline, so the isolated DOD kernel and large-grid geometry guard both moved in the right direction.
+
+## Hypothesis: hoist CPU Markov-step dispatch and parallelize repeated row sweeps
+- Timestamp: 2026-03-07T15:43:00-07:00
+- Commit: n/a
+- Primary target:
+  - `bench_markov_multi_step/20000/20`
+  - `bench_pipeline_diffusion_main/20`
+  - `bench_pipeline_diffusion_main/100`
+- Hypothesis:
+  - Move the CPU CSR row sweep into a shared helper, compute backend/worker selection once per repeated Markov call, and enable parallel row execution only when `row_step_work` is large enough to amortize the worker-pool overhead.
+- Files touched:
+  - `include/igneous/ops/diffusion/geometry.hpp`
+- Smoke results:
+  - `bench_diffusion_build/2000`: `3.438 ms` -> `3.222 ms`
+  - `bench_markov_step/2000`: `17.938 us` -> `20.352 us`
+  - `bench_markov_multi_step/2000/20`: `350.765 us` -> `382.900 us`
+  - `bench_markov_multi_step/20000/20`: `3.881 ms` -> `2.091 ms`
+  - `bench_pipeline_diffusion_main/20`: `4.187 ms` -> `4.927 ms`
+  - `bench_pipeline_diffusion_main/100`: `5.711 ms` -> `7.972 ms`
+- Test results:
+  - `test_structure_diffusion_geometry`: pass
+- Decision: `rejected`
+- Rejected because:
+  - The helper did improve the largest isolated Markov microbenchmark, but it regressed both end-to-end diffusion pipeline guards badly enough that the trade is unacceptable.
+
+## Hypothesis: parallelize `carre_du_champ` row sweeps directly
+- Timestamp: 2026-03-07T15:44:00-07:00
+- Commit: n/a
+- Primary target:
+  - `bench_hodge_phase_curl_energy`
+  - `bench_pipeline_hodge_main`
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+- Hypothesis:
+  - Remove the redundant zero-fill in `carre_du_champ()` and parallelize both the mean-center pass and the final row accumulation above a conservative row threshold.
+- Files touched:
+  - `include/igneous/ops/diffusion/geometry.hpp`
+- Smoke results before diffgeo abort:
+  - `bench_pipeline_hodge_main`: `153.294 ms` -> `149.364 ms`
+  - `bench_hodge_phase_gram`: `1.514 ms` -> `1.409 ms`
+  - `bench_hodge_phase_weak_derivative`: `1.112 ms` -> `1.112 ms`
+  - `bench_hodge_phase_curl_energy`: `12.130 ms` -> `10.827 ms`
+- Diffgeo behavior:
+  - `bench_diffgeo` did not return under the modified kernel and had to be terminated.
+- Decision: `rejected`
+- Rejected because:
+  - The row-parallel gamma path likely nests into existing worker-pool parallelism in the generic form assembly, which makes it unsafe for the diffgeo pipeline despite the hodge-side movement.
+
+## Hypothesis: scalarize ambient form reconstruction in diffgeo/hodge apps and benches
+- Timestamp: 2026-03-07T15:45:00-07:00
+- Commit: n/a
+- Primary target:
+  - `bench_diffgeo_pipeline/4000/64/32/32`
+  - `igneous-diffusion-geometry --n-points 1000`
+- Hypothesis:
+  - Replace the per-point `Eigen::Matrix3f` reconstruction path with direct scalar formulas and pointer-based column loads for both 1-form and dual-2-form ambient recovery.
+- Files touched:
+  - `benches/bench_diffgeo.cpp`
+  - `src/main_diffusion_geometry.cpp`
+  - `src/main_hodge.cpp`
+- Smoke results:
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `149.864 ms` -> `153.718 ms`
+  - app guard `igneous-diffusion-geometry --n-points 1000 --output-dir <tempdir>`: `real 0.07` -> `real 0.09`
+- Test results:
+  - `test_diffgeo_cli_outputs`: pass
+  - `test_hodge_cli_outputs`: pass
+- Decision: `rejected`
+- Rejected because:
+  - The scalar rewrite is mathematically equivalent, but on the current head it regressed both the diffgeo benchmark guard and the app-level wall-time guard.
+
+## Hypothesis: cache backend/thread env lookups for `parallel_for_index`
+- Timestamp: 2026-03-07T15:46:00-07:00
+- Commit: n/a
+- Primary target:
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`
+  - `bench_hodge_phase_eigenbasis`
+  - `bench_pipeline_hodge_main`
+- Hypothesis:
+  - Read `IGNEOUS_BACKEND` and `IGNEOUS_NUM_THREADS` once per process instead of reparsing them on every `parallel_for_index()` call, to remove repeated `getenv` and `hardware_concurrency()` overhead from the eigensolve-heavy paths.
+- Files touched:
+  - `include/igneous/core/parallel.hpp`
+- Smoke results:
+  - `bench_eigenbasis/2000/16`: `8.199 ms` -> `8.539 ms`
+  - `bench_pipeline_spectral_main`: `16.783 ms` -> `18.089 ms`
+  - `bench_pipeline_hodge_main`: `153.294 ms` -> `160.077 ms`
+  - `bench_hodge_phase_eigenbasis`: `116.248 ms` -> `123.248 ms`
+  - `bench_diffgeo_pipeline/4000/64/32/32`: `149.864 ms` -> `161.629 ms`
+  - `bench_diffgeo_phase_eigenbasis/4000/64/32/32`: `106.213 ms` -> `113.714 ms`
+- Test results:
+  - `test_ops_spectral_geometry`: pass
+  - `test_ops_diffusion_forms`: pass
+  - `test_ops_hodge`: pass
+- Decision: `rejected`
+- Rejected because:
+  - Even if the cached env lookup slightly helps tiny loops, it regresses the actual 64-mode guard path across spectral, hodge, and diffgeo.
+
+## Profiling: current diffgeo pipeline
+- Timestamp: 2026-03-07T15:47:00-07:00
+- Artifact:
+  - `notes/perf/20260306-wave3/profiles/20260307-154012-diffgeo-pipeline/sample.txt`
+- Main observations:
+  - The diffgeo pipeline is still dominated by the large sparse diffusion eigensolve.
+  - The same Spectra restart/lanczos path and Eigen dense orthogonalization matvecs remain hot on the current head.
+  - The remaining `parallel_for_index` env/thread lookup overhead is visible in samples, but it is clearly not large enough to justify the regression from the cached-env experiment.
