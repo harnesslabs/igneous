@@ -22,16 +22,28 @@ namespace igneous::ops::diffusion {
 template <typename MeshT> struct HodgeWorkspace {
   /// \brief Coordinate vectors used in gamma evaluations.
   std::array<Eigen::VectorXf, 3> coords;
+  /// \brief Markov-averaged coordinate vectors.
+  std::array<Eigen::VectorXf, 3> coord_means;
   /// \brief `Gamma(x_a, phi_i)` matrix cache for each axis.
   std::array<Eigen::MatrixXf, 3> gamma_x_phi_mat;
+  /// \brief `mu * Gamma(x_a, phi_i)` matrix cache for each axis.
+  std::array<Eigen::MatrixXf, 3> weighted_gamma_x_phi_mat;
   /// \brief Basis weighted by stationary measure.
   Eigen::MatrixXf weighted_u;
+  /// \brief Markov-applied basis cache.
+  Eigen::MatrixXf markov_basis;
+  /// \brief Generic Markov matrix temporary.
+  Eigen::MatrixXf markov_tmp;
   /// \brief `Gamma(x_a, x_b)` caches.
   std::array<std::array<Eigen::VectorXf, 3>, 3> gamma_xx;
   /// \brief Temporary `Gamma(phi_i, phi_j)` buffer.
   Eigen::VectorXf gamma_phi_phi;
   /// \brief Generic temporary weight vector.
   Eigen::VectorXf weight;
+  /// \brief Temporary `P^T weight` buffer.
+  Eigen::VectorXf pt_weight;
+  /// \brief Cached inverse gamma denominators on the mean-centered path.
+  Eigen::VectorXf inv_gamma_denom;
   /// \brief Cached state for `gamma_x_phi_mat` and `weighted_u`.
   int mixed_n_verts = -1;
   /// \brief Cached scalar basis count for `gamma_x_phi_mat` and `weighted_u`.
@@ -117,6 +129,32 @@ void apply_markov_transition_matrix(const MeshT& mesh, const Eigen::MatrixXf& in
       128);
 }
 
+template <typename MeshT> bool uses_mean_centres(const MeshT& mesh) {
+  if constexpr (requires { mesh.structure.use_mean_centres; }) {
+    return mesh.structure.use_mean_centres;
+  }
+  return false;
+}
+
+template <typename MeshT>
+void apply_markov_adjoint(const MeshT& mesh, Eigen::Ref<const Eigen::VectorXf> input,
+                          Eigen::VectorXf& output) {
+  const int n_verts = static_cast<int>(mesh.num_points());
+  output.setZero(n_verts);
+
+  const auto& row_offsets = mesh.structure.markov_row_offsets;
+  const auto& col_indices = mesh.structure.markov_col_indices;
+  const auto& weights = mesh.structure.markov_values;
+  for (int row_idx = 0; row_idx < n_verts; ++row_idx) {
+    const int begin = row_offsets[static_cast<size_t>(row_idx)];
+    const int end = row_offsets[static_cast<size_t>(row_idx) + 1];
+    const float scale = input[row_idx];
+    for (int idx = begin; idx < end; ++idx) {
+      output[col_indices[static_cast<size_t>(idx)]] += weights[static_cast<size_t>(idx)] * scale;
+    }
+  }
+}
+
 template <typename MeshT>
 void prepare_circular_coordinate_workspace(const MeshT& mesh, float bandwidth,
                                           CircularCoordinateWorkspace<MeshT>& workspace) {
@@ -138,12 +176,7 @@ void prepare_circular_coordinate_workspace(const MeshT& mesh, float bandwidth,
   workspace.function_gram.resize(n0, n0);
   workspace.function_gram.noalias() = U.transpose() * workspace.weighted_u;
 
-  const bool use_mean_centres = [&]() {
-    if constexpr (requires { mesh.structure.use_mean_centres; }) {
-      return mesh.structure.use_mean_centres;
-    }
-    return false;
-  }();
+  const bool use_mean_centres = uses_mean_centres(mesh);
 
   if (use_mean_centres) {
     workspace.markov_basis.resize(n_verts, n0);
@@ -239,6 +272,7 @@ void ensure_hodge_mixed_cache(const MeshT& mesh, float bandwidth,
   const auto& mu = mesh.structure.mu;
   const int n0 = U.cols();
   const int n_verts = static_cast<int>(mesh.num_points());
+  const bool use_mean_centres = uses_mean_centres(mesh);
 
   if (workspace.mixed_ready && workspace.mixed_n_verts == n_verts &&
       workspace.mixed_n0 == n0 && hodge_cache_matches(workspace.mixed_bandwidth, bandwidth)) {
@@ -247,19 +281,52 @@ void ensure_hodge_mixed_cache(const MeshT& mesh, float bandwidth,
 
   fill_coordinate_vectors(mesh, workspace.coords);
 
-  for (int a = 0; a < 3; ++a) {
-    workspace.gamma_x_phi_mat[a].resize(n_verts, n0);
-    core::parallel_for_index(
-        0, n0,
-        [&](int i) {
-          carre_du_champ(mesh, workspace.coords[a], U.col(i), bandwidth,
-                         workspace.gamma_x_phi_mat[a].col(i));
-        },
-        8);
+  if (use_mean_centres) {
+    workspace.markov_basis.resize(n_verts, n0);
+    apply_markov_transition_matrix(mesh, U, workspace.markov_basis);
+
+    workspace.inv_gamma_denom.resize(n_verts);
+    for (int i = 0; i < n_verts; ++i) {
+      float denom = 2.0f;
+      if constexpr (requires { mesh.structure.local_bandwidths; }) {
+        if (mesh.structure.local_bandwidths.size() == n_verts) {
+          denom =
+              2.0f * std::max(mesh.structure.local_bandwidths[static_cast<size_t>(i)], 1e-8f);
+        }
+      }
+      workspace.inv_gamma_denom[i] = 1.0f / denom;
+    }
+
+    for (int a = 0; a < 3; ++a) {
+      workspace.coord_means[a].resize(n_verts);
+      apply_markov_transition(mesh, workspace.coords[a], workspace.coord_means[a]);
+      workspace.markov_tmp.resize(n_verts, n0);
+      workspace.markov_tmp = U.array().colwise() * workspace.coords[a].array();
+      apply_markov_transition_matrix(mesh, workspace.markov_tmp, workspace.gamma_x_phi_mat[a]);
+      workspace.gamma_x_phi_mat[a].array() -=
+          workspace.markov_basis.array().colwise() * workspace.coord_means[a].array();
+      workspace.gamma_x_phi_mat[a].array().colwise() *= workspace.inv_gamma_denom.array();
+    }
+  } else {
+    for (int a = 0; a < 3; ++a) {
+      workspace.gamma_x_phi_mat[a].resize(n_verts, n0);
+      core::parallel_for_index(
+          0, n0,
+          [&](int i) {
+            carre_du_champ(mesh, workspace.coords[a], U.col(i), bandwidth,
+                           workspace.gamma_x_phi_mat[a].col(i));
+          },
+          8);
+    }
   }
 
   workspace.weighted_u.resize(n_verts, n0);
   workspace.weighted_u = U.array().colwise() * mu.array();
+  for (int a = 0; a < 3; ++a) {
+    workspace.weighted_gamma_x_phi_mat[a].resize(n_verts, n0);
+    workspace.weighted_gamma_x_phi_mat[a] =
+        workspace.gamma_x_phi_mat[a].array().colwise() * mu.array();
+  }
   workspace.mixed_n_verts = n_verts;
   workspace.mixed_n0 = n0;
   workspace.mixed_bandwidth = bandwidth;
@@ -351,6 +418,34 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT& mesh, float bandwidth,
   Eigen::MatrixXf E_up = Eigen::MatrixXf::Zero(n_basis, n_basis);
   ensure_hodge_gamma_xx(mesh, bandwidth, workspace);
   ensure_hodge_mixed_cache(mesh, bandwidth, workspace);
+
+  if (uses_mean_centres(mesh)) {
+    for (int a = 0; a < 3; ++a) {
+      for (int b = 0; b < 3; ++b) {
+        workspace.weight =
+            (mu_arr * workspace.gamma_xx[a][b].array() * workspace.inv_gamma_denom.array())
+                .matrix();
+        apply_markov_adjoint(mesh, workspace.weight, workspace.pt_weight);
+
+        workspace.markov_tmp = U.array().colwise() * workspace.pt_weight.array();
+        Eigen::MatrixXf block = U.transpose() * workspace.markov_tmp;
+
+        workspace.markov_tmp = workspace.markov_basis.array().colwise() * workspace.weight.array();
+        block.noalias() -= workspace.markov_basis.transpose() * workspace.markov_tmp;
+        block.noalias() -=
+            workspace.gamma_x_phi_mat[b].transpose() * workspace.weighted_gamma_x_phi_mat[a];
+
+        for (int k = 0; k < n0; ++k) {
+          for (int l = 0; l < n0; ++l) {
+            E_up(k * 3 + a, l * 3 + b) = block(k, l);
+          }
+        }
+      }
+    }
+
+    E_up = 0.5f * (E_up + E_up.transpose());
+    return E_up;
+  }
 
   core::parallel_for_index(
       0, n0,
