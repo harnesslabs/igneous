@@ -73,8 +73,8 @@ DiffusionMesh make_torus_mesh(const DiffgeoConfig& cfg) {
 }
 
 void build_diffusion_geometry(DiffusionMesh& mesh, int k_neighbors) {
-  mesh.structure.build({mesh.x_span(), mesh.y_span(), mesh.z_span(), k_neighbors, 8, -0.5f, 0.0f,
-                        true});
+  mesh.structure.build(
+      {mesh.x_span(), mesh.y_span(), mesh.z_span(), k_neighbors, 8, -0.5f, 0.0f, true});
 }
 
 std::array<std::array<Eigen::VectorXf, 3>, 3>
@@ -171,9 +171,9 @@ Eigen::VectorXf pad_1form_coeffs(const Eigen::VectorXf& coeffs, int n_basis, int
   return padded;
 }
 
-HarmonicModes compute_harmonic_1modes(DiffusionMesh& mesh, int n_basis, int n_coeff,
-                                      igneous::ops::diffusion::DiffusionFormWorkspace<DiffusionMesh>&
-                                          forms_ws) {
+HarmonicModes
+compute_harmonic_1modes(DiffusionMesh& mesh, int n_basis, int n_coeff,
+                        igneous::ops::diffusion::DiffusionFormWorkspace<DiffusionMesh>& forms_ws) {
   igneous::ops::diffusion::compute_eigenbasis(mesh, n_basis);
   const Eigen::MatrixXf G1 =
       igneous::ops::diffusion::compute_kform_gram_matrix(mesh, 1, n_coeff, forms_ws);
@@ -183,8 +183,7 @@ HarmonicModes compute_harmonic_1modes(DiffusionMesh& mesh, int n_basis, int n_co
       igneous::ops::diffusion::compute_up_laplacian_matrix(mesh, 1, n_coeff, forms_ws);
   const Eigen::MatrixXf L1 = igneous::ops::diffusion::assemble_hodge_laplacian_matrix(up1, down1);
   auto [evals1, evecs1] = igneous::ops::diffusion::compute_form_spectrum(L1, G1);
-  auto harmonic1_idx =
-      igneous::ops::diffusion::extract_harmonic_mode_indices(evals1, 1e-3f, 3);
+  auto harmonic1_idx = igneous::ops::diffusion::extract_harmonic_mode_indices(evals1, 1e-3f, 3);
 
   return {
       std::move(evals1),
@@ -213,8 +212,7 @@ void bench_diffgeo_pipeline(benchmark::State& state) {
         igneous::ops::diffusion::compute_down_laplacian_matrix(mesh, 1, cfg.n_coeff, forms_ws);
     const Eigen::MatrixXf up1 =
         igneous::ops::diffusion::compute_up_laplacian_matrix(mesh, 1, cfg.n_coeff, forms_ws);
-    const Eigen::MatrixXf L1 =
-        igneous::ops::diffusion::assemble_hodge_laplacian_matrix(up1, down1);
+    const Eigen::MatrixXf L1 = igneous::ops::diffusion::assemble_hodge_laplacian_matrix(up1, down1);
     auto [evals1, evecs1] = igneous::ops::diffusion::compute_form_spectrum(L1, G1);
 
     if (evals1.size() == 0 || evecs1.cols() == 0) {
@@ -242,8 +240,7 @@ void bench_diffgeo_pipeline(benchmark::State& state) {
         igneous::ops::diffusion::assemble_down_laplacian_matrix_from_previous(D1, G1_inv);
     const Eigen::MatrixXf up2 =
         igneous::ops::diffusion::compute_up_laplacian_matrix(mesh, 2, cfg.n_coeff, forms_ws);
-    const Eigen::MatrixXf L2 =
-        igneous::ops::diffusion::assemble_hodge_laplacian_matrix(up2, down2);
+    const Eigen::MatrixXf L2 = igneous::ops::diffusion::assemble_hodge_laplacian_matrix(up2, down2);
     auto [evals2, evecs2] = igneous::ops::diffusion::compute_form_spectrum(L2, G2);
 
     if (evals2.size() == 0 || evecs2.cols() == 0) {
@@ -261,8 +258,7 @@ void bench_diffgeo_pipeline(benchmark::State& state) {
     }
 
     Eigen::VectorXf harmonic1 = evecs1.col(idx0);
-    Eigen::VectorXf harmonic2 =
-        evecs2.col(harmonic2_idx.empty() ? 0 : harmonic2_idx[0]);
+    Eigen::VectorXf harmonic2 = evecs2.col(harmonic2_idx.empty() ? 0 : harmonic2_idx[0]);
     auto field1 = reconstruct_1form_ambient(mesh, harmonic1, cfg.n_coeff, gamma_data);
     auto field2 = reconstruct_2form_dual_ambient(mesh, harmonic2, cfg.n_coeff, gamma_data);
     auto wedge = reconstruct_2form_dual_ambient(mesh, wedge_coeffs, cfg.n_coeff, gamma_data);
@@ -358,12 +354,10 @@ void bench_diffgeo_phase_circular(benchmark::State& state) {
   igneous::ops::diffusion::CircularCoordinateWorkspace<DiffusionMesh> circular_ws;
 
   for (auto _ : state) {
-    const Eigen::VectorXf theta_0 =
-        igneous::ops::diffusion::compute_circular_coordinates(mesh, alpha0, 0.0f, 1.0f, 0,
-                                                              nullptr, circular_ws);
-    const Eigen::VectorXf theta_1 =
-        igneous::ops::diffusion::compute_circular_coordinates(mesh, alpha1, 0.0f, 1.0f, 1,
-                                                              nullptr, circular_ws);
+    const Eigen::VectorXf theta_0 = igneous::ops::diffusion::compute_circular_coordinates(
+        mesh, alpha0, 0.0f, 1.0f, 0, nullptr, circular_ws);
+    const Eigen::VectorXf theta_1 = igneous::ops::diffusion::compute_circular_coordinates(
+        mesh, alpha1, 0.0f, 1.0f, 1, nullptr, circular_ws);
     benchmark::DoNotOptimize(theta_0.data());
     benchmark::DoNotOptimize(theta_1.data());
   }
@@ -444,10 +438,8 @@ void bench_diffgeo_phase_wedge(benchmark::State& state) {
 } // namespace
 
 BENCHMARK(bench_diffgeo_pipeline)->Args({1000, 50, 32, 32})->Args({4000, 64, 32, 32});
-BENCHMARK(bench_diffgeo_phase_structure_build)->Args({1000, 50, 32, 32})->Args(
-    {4000, 64, 32, 32});
-BENCHMARK(bench_diffgeo_phase_eigenbasis)->Args({1000, 50, 32, 32})->Args(
-    {4000, 64, 32, 32});
+BENCHMARK(bench_diffgeo_phase_structure_build)->Args({1000, 50, 32, 32})->Args({4000, 64, 32, 32});
+BENCHMARK(bench_diffgeo_phase_eigenbasis)->Args({1000, 50, 32, 32})->Args({4000, 64, 32, 32});
 BENCHMARK(bench_diffgeo_phase_k1_gram)->Args({1000, 50, 32, 32})->Args({4000, 64, 32, 32});
 BENCHMARK(bench_diffgeo_phase_k1_down)->Args({1000, 50, 32, 32})->Args({4000, 64, 32, 32});
 BENCHMARK(bench_diffgeo_phase_k1_up)->Args({1000, 50, 32, 32})->Args({4000, 64, 32, 32});

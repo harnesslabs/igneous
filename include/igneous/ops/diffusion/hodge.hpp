@@ -121,8 +121,8 @@ void apply_markov_transition_matrix(const MeshT& mesh, const Eigen::MatrixXf& in
         const int begin = row_offsets[static_cast<size_t>(row_idx)];
         const int end = row_offsets[static_cast<size_t>(row_idx) + 1];
         for (int idx = begin; idx < end; ++idx) {
-          accum.noalias() += weights[static_cast<size_t>(idx)] *
-                             input.row(col_indices[static_cast<size_t>(idx)]);
+          accum.noalias() +=
+              weights[static_cast<size_t>(idx)] * input.row(col_indices[static_cast<size_t>(idx)]);
         }
         output.row(row_idx) = accum;
       },
@@ -157,7 +157,7 @@ void apply_markov_adjoint(const MeshT& mesh, Eigen::Ref<const Eigen::VectorXf> i
 
 template <typename MeshT>
 void prepare_circular_coordinate_workspace(const MeshT& mesh, float bandwidth,
-                                          CircularCoordinateWorkspace<MeshT>& workspace) {
+                                           CircularCoordinateWorkspace<MeshT>& workspace) {
   const auto& U = mesh.structure.eigen_basis;
   const auto& mu = mesh.structure.mu;
   const int n0 = U.cols();
@@ -188,8 +188,7 @@ void prepare_circular_coordinate_workspace(const MeshT& mesh, float bandwidth,
       float denom = 2.0f;
       if constexpr (requires { mesh.structure.local_bandwidths; }) {
         if (mesh.structure.local_bandwidths.size() == n_verts) {
-          denom =
-              2.0f * std::max(mesh.structure.local_bandwidths[static_cast<size_t>(i)], 1e-8f);
+          denom = 2.0f * std::max(mesh.structure.local_bandwidths[static_cast<size_t>(i)], 1e-8f);
         }
       }
       b[i] = mu[i] / denom;
@@ -224,8 +223,10 @@ void prepare_circular_coordinate_workspace(const MeshT& mesh, float bandwidth,
     workspace.markov_tmp = U.array().colwise() * ptb.array();
     workspace.laplacian0_weak.noalias() = U.transpose() * workspace.markov_tmp;
     workspace.markov_tmp = workspace.markov_basis.array().colwise() * b.array();
-    workspace.laplacian0_weak.noalias() -= workspace.markov_basis.transpose() * workspace.markov_tmp;
-    workspace.laplacian0_weak = 0.5f * (workspace.laplacian0_weak + workspace.laplacian0_weak.transpose());
+    workspace.laplacian0_weak.noalias() -=
+        workspace.markov_basis.transpose() * workspace.markov_tmp;
+    workspace.laplacian0_weak =
+        0.5f * (workspace.laplacian0_weak + workspace.laplacian0_weak.transpose());
   } else {
     for (int a = 0; a < 3; ++a) {
       workspace.gamma_x_phi_mat[a].resize(n_verts, n0);
@@ -274,8 +275,8 @@ void ensure_hodge_mixed_cache(const MeshT& mesh, float bandwidth,
   const int n_verts = static_cast<int>(mesh.num_points());
   const bool use_mean_centres = uses_mean_centres(mesh);
 
-  if (workspace.mixed_ready && workspace.mixed_n_verts == n_verts &&
-      workspace.mixed_n0 == n0 && hodge_cache_matches(workspace.mixed_bandwidth, bandwidth)) {
+  if (workspace.mixed_ready && workspace.mixed_n_verts == n_verts && workspace.mixed_n0 == n0 &&
+      hodge_cache_matches(workspace.mixed_bandwidth, bandwidth)) {
     return;
   }
 
@@ -290,8 +291,7 @@ void ensure_hodge_mixed_cache(const MeshT& mesh, float bandwidth,
       float denom = 2.0f;
       if constexpr (requires { mesh.structure.local_bandwidths; }) {
         if (mesh.structure.local_bandwidths.size() == n_verts) {
-          denom =
-              2.0f * std::max(mesh.structure.local_bandwidths[static_cast<size_t>(i)], 1e-8f);
+          denom = 2.0f * std::max(mesh.structure.local_bandwidths[static_cast<size_t>(i)], 1e-8f);
         }
       }
       workspace.inv_gamma_denom[i] = 1.0f / denom;
@@ -457,12 +457,11 @@ Eigen::MatrixXf compute_curl_energy_matrix(const MeshT& mesh, float bandwidth,
 
           for (int a = 0; a < 3; ++a) {
             for (int b = 0; b < 3; ++b) {
-              const float val =
-                  (((gamma_phi_phi_local.array() * workspace.gamma_xx[a][b].array()) -
-                    (workspace.gamma_x_phi_mat[b].col(k).array() *
-                     workspace.gamma_x_phi_mat[a].col(l).array())) *
-                   mu_arr)
-                      .sum();
+              const float val = (((gamma_phi_phi_local.array() * workspace.gamma_xx[a][b].array()) -
+                                  (workspace.gamma_x_phi_mat[b].col(k).array() *
+                                   workspace.gamma_x_phi_mat[a].col(l).array())) *
+                                 mu_arr)
+                                    .sum();
 
               const int row = k * 3 + a;
               const int col = l * 3 + b;
@@ -572,8 +571,7 @@ compute_hodge_spectrum(const Eigen::MatrixXf& laplacian, const Eigen::MatrixXf& 
  */
 template <typename MeshT>
 Eigen::VectorXf compute_circular_coordinates(const MeshT& mesh, const Eigen::VectorXf& alpha_coeffs,
-                                             float bandwidth, float lambda,
-                                             int positive_imag_mode,
+                                             float bandwidth, float lambda, int positive_imag_mode,
                                              std::complex<float>* selected_eval,
                                              CircularCoordinateWorkspace<MeshT>& workspace) {
   const auto& U = mesh.structure.eigen_basis;
@@ -590,15 +588,12 @@ Eigen::VectorXf compute_circular_coordinates(const MeshT& mesh, const Eigen::Vec
 
   workspace.q.noalias() = U * workspace.alpha_mat;
   workspace.weighted_gamma =
-      (workspace.gamma_x_phi_mat[0].array().colwise() *
-       (workspace.q.col(0).array() * mu.array()))
+      (workspace.gamma_x_phi_mat[0].array().colwise() * (workspace.q.col(0).array() * mu.array()))
           .matrix();
   workspace.weighted_gamma.array() +=
-      workspace.gamma_x_phi_mat[1].array().colwise() *
-      (workspace.q.col(1).array() * mu.array());
+      workspace.gamma_x_phi_mat[1].array().colwise() * (workspace.q.col(1).array() * mu.array());
   workspace.weighted_gamma.array() +=
-      workspace.gamma_x_phi_mat[2].array().colwise() *
-      (workspace.q.col(2).array() * mu.array());
+      workspace.gamma_x_phi_mat[2].array().colwise() * (workspace.q.col(2).array() * mu.array());
 
   workspace.x_op.noalias() = U.transpose() * workspace.weighted_gamma;
 

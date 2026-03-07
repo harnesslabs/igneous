@@ -233,7 +233,8 @@ void ensure_weighted_u(const MeshT& mesh, int n_coefficients,
 template <typename MeshT>
 CompoundDeterminantData compute_compound_determinants(const MeshT& mesh, int k,
                                                       DiffusionFormWorkspace<MeshT>& workspace) {
-  if (k >= 0 && k < static_cast<int>(workspace.compound_cache.size()) && workspace.compound_ready[k]) {
+  if (k >= 0 && k < static_cast<int>(workspace.compound_cache.size()) &&
+      workspace.compound_ready[k]) {
     return workspace.compound_cache[static_cast<size_t>(k)];
   }
 
@@ -442,8 +443,7 @@ inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf& matrix, f
  */
 template <typename MeshT>
 Eigen::MatrixXf compute_kform_gram_inverse(const MeshT& mesh, int k, int n_coefficients,
-                                           DiffusionFormWorkspace<MeshT>& workspace,
-                                           float rcond);
+                                           DiffusionFormWorkspace<MeshT>& workspace, float rcond);
 
 /**
  * \brief Assemble codifferential matrix `delta_k` from `d_{k-1}` and mass.
@@ -549,8 +549,7 @@ inline Eigen::MatrixXf pseudo_inverse_symmetric(const Eigen::MatrixXf& matrix,
  */
 template <typename MeshT>
 Eigen::MatrixXf compute_kform_gram_inverse(const MeshT& mesh, int k, int n_coefficients,
-                                           DiffusionFormWorkspace<MeshT>& workspace,
-                                           float rcond) {
+                                           DiffusionFormWorkspace<MeshT>& workspace, float rcond) {
   if (k < 0 || k > 2) {
     return Eigen::MatrixXf();
   }
@@ -587,8 +586,9 @@ Eigen::MatrixXf compute_kform_gram_inverse(const MeshT& mesh, int k, int n_coeff
  * \param G_prev_inv Previous-degree Gram pseudo-inverse.
  * \return Down-Laplacian matrix.
  */
-inline Eigen::MatrixXf assemble_down_laplacian_matrix_from_previous(
-    const Eigen::MatrixXf& D_prev, const Eigen::MatrixXf& G_prev_inv) {
+inline Eigen::MatrixXf
+assemble_down_laplacian_matrix_from_previous(const Eigen::MatrixXf& D_prev,
+                                             const Eigen::MatrixXf& G_prev_inv) {
   return D_prev * G_prev_inv * D_prev.transpose();
 }
 
@@ -647,9 +647,8 @@ Eigen::MatrixXf compute_up_laplacian_matrix(const MeshT& mesh, int k, int n_coef
               if (k == 1) {
                 const auto& gJK = workspace.gamma_coords[J][K];
                 const Eigen::ArrayXf term =
-                    (gamma_local.array() * gJK.array()) -
-                    (workspace.gamma_mixed[K].col(i).array() *
-                     workspace.gamma_mixed[J].col(l).array());
+                    (gamma_local.array() * gJK.array()) - (workspace.gamma_mixed[K].col(i).array() *
+                                                           workspace.gamma_mixed[J].col(l).array());
                 val = (term * mu.array()).sum();
               } else {
                 const auto& row_combo = compounds.indices[static_cast<size_t>(J)];

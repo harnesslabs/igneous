@@ -156,10 +156,10 @@ struct DiscreteExteriorCalculus {
       core::parallel_for_index(
           0, block_count,
           [&](int block_idx) {
-            const size_t face_begin = (n_faces * static_cast<size_t>(block_idx)) /
-                                      static_cast<size_t>(block_count);
-            const size_t face_end = (n_faces * static_cast<size_t>(block_idx + 1)) /
-                                    static_cast<size_t>(block_count);
+            const size_t face_begin =
+                (n_faces * static_cast<size_t>(block_idx)) / static_cast<size_t>(block_count);
+            const size_t face_end =
+                (n_faces * static_cast<size_t>(block_idx + 1)) / static_cast<size_t>(block_count);
             uint32_t* counts = block_counts.data() + (static_cast<size_t>(block_idx) * stride);
 
             for (size_t f = face_begin; f < face_end; ++f) {
@@ -212,10 +212,10 @@ struct DiscreteExteriorCalculus {
       core::parallel_for_index(
           0, block_count,
           [&](int block_idx) {
-            const size_t face_begin = (n_faces * static_cast<size_t>(block_idx)) /
-                                      static_cast<size_t>(block_count);
-            const size_t face_end = (n_faces * static_cast<size_t>(block_idx + 1)) /
-                                    static_cast<size_t>(block_count);
+            const size_t face_begin =
+                (n_faces * static_cast<size_t>(block_idx)) / static_cast<size_t>(block_count);
+            const size_t face_end =
+                (n_faces * static_cast<size_t>(block_idx + 1)) / static_cast<size_t>(block_count);
             uint32_t* write_head = block_counts.data() + (static_cast<size_t>(block_idx) * stride);
 
             for (uint32_t f = static_cast<uint32_t>(face_begin);

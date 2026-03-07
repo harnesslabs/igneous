@@ -431,9 +431,7 @@ struct DiffusionGeometry {
         1.0f - (input.c * 0.5f) + input.bandwidth_variability * ((dim_B * 0.5f) + 1.0f);
     Eigen::VectorXf density_alpha(n);
     core::parallel_for_index(
-        0, n,
-        [&](int i) { density_alpha[i] = std::pow(density_estimate_B[i], -alpha); },
-        256);
+        0, n, [&](int i) { density_alpha[i] = std::pow(density_estimate_B[i], -alpha); }, 256);
 
     markov_row_offsets.resize(static_cast<size_t>(n) + 1);
     for (int i = 0; i <= n; ++i) {
@@ -511,8 +509,8 @@ struct DiffusionGeometry {
           const size_t base = static_cast<size_t>(i) * row_stride;
           for (int k = 0; k < k_neighbors; ++k) {
             const size_t idx = base + static_cast<size_t>(k);
-            markov_triplets[idx] = Eigen::Triplet<float>(
-                i, markov_col_indices[idx], markov_values[idx]);
+            markov_triplets[idx] =
+                Eigen::Triplet<float>(i, markov_col_indices[idx], markov_values[idx]);
           }
         },
         64);

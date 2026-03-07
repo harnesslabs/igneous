@@ -390,8 +390,7 @@ template <typename MeshT> void compute_eigenbasis(MeshT& mesh, int n_eigenvector
       const bool try_compact = k_eval >= 32;
       const int compact_ncv = try_compact ? std::min(n, std::max(k_eval + 16, 20)) : full_ncv;
 
-      if (inv_sqrt_rows.size() != n ||
-          sym_normalized_values.size() != sym_values.size()) {
+      if (inv_sqrt_rows.size() != n || sym_normalized_values.size() != sym_values.size()) {
         inv_sqrt_rows.resize(n);
         for (int i = 0; i < n; ++i) {
           inv_sqrt_rows[i] = 1.0f / std::sqrt(std::max(row_sums[i], 1e-12f));
